@@ -12,6 +12,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:state_space/src/engine/kalman.dart';
+import 'package:state_space/src/engine/timeline.dart';
 import 'package:state_space/state_space.dart';
 
 /// Kernel smoothing, the obvious way: every output point is a weighted mean
@@ -101,6 +103,27 @@ void main() {
         '${_ms(smooth).padRight(12)}'
         '${(smooth * 1000 / n).toStringAsFixed(1).padRight(9)}'
         '${quadratic == null ? '--' : _ms(quadratic)}');
+  }
+
+  // What the two-state specialisation is worth on the pass that fit() runs
+  // fifty times per call.
+  print('');
+  print('forward pass only        generic     fast path   speedup');
+  for (final n in [1000, 10000, 100000]) {
+    final data = series(n, random);
+    final timeline = Timeline.merge(data, null);
+    final components = model.components;
+
+    final generic = median(() => KalmanFilter(components,
+            measurementVariance: model.measurementVariance,
+            initialization: model.initialization)
+        .run(timeline));
+    final fast = median(() => model.logLikelihood(data));
+
+    print('N = ${n.toString().padRight(20)}'
+        '${_ms(generic).padRight(12)}'
+        '${_ms(fast).padRight(12)}'
+        '${(generic / fast).toStringAsFixed(2)}x');
   }
 }
 
