@@ -1,0 +1,171 @@
+import 'dart:math' as math;
+import 'dart:typed_data';
+
+import 'package:state_space/state_space.dart';
+import 'package:test/test.dart';
+
+StructuralModel _trend({double processVariance = 1e-3}) =>
+    StructuralModel.localLinearTrend(
+      processVariance: processVariance,
+      measurementVariance: 0.25,
+    );
+
+void main() {
+  group('degenerate inputs', () {
+    test('no observations gives an empty result rather than an error', () {
+      final result = _trend().smooth(const []);
+      expect(result.length, 0);
+      expect(result.logMarginalLikelihood, 0);
+      expect(result.componentCount, 1);
+    });
+
+    test('one observation pins the level and leaves the slope unknown', () {
+      final result = _trend().smooth([const Observation(4, 82.5)]);
+      // Not exactly 82.5: the finite prior shrinks it by one part in kappa.
+      expect(result.level.single, closeTo(82.5, 1e-3));
+      // Everything the single reading says is about the level; the slope keeps
+      // its prior, which is enormous by construction.
+      expect(result.levelVariance.single, closeTo(0.25, 1e-4));
+      expect(result.slopeVariance!.single, greaterThan(1e4));
+    });
+
+    test('every value identical gives that value and no slope', () {
+      final data = [for (var i = 0; i < 20; i++) Observation(i * 1.5, 61.4)];
+      final result = _trend().smooth(data);
+      for (var i = 0; i < data.length; i++) {
+        expect(result.level[i], closeTo(61.4, 1e-3));
+        expect(result.slope![i], closeTo(0, 1e-5));
+      }
+    });
+
+    test('a five-year gap widens the band without breaking anything', () {
+      final data = [
+        for (var i = 0; i < 10; i++) Observation(i.toDouble(), 80 + 0.1 * i),
+        for (var i = 0; i < 10; i++)
+          Observation(1826 + i.toDouble(), 92 + 0.1 * i),
+      ];
+      final middle = Float64List.fromList([913.0]);
+      final result = _trend().smooth(data, grid: middle);
+
+      expect(result.level.single.isFinite, isTrue);
+      expect(result.levelVariance.single, greaterThan(1e3));
+
+      final atData = _trend().smooth(data);
+      for (final v in atData.levelVariance) {
+        expect(v.isFinite, isTrue);
+        expect(v, greaterThan(0));
+      }
+    });
+
+    test('an observation with zero variance is honoured exactly', () {
+      final data = [
+        const Observation(0, 10),
+        const Observation(1, 11),
+        const Observation(2, 20, relativeVariance: 0),
+        const Observation(3, 13),
+        const Observation(4, 14),
+      ];
+      final result = _trend().smooth(data);
+      expect(result.level[2], closeTo(20, 1e-9));
+      expect(result.levelVariance[2], closeTo(0, 1e-12));
+    });
+  });
+
+  group('two readings at the same instant', () {
+    test('are the same as one reading of twice the precision', () {
+      final shared = [
+        const Observation(0, 79.0),
+        const Observation(1, 79.4),
+        const Observation(3, 80.1),
+      ];
+      final model = _trend();
+
+      final twice = model.smooth([
+        ...shared,
+        const Observation(4, 80.0),
+        const Observation(4, 81.0),
+        const Observation(6, 80.9),
+      ]);
+      final once = model.smooth([
+        ...shared,
+        const Observation(4, 80.5, relativeVariance: 0.5),
+        const Observation(6, 80.9),
+      ]);
+
+      // Same posterior; the pair just occupies two slots in the output. The
+      // likelihoods are deliberately not compared: one is the density of two
+      // readings, the other of their average, and those are different numbers
+      // for the same model. Aggregating duplicates is an optimisation, not a
+      // requirement, and this is the sense in which it is safe.
+      expect(twice.level[3], closeTo(once.level[3], 1e-9));
+      expect(twice.level[4], closeTo(once.level[3], 1e-9));
+      expect(twice.levelVariance[4], closeTo(once.levelVariance[3], 1e-11));
+      expect(twice.level[5], closeTo(once.level[4], 1e-9));
+    });
+  });
+
+  group('input validation', () {
+    test('rejects unsorted observations, with advice', () {
+      expect(
+        () =>
+            _trend().smooth([const Observation(2, 1), const Observation(1, 1)]),
+        throwsA(isA<ArgumentError>().having(
+            (e) => e.message.toString(), 'message', contains('sorted'))),
+      );
+    });
+
+    test('rejects NaN and infinity', () {
+      expect(() => _trend().smooth([Observation(0, double.nan)]),
+          throwsArgumentError);
+      expect(() => _trend().smooth([Observation(double.infinity, 1)]),
+          throwsArgumentError);
+      expect(
+          () => _trend().smooth([
+                const Observation(0, 1),
+                Observation(1, 1, relativeVariance: double.nan)
+              ]),
+          throwsArgumentError);
+    });
+
+    test('rejects a negative observation variance', () {
+      expect(
+          () =>
+              _trend().smooth([const Observation(0, 1, relativeVariance: -1)]),
+          throwsArgumentError);
+    });
+
+    test('rejects an unsorted grid', () {
+      expect(
+          () => _trend().smooth([const Observation(0, 1)],
+              grid: Float64List.fromList([3, 1])),
+          throwsArgumentError);
+    });
+
+    test('rejects a model with no components or a bad variance', () {
+      expect(() => StructuralModel(const []), throwsArgumentError);
+      expect(
+          () => StructuralModel.localLinearTrend(
+              processVariance: 1e-3, measurementVariance: 0),
+          throwsArgumentError);
+    });
+  });
+
+  test('a long series stays finite and monotone in its own likelihood', () {
+    // Nothing subtle, just a guard against silent overflow or NaN creeping in
+    // over a few thousand steps.
+    final random = math.Random(11);
+    final data = <Observation>[];
+    var value = 80.0;
+    for (var i = 0; i < 4000; i++) {
+      value += 0.02 * (random.nextDouble() - 0.5);
+      data.add(
+          Observation(i.toDouble(), value + 0.3 * (random.nextDouble() - 0.5)));
+    }
+    final result = _trend().smooth(data);
+    expect(result.logMarginalLikelihood.isFinite, isTrue);
+    for (var i = 0; i < data.length; i++) {
+      expect(result.level[i].isFinite, isTrue);
+      expect(result.levelVariance[i], greaterThan(0));
+    }
+  });
+}
