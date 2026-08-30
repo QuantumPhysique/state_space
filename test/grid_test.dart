@@ -114,9 +114,19 @@ void main() {
       expect(result.logMarginalLikelihood.isFinite, isTrue);
     });
 
-    test('a grid with no observations at all is just the prior', () {
-      final result =
-          _model().smooth(const [], grid: Float64List.fromList([0, 1, 2]));
+    test('a grid with no observations at all has no answer to give', () {
+      expect(
+        () => _model().smooth(const [], grid: Float64List.fromList([0, 1, 2])),
+        throwsA(isA<StateError>()),
+      );
+    });
+
+    test('under the older prior the same request returns the prior', () {
+      final result = StructuralModel.localLinearTrend(
+        processVariance: 8e-4,
+        measurementVariance: 0.2,
+        initialization: const ApproximateDiffuse(),
+      ).smooth(const [], grid: Float64List.fromList([0, 1, 2]));
       expect(result.length, 3);
       for (final v in result.levelVariance) {
         expect(v, greaterThan(1e4));

@@ -201,14 +201,16 @@ class RtsSmoother {
   /// smoothed mean and covariance and needs to know nothing about any of this.
   void combineDiffuse(FilterResult filtered) {
     final d = filtered.diffuseDim;
-    if (d == 0) return;
+    final estimate = filtered.diffuseMean;
+    final spread = filtered.diffuseCovariance;
+    // An empty series leaves the flat directions unestimated, and there is
+    // nothing to fold them into either.
+    if (d == 0 || estimate == null || spread == null) return;
 
     final n = stateDim;
     final mean = filtered.filteredMean!;
     final cov = filtered.filteredCovariance!;
     final sensitivity = filtered.filteredSensitivity!;
-    final estimate = filtered.diffuseMean!;
-    final spread = filtered.diffuseCovariance!;
     final scaled = Float64List(n * d);
 
     for (var t = 0; t < filtered.stepCount; t++) {

@@ -327,7 +327,9 @@ class KalmanFilter {
     Float64List? diffuseMean;
     Float64List? diffuseCovariance;
     var diffuseLogDeterminant = 0.0;
-    if (d > 0) {
+    // With no steps there is nothing to report and nothing to estimate, so
+    // the diffuse system is left unsolved rather than declared singular.
+    if (d > 0 && steps > 0) {
       final solved = _solveDiffuseSystem(timeline.observationCount);
       diffuseMean = solved.mean;
       diffuseCovariance = solved.covariance;

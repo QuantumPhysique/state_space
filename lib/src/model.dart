@@ -23,7 +23,7 @@ class StructuralModel {
   StructuralModel(
     List<Component> components, {
     this.measurementVariance = 1.0,
-    this.initialization = const ApproximateDiffuse(),
+    this.initialization = const ExactDiffuse(),
   }) : components = List.unmodifiable(components) {
     if (components.isEmpty) {
       throw ArgumentError.value(
@@ -40,7 +40,7 @@ class StructuralModel {
   factory StructuralModel.localLinearTrend({
     required double processVariance,
     double measurementVariance = 1.0,
-    Initialization initialization = const ApproximateDiffuse(),
+    Initialization initialization = const ExactDiffuse(),
   }) =>
       StructuralModel(
         [LocalLinearTrend(processVariance: processVariance)],
@@ -52,7 +52,7 @@ class StructuralModel {
   factory StructuralModel.localLevel({
     required double processVariance,
     double measurementVariance = 1.0,
-    Initialization initialization = const ApproximateDiffuse(),
+    Initialization initialization = const ExactDiffuse(),
   }) =>
       StructuralModel(
         [LocalLevel(processVariance: processVariance)],
@@ -68,6 +68,11 @@ class StructuralModel {
   final double measurementVariance;
 
   /// How the prior on the first step's state is specified.
+  ///
+  /// Exact by default. [ApproximateDiffuse] remains available, and is the
+  /// thing to reach for when the data cannot determine the flat directions
+  /// and a very large number is more useful than an exception — a single
+  /// observation under a two-state trend, for instance.
   final Initialization initialization;
 
   /// Total number of states across all components.

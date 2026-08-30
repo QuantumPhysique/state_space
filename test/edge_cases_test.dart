@@ -10,6 +10,14 @@ StructuralModel _trend({double processVariance = 1e-3}) =>
       measurementVariance: 0.25,
     );
 
+/// The same model under the older, approximate prior, for the cases where a
+/// very large number is more useful than an exception.
+StructuralModel _wideTrend() => StructuralModel.localLinearTrend(
+      processVariance: 1e-3,
+      measurementVariance: 0.25,
+      initialization: const ApproximateDiffuse(),
+    );
+
 void main() {
   group('degenerate inputs', () {
     test('no observations gives an empty result rather than an error', () {
@@ -19,8 +27,19 @@ void main() {
       expect(result.componentCount, 1);
     });
 
-    test('one observation pins the level and leaves the slope unknown', () {
-      final result = _trend().smooth([const Observation(4, 82.5)]);
+    test('one observation is not enough to place a two-state trend', () {
+      // The level is pinned and the slope is not, so there is no posterior to
+      // report. Exact initialisation says so instead of returning a number
+      // whose size is an artefact of the prior.
+      expect(
+        () => _trend().smooth([const Observation(4, 82.5)]),
+        throwsA(isA<StateError>().having(
+            (e) => e.message, 'message', contains('does not determine'))),
+      );
+    });
+
+    test('unless you ask for the older prior, which answers anyway', () {
+      final result = _wideTrend().smooth([const Observation(4, 82.5)]);
       // Not exactly 82.5: the finite prior shrinks it by one part in kappa.
       expect(result.level.single, closeTo(82.5, 1e-3));
       // Everything the single reading says is about the level; the slope keeps
@@ -33,8 +52,8 @@ void main() {
       final data = [for (var i = 0; i < 20; i++) Observation(i * 1.5, 61.4)];
       final result = _trend().smooth(data);
       for (var i = 0; i < data.length; i++) {
-        expect(result.level[i], closeTo(61.4, 1e-3));
-        expect(result.slope![i], closeTo(0, 1e-5));
+        expect(result.level[i], closeTo(61.4, 1e-9));
+        expect(result.slope![i], closeTo(0, 1e-10));
       }
     });
 

@@ -43,8 +43,7 @@ export 'src/components/local_level.dart';
 export 'src/components/local_linear_trend.dart';
 export 'src/engine/matrix_block.dart' show MatrixBlock;
 export 'src/fit/fit.dart' show fit;
-// ExactDiffuse stays internal until it is the documented default.
-export 'src/initialization.dart' show ApproximateDiffuse, Initialization;
+export 'src/initialization.dart';
 export 'src/model.dart';
 export 'src/observation.dart';
 export 'src/result.dart';

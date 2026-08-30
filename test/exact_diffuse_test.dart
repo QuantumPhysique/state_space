@@ -4,7 +4,6 @@ import 'dart:typed_data';
 import 'package:state_space/src/engine/kalman.dart';
 import 'package:state_space/src/engine/rts.dart';
 import 'package:state_space/src/engine/timeline.dart';
-import 'package:state_space/src/initialization.dart';
 import 'package:state_space/state_space.dart';
 import 'package:test/test.dart';
 
