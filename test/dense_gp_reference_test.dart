@@ -99,6 +99,100 @@ double _kernel(double s, double t,
   );
 }
 
+/// The restricted likelihood of the same model, computed densely.
+///
+/// Exact diffuse initialisation says the trend starts from an unknown point
+/// with a flat prior. Densely, that is the linear model `y = B d + f + e` with
+/// `f` a spline-kernel Gaussian process, `B = [1, s]` carrying the unknown
+/// level and slope, and `d` integrated out under a flat prior. What survives
+/// the integration is the restricted likelihood
+///
+/// ```text
+/// -2 log L = (N - d) log 2pi + log|C| + log|B' C^-1 B| + y' P y
+/// ```
+///
+/// with `C = K + R` and `P = C^-1 - C^-1 B (B' C^-1 B)^-1 B' C^-1`. The middle
+/// determinant is the term the augmented filter accumulates as `log|M|`, and
+/// it is the whole reason the diffuse likelihood is comparable across models:
+/// getting it wrong shifts every likelihood by a constant that nothing else
+/// in the package would notice.
+({double logLikelihood, double logDeterminant}) _restrictedLikelihood(
+  List<Observation> data, {
+  required double processVariance,
+  required double measurementVariance,
+}) {
+  final n = data.length;
+  final origin = data.first.time;
+  double spline(double a, double b) {
+    final m = math.min(a, b);
+    return processVariance * (m * m * m / 3 + m * m * (a - b).abs() / 2);
+  }
+
+  final times = [for (final o in data) o.time - origin];
+  final covariance = <List<double>>[
+    for (var i = 0; i < n; i++)
+      [
+        for (var j = 0; j < n; j++)
+          spline(times[i], times[j]) +
+              (i == j ? data[i].relativeVariance * measurementVariance : 0.0)
+      ]
+  ];
+
+  // Solve against the data and against both columns of the design at once.
+  final rhs = <List<double>>[
+    for (var i = 0; i < n; i++) [data[i].value, 1.0, times[i]]
+  ];
+  final factor = Matrix64.fromRows(covariance).cholesky();
+  final solved = factor.solve(Matrix64.fromRows(rhs));
+
+  var logDeterminant = 0.0;
+  for (var i = 0; i < n; i++) {
+    logDeterminant += 2 * math.log(factor.lower(i, i));
+  }
+
+  final design = [
+    for (var i = 0; i < n; i++) [1.0, times[i]]
+  ];
+  var quadratic = 0.0;
+  final projected = [0.0, 0.0];
+  final information = [
+    [0.0, 0.0],
+    [0.0, 0.0]
+  ];
+  for (var i = 0; i < n; i++) {
+    quadratic += data[i].value * solved(i, 0);
+    for (var k = 0; k < 2; k++) {
+      projected[k] += design[i][k] * solved(i, 0);
+      for (var l = 0; l < 2; l++) {
+        information[k][l] += design[i][k] * solved(i, l + 1);
+      }
+    }
+  }
+
+  final determinant = information[0][0] * information[1][1] -
+      information[0][1] * information[1][0];
+  final inverse = [
+    [information[1][1] / determinant, -information[0][1] / determinant],
+    [-information[1][0] / determinant, information[0][0] / determinant],
+  ];
+  var explained = 0.0;
+  for (var k = 0; k < 2; k++) {
+    for (var l = 0; l < 2; l++) {
+      explained += projected[k] * inverse[k][l] * projected[l];
+    }
+  }
+
+  return (
+    logLikelihood: -0.5 *
+        ((n - 2) * math.log(2 * math.pi) +
+            logDeterminant +
+            math.log(determinant) +
+            quadratic -
+            explained),
+    logDeterminant: math.log(determinant),
+  );
+}
+
 List<Observation> _irregularSeries(int n, {int seed = 7}) {
   final random = math.Random(seed);
   final data = <Observation>[];
@@ -113,6 +207,50 @@ List<Observation> _irregularSeries(int n, {int seed = 7}) {
 }
 
 void main() {
+  group('exact diffuse initialisation against the dense restricted likelihood',
+      () {
+    test('the augmented filter computes the restricted likelihood', () {
+      const processVariance = 3e-4;
+      const measurementVariance = 0.04;
+      final data = _irregularSeries(100);
+
+      final forward = KalmanFilter(
+        [const LocalLinearTrend(processVariance: processVariance)],
+        measurementVariance: measurementVariance,
+        initialization: const ExactDiffuse(),
+      ).run(Timeline.merge(data, null));
+
+      final dense = _restrictedLikelihood(data,
+          processVariance: processVariance,
+          measurementVariance: measurementVariance);
+
+      expect(forward.logLikelihood, closeTo(dense.logLikelihood, 1e-9));
+      expect(forward.usedObservations, data.length - 2);
+    });
+
+    test('and the log determinant it subtracts is the one REML subtracts', () {
+      // Pinning the pieces separately, not only the total. A sign error in
+      // log|M| and a compensating one in the residual sum would cancel in the
+      // likelihood and survive the test above; they cannot survive this one.
+      const processVariance = 2e-3;
+      const measurementVariance = 0.09;
+      final data = _irregularSeries(60, seed: 12);
+
+      final dense = _restrictedLikelihood(data,
+          processVariance: processVariance,
+          measurementVariance: measurementVariance);
+      final forward = KalmanFilter(
+        [const LocalLinearTrend(processVariance: processVariance)],
+        measurementVariance: measurementVariance,
+        initialization: const ExactDiffuse(),
+      ).run(Timeline.merge(data, null));
+
+      expect(forward.diffuseLogDeterminant,
+          closeTo(dense.logDeterminant, 1e-9 * dense.logDeterminant.abs()));
+      expect(forward.logLikelihood, closeTo(dense.logLikelihood, 1e-9));
+    });
+  });
+
   group('the linear-time recursion computes the cubic-time posterior', () {
     // A modest diffuse variance keeps the dense covariance well conditioned,
     // so any disagreement is the algorithm's fault rather than the reference
