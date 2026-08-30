@@ -1,6 +1,7 @@
 {
  "name": "regular",
  "description": "40 unit-spaced observations, nothing missing",
+ "initialization": "approximate",
  "generator": "statsmodels 0.15.0",
  "processVariance": 0.002,
  "measurementVariance": 0.0625,
@@ -904,5 +905,6 @@
   0.16531229303911962,
   -1.3536109217464913,
   -0.546877856049134
- ]
+ ],
+ "diffuseObservations": 0
 }

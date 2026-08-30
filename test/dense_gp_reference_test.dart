@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:matrices/matrices.dart';
 import 'package:state_space/src/engine/kalman.dart';
+import 'package:state_space/src/engine/rts.dart';
 import 'package:state_space/src/engine/timeline.dart';
 import 'package:state_space/state_space.dart';
 import 'package:test/test.dart';
@@ -116,7 +117,12 @@ double _kernel(double s, double t,
 /// it is the whole reason the diffuse likelihood is comparable across models:
 /// getting it wrong shifts every likelihood by a constant that nothing else
 /// in the package would notice.
-({double logLikelihood, double logDeterminant}) _restrictedLikelihood(
+({
+  double logLikelihood,
+  double logDeterminant,
+  List<double> estimate,
+  List<List<double>> spread,
+}) _restrictedLikelihood(
   List<Observation> data, {
   required double processVariance,
   required double measurementVariance,
@@ -176,9 +182,11 @@ double _kernel(double s, double t,
     [-information[1][0] / determinant, information[0][0] / determinant],
   ];
   var explained = 0.0;
+  final estimate = [0.0, 0.0];
   for (var k = 0; k < 2; k++) {
     for (var l = 0; l < 2; l++) {
       explained += projected[k] * inverse[k][l] * projected[l];
+      estimate[k] += inverse[k][l] * projected[l];
     }
   }
 
@@ -190,6 +198,8 @@ double _kernel(double s, double t,
             quadratic -
             explained),
     logDeterminant: math.log(determinant),
+    estimate: estimate,
+    spread: inverse,
   );
 }
 
@@ -226,6 +236,50 @@ void main() {
 
       expect(forward.logLikelihood, closeTo(dense.logLikelihood, 1e-9));
       expect(forward.usedObservations, data.length - 2);
+    });
+
+    test('the smoothed initial state is the least-squares estimate', () {
+      // At the first time point the state *is* the pair of flat directions,
+      // so the smoothed level and slope there must equal the generalised
+      // least-squares estimate the dense form computes directly. This is the
+      // sharpest single check on the augmentation: it involves the whole
+      // series through C, and it is exactly where an implementation that
+      // fumbles the flat directions goes wrong first.
+      const processVariance = 5e-4;
+      const measurementVariance = 0.05;
+      final data = _irregularSeries(90, seed: 31);
+
+      final dense = _restrictedLikelihood(data,
+          processVariance: processVariance,
+          measurementVariance: measurementVariance);
+      final smoothed = StructuralModel.localLinearTrend(
+        processVariance: processVariance,
+        measurementVariance: measurementVariance,
+      ).smooth(data);
+
+      expect(smoothed.level[0], closeTo(dense.estimate[0], 1e-9));
+      expect(smoothed.slope![0], closeTo(dense.estimate[1], 1e-11));
+
+      // And its covariance is the estimate's covariance, all four entries.
+      final timeline = Timeline.merge(data, null);
+      final components = [
+        const LocalLinearTrend(processVariance: processVariance)
+      ];
+      final forward = KalmanFilter(components,
+              measurementVariance: measurementVariance,
+              initialization: const ExactDiffuse())
+          .run(timeline, keepHistory: true);
+      RtsSmoother(components)
+        ..smoothInPlace(timeline, forward)
+        ..combineDiffuse(forward);
+
+      for (var i = 0; i < 2; i++) {
+        for (var j = 0; j < 2; j++) {
+          expect(forward.filteredCovariance![i * 2 + j],
+              closeTo(dense.spread[i][j], 1e-12),
+              reason: 'P^s[0][$i][$j]');
+        }
+      }
     });
 
     test('and the log determinant it subtracts is the one REML subtracts', () {

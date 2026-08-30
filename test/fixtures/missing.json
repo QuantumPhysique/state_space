@@ -1,6 +1,7 @@
 {
  "name": "missing",
  "description": "50 unit-spaced steps with a block of missing observations and per-observation noise weights",
+ "initialization": "approximate",
  "generator": "statsmodels 0.15.0",
  "processVariance": 0.001,
  "measurementVariance": 0.04,
@@ -1124,5 +1125,6 @@
   -0.15822688066053525,
   0.31650508877651334,
   -0.32330344787099397
- ]
+ ],
+ "diffuseObservations": 0
 }

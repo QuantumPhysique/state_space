@@ -17,7 +17,17 @@ couples slope uncertainty into level uncertainty over a gap. Comparing against
 it would be comparing against a different model, so we build the model
 explicitly with time-varying system matrices instead.
 
-Second, statsmodels writes the recursion as
+Second, one caveat about the exact diffuse fixtures. statsmodels' exact
+diffuse smoother disagrees with a dense generalised-least-squares computation
+about the *smoothed slope at the very first step*, and about the covariance
+entries touching it, when the transition matrix is genuinely time-varying. It
+agrees to 1e-14 whenever the step is constant -- at unit steps, at 2.5, at 0.5
+-- and only diverges once the steps vary. This package agrees with the dense
+form in every case, and golden_test.dart pins its own value against that dense
+form rather than against statsmodels for those four numbers. Everything else in
+the diffuse fixtures, at every other step, agrees to 1e-10 or better.
+
+Third, statsmodels writes the recursion as
 
     y_t       = Z_t alpha_t + eps_t
     alpha_t+1 = T_t alpha_t + R_t eta_t
@@ -45,7 +55,7 @@ class ContinuousLocalLinearTrend(sm.tsa.statespace.MLEModel):
     Q(dt) = sigma2 * [[dt^3/3, dt^2/2], [dt^2/2, dt]]
     """
 
-    def __init__(self, values, times, sigma2, sigma_eps2, weights, kappa):
+    def __init__(self, values, times, sigma2, sigma_eps2, weights, kappa, initialization):
         super().__init__(values, k_states=2, k_posdef=2)
         n = len(values)
         gaps = np.empty(n)
@@ -66,26 +76,34 @@ class ContinuousLocalLinearTrend(sm.tsa.statespace.MLEModel):
         for t, w in enumerate(weights):
             self.ssm["obs_cov", :, :, t] = sigma_eps2 * w
 
-        # The Dart side scales its diffuse prior by the measurement variance so
-        # that the whole model is scale-equivariant. Match that here.
-        self.ssm.initialize_approximate_diffuse(kappa * sigma_eps2)
+        if initialization == "approximate":
+            # The Dart side scales its diffuse prior by the measurement
+            # variance so that the whole model is scale-equivariant. Match
+            # that here.
+            self.ssm.initialize_approximate_diffuse(kappa * sigma_eps2)
+        else:
+            self.ssm.initialize_diffuse()
 
     @property
     def start_params(self):
         return np.array([])
 
 
-def fixture(name, times, values, weights, sigma2, sigma_eps2, kappa=1e6):
+def fixture(name, times, values, weights, sigma2, sigma_eps2, kappa=1e6,
+            initialization="approximate"):
     times = np.asarray(times, dtype=float)
     values = np.asarray(values, dtype=float)
     weights = np.asarray(weights, dtype=float)
 
-    model = ContinuousLocalLinearTrend(values, times, sigma2, sigma_eps2, weights, kappa)
+    model = ContinuousLocalLinearTrend(
+        values, times, sigma2, sigma_eps2, weights, kappa, initialization
+    )
     res = model.smooth([])
 
     payload = {
         "name": name,
         "description": DESCRIPTIONS[name],
+        "initialization": initialization,
         "generator": "statsmodels " + sm.__version__,
         "processVariance": sigma2,
         "measurementVariance": sigma_eps2,
@@ -104,11 +122,16 @@ def fixture(name, times, values, weights, sigma2, sigma_eps2, kappa=1e6):
         "smoothedState": res.smoothed_state.T.ravel().tolist(),
         "smoothedStateCov": np.moveaxis(res.smoothed_state_cov, 2, 0).ravel().tolist(),
         "loglikelihoodObs": [float(v) for v in res.llf_obs],
+        "diffuseObservations": int(res.nobs_diffuse),
     }
 
-    path = OUT / f"{name}.json"
+    suffix = "" if initialization == "approximate" else "-diffuse"
+    path = OUT / f"{name}{suffix}.json"
     path.write_text(json.dumps(payload, indent=1) + "\n")
-    print(f"wrote {path.relative_to(OUT.parent.parent)} ({len(times)} steps)")
+    print(
+        f"wrote {path.relative_to(OUT.parent.parent)} "
+        f"({len(times)} steps, {initialization})"
+    )
 
 
 DESCRIPTIONS = {
@@ -124,16 +147,20 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     rng = np.random.default_rng(20260830)
 
+    scenarios = []
+
     # 1. The easy case: regular sampling, every point observed.
     times = np.arange(40.0)
     signal = 80 + 0.03 * times - 2 * np.sin(times / 9)
-    fixture(
-        "regular",
-        times,
-        signal + rng.normal(0, 0.25, times.size),
-        np.ones(times.size),
-        sigma2=2e-3,
-        sigma_eps2=0.0625,
+    scenarios.append(
+        dict(
+            name="regular",
+            times=times,
+            values=signal + rng.normal(0, 0.25, times.size),
+            weights=np.ones(times.size),
+            sigma2=2e-3,
+            sigma_eps2=0.0625,
+        )
     )
 
     # 2. Irregular gaps, including a same-day repeat (dt = 0) and a long gap.
@@ -142,30 +169,40 @@ def main():
     steps[30] = 40.0
     times = np.concatenate([[0.0], np.cumsum(steps)])
     signal = 80 + 0.01 * times - 3 * np.cos(times / 30)
-    fixture(
-        "irregular",
-        times,
-        signal + rng.normal(0, 0.3, times.size),
-        np.ones(times.size),
-        sigma2=5e-4,
-        sigma_eps2=0.09,
+    scenarios.append(
+        dict(
+            name="irregular",
+            times=times,
+            values=signal + rng.normal(0, 0.3, times.size),
+            weights=np.ones(times.size),
+            sigma2=5e-4,
+            sigma_eps2=0.09,
+        )
     )
 
     # 3. Missing observations and unequal measurement weights.
     times = np.arange(50.0)
-    signal = 80 + 0.05 * times
-    values = signal + rng.normal(0, 0.2, times.size)
+    values = 80 + 0.05 * times + rng.normal(0, 0.2, times.size)
     values[20:28] = np.nan
     values[41] = np.nan
-    weights = np.where(np.arange(50) % 7 == 0, 4.0, 1.0)
-    fixture(
-        "missing",
-        times,
-        values,
-        weights,
-        sigma2=1e-3,
-        sigma_eps2=0.04,
+    scenarios.append(
+        dict(
+            name="missing",
+            times=times,
+            values=values,
+            weights=np.where(np.arange(50) % 7 == 0, 4.0, 1.0),
+            sigma2=1e-3,
+            sigma_eps2=0.04,
+        )
     )
+
+    # Both initialisations for every scenario. The approximate set documents
+    # what the wide-prior path does; the diffuse set is what the package
+    # actually does by default. Keeping both is what makes the changelog's
+    # claim about the difference testable rather than asserted.
+    for scenario in scenarios:
+        for initialization in ("approximate", "diffuse"):
+            fixture(**scenario, initialization=initialization)
 
 
 if __name__ == "__main__":

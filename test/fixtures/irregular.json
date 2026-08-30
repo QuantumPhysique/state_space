@@ -1,6 +1,7 @@
 {
  "name": "irregular",
  "description": "60 observations with gaps from 0 to 40 time units, including a repeated timestamp",
+ "initialization": "approximate",
  "generator": "statsmodels 0.15.0",
  "processVariance": 0.0005,
  "measurementVariance": 0.09,
@@ -1344,5 +1345,6 @@
   -0.4849031182139846,
   -0.10843229958922845,
   -0.037414817526574384
- ]
+ ],
+ "diffuseObservations": 0
 }
