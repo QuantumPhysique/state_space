@@ -6,6 +6,7 @@ import 'components/local_linear_trend.dart';
 import 'engine/kalman.dart';
 import 'engine/rts.dart';
 import 'engine/timeline.dart';
+import 'initialization.dart';
 import 'observation.dart';
 import 'result.dart';
 
@@ -22,7 +23,7 @@ class StructuralModel {
   StructuralModel(
     List<Component> components, {
     this.measurementVariance = 1.0,
-    this.diffuseVariance = 1e6,
+    this.initialization = const ApproximateDiffuse(),
   }) : components = List.unmodifiable(components) {
     if (components.isEmpty) {
       throw ArgumentError.value(
@@ -32,10 +33,6 @@ class StructuralModel {
       throw ArgumentError.value(measurementVariance, 'measurementVariance',
           'must be finite and positive');
     }
-    if (!(diffuseVariance > 0) || !diffuseVariance.isFinite) {
-      throw ArgumentError.value(
-          diffuseVariance, 'diffuseVariance', 'must be finite and positive');
-    }
   }
 
   /// A single [LocalLinearTrend]: a smooth curve whose slope wanders. The
@@ -43,24 +40,24 @@ class StructuralModel {
   factory StructuralModel.localLinearTrend({
     required double processVariance,
     double measurementVariance = 1.0,
-    double diffuseVariance = 1e6,
+    Initialization initialization = const ApproximateDiffuse(),
   }) =>
       StructuralModel(
         [LocalLinearTrend(processVariance: processVariance)],
         measurementVariance: measurementVariance,
-        diffuseVariance: diffuseVariance,
+        initialization: initialization,
       );
 
   /// A single [LocalLevel]: a level with no persistent direction.
   factory StructuralModel.localLevel({
     required double processVariance,
     double measurementVariance = 1.0,
-    double diffuseVariance = 1e6,
+    Initialization initialization = const ApproximateDiffuse(),
   }) =>
       StructuralModel(
         [LocalLevel(processVariance: processVariance)],
         measurementVariance: measurementVariance,
-        diffuseVariance: diffuseVariance,
+        initialization: initialization,
       );
 
   /// The additive blocks of the model, in state order.
@@ -70,17 +67,8 @@ class StructuralModel {
   /// [Observation.relativeVariance].
   final double measurementVariance;
 
-  /// Prior variance placed on the diffuse states, as a multiple of
-  /// [measurementVariance].
-  ///
-  /// The default is large enough to be uninformative and small enough to stay
-  /// well conditioned. It is a multiple rather than an absolute number so that
-  /// scaling every variance in the model scales the prior too, which is what
-  /// makes the profile likelihood used by [fit] exact.
-  ///
-  /// Exact diffuse initialisation, which removes the approximation entirely,
-  /// is planned for 0.2.
-  final double diffuseVariance;
+  /// How the prior on the first step's state is specified.
+  final Initialization initialization;
 
   /// Total number of states across all components.
   int get stateDim => components.fold(0, (n, c) => n + c.stateDim);
@@ -116,7 +104,7 @@ class StructuralModel {
     return StructuralModel(
       rebuilt,
       measurementVariance: measurementVariance,
-      diffuseVariance: diffuseVariance,
+      initialization: initialization,
     );
   }
 
@@ -124,7 +112,7 @@ class StructuralModel {
   StructuralModel withMeasurementVariance(double variance) => StructuralModel(
         components,
         measurementVariance: variance,
-        diffuseVariance: diffuseVariance,
+        initialization: initialization,
       );
 
   /// Log marginal likelihood of [observations] under this model.
@@ -162,7 +150,7 @@ class StructuralModel {
     final filter = KalmanFilter(
       components,
       measurementVariance: measurementVariance,
-      diffuseVariance: diffuseVariance,
+      initialization: initialization,
     );
     return filter.run(timeline, keepHistory: keepHistory);
   }

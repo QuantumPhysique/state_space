@@ -132,7 +132,7 @@ void main() {
       final model = StructuralModel.localLinearTrend(
         processVariance: processVariance,
         measurementVariance: measurementVariance,
-        diffuseVariance: diffuseVariance,
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
       );
 
       final fast = model.smooth(data);
@@ -162,7 +162,7 @@ void main() {
       final model = StructuralModel.localLinearTrend(
         processVariance: processVariance,
         measurementVariance: measurementVariance,
-        diffuseVariance: diffuseVariance,
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
       );
 
       final fast = model.smooth(data, grid: grid);
@@ -187,7 +187,7 @@ void main() {
       final model = StructuralModel.localLinearTrend(
         processVariance: processVariance,
         measurementVariance: measurementVariance,
-        diffuseVariance: diffuseVariance,
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
       );
 
       // The prior here is proper, so every innovation carries information and
@@ -195,7 +195,7 @@ void main() {
       final forward = KalmanFilter(
         model.components,
         measurementVariance: measurementVariance,
-        diffuseVariance: diffuseVariance,
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
         burnIn: 0,
       ).run(Timeline.merge(data, null));
 
@@ -212,9 +212,11 @@ void main() {
 
     test('still agrees under the default, nearly diffuse prior', () {
       final data = _irregularSeries(60);
+      const defaultPrior = ApproximateDiffuse();
       final model = StructuralModel.localLinearTrend(
         processVariance: processVariance,
         measurementVariance: measurementVariance,
+        initialization: defaultPrior,
       );
 
       final fast = model.smooth(data);
@@ -223,7 +225,7 @@ void main() {
         [for (final o in data) o.time],
         processVariance: processVariance,
         measurementVariance: measurementVariance,
-        diffuseVariance: model.diffuseVariance,
+        diffuseVariance: defaultPrior.variance,
       );
 
       // A prior variance of 1e6 times the noise pushes the dense covariance to

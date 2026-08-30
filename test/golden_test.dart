@@ -73,7 +73,7 @@ class Fixture {
   StructuralModel get model => StructuralModel.localLinearTrend(
         processVariance: processVariance,
         measurementVariance: measurementVariance,
-        diffuseVariance: diffuseVariance,
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
       );
 }
 
@@ -102,7 +102,7 @@ void main() {
         forward = KalmanFilter(
           fixture.model.components,
           measurementVariance: fixture.measurementVariance,
-          diffuseVariance: fixture.diffuseVariance,
+          initialization: ApproximateDiffuse(variance: fixture.diffuseVariance),
           burnIn: 0,
         ).run(timeline, keepHistory: true);
       });
@@ -143,7 +143,7 @@ void main() {
         final burned = KalmanFilter(
           fixture.model.components,
           measurementVariance: fixture.measurementVariance,
-          diffuseVariance: fixture.diffuseVariance,
+          initialization: ApproximateDiffuse(variance: fixture.diffuseVariance),
         ).run(timeline);
 
         var total = 0.0;

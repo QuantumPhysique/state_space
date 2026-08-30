@@ -50,7 +50,7 @@ void main() {
         final result = StructuralModel.localLinearTrend(
           processVariance: 1e-16,
           measurementVariance: 0.25,
-          diffuseVariance: diffuseVariance,
+          initialization: ApproximateDiffuse(variance: diffuseVariance),
         ).smooth(data);
         var worst = 0.0;
         for (var i = 0; i < data.length; i++) {
@@ -80,7 +80,7 @@ void main() {
       final result = StructuralModel.localLevel(
         processVariance: 1e-18,
         measurementVariance: 1.0,
-        diffuseVariance: 1e12,
+        initialization: ApproximateDiffuse(variance: 1e12),
       ).smooth(data);
 
       var weight = 0.0, weighted = 0.0;
@@ -155,7 +155,7 @@ void main() {
       final model = StructuralModel.localLinearTrend(
         processVariance: 5e-4,
         measurementVariance: 0.2,
-        diffuseVariance: 1e8,
+        initialization: ApproximateDiffuse(variance: 1e8),
       );
 
       final forward = model.smooth(data);

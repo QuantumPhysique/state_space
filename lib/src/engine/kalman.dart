@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../component.dart';
+import '../initialization.dart';
 import 'matrix_block.dart';
 import 'timeline.dart';
 
@@ -87,7 +88,7 @@ class KalmanFilter {
   KalmanFilter(
     this.components, {
     required this.measurementVariance,
-    required this.diffuseVariance,
+    required this.initialization,
     int? burnIn,
   })  : burnIn = burnIn ?? _diffuseStateCount(components),
         stateDim = components.fold(0, (n, c) => n + c.stateDim),
@@ -115,7 +116,7 @@ class KalmanFilter {
 
   final List<Component> components;
   final double measurementVariance;
-  final double diffuseVariance;
+  final Initialization initialization;
   final int stateDim;
 
   /// How many leading observations are excluded from the likelihood.
@@ -253,7 +254,9 @@ class KalmanFilter {
     _x.fillRange(0, n, 0);
     _p.fillRange(0, n * n, 0);
 
-    final kappa = diffuseVariance * measurementVariance;
+    final kappa = switch (initialization) {
+      ApproximateDiffuse(:final variance) => variance * measurementVariance,
+    };
     for (var b = 0; b < components.length; b++) {
       final component = components[b];
       final start = _offsets[b];

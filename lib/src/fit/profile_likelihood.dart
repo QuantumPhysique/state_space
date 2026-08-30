@@ -47,7 +47,7 @@ class ProfileLikelihood {
     final filter = KalmanFilter(
       model.components,
       measurementVariance: 1,
-      diffuseVariance: model.diffuseVariance,
+      initialization: model.initialization,
     );
     _cached = filter.run(_timeline);
     _cachedArgument = logRatio;
