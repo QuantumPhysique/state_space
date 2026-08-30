@@ -97,6 +97,80 @@ void main() {
     });
   });
 
+  group('exact initialisation reaches the limits instead of approaching them',
+      () {
+    test('a rigid trend is ordinary least squares, full stop', () {
+      // The same test as above with no kappa in it. What was a limit becomes
+      // an identity, and the tolerance drops by five orders of magnitude --
+      // all that is left is the fact that the process variance is 1e-16
+      // rather than actually zero.
+      final data = _series();
+      final line = _ols(data);
+      final result = StructuralModel.localLinearTrend(
+        processVariance: 1e-16,
+        measurementVariance: 0.25,
+      ).smooth(data);
+
+      for (var i = 0; i < data.length; i++) {
+        expect(result.level[i],
+            closeTo(line.intercept + line.slope * data[i].time, 1e-9),
+            reason: 'level at $i');
+        expect(result.slope![i], closeTo(line.slope, 1e-11));
+      }
+    });
+
+    test('a rigid level is the precision-weighted mean, full stop', () {
+      final data = [
+        const Observation(0, 10.0),
+        const Observation(1, 12.0, relativeVariance: 0.25),
+        const Observation(5, 11.0),
+        const Observation(9, 13.0, relativeVariance: 4.0),
+      ];
+      final result = StructuralModel.localLevel(
+        processVariance: 1e-18,
+        measurementVariance: 1.0,
+      ).smooth(data);
+
+      var weight = 0.0, weighted = 0.0;
+      for (final o in data) {
+        weight += 1 / o.relativeVariance;
+        weighted += o.value / o.relativeVariance;
+      }
+
+      for (var i = 0; i < data.length; i++) {
+        expect(result.level[i], closeTo(weighted / weight, 1e-12));
+        expect(result.levelVariance[i], closeTo(1 / weight, 1e-12));
+      }
+    });
+
+    test('reversing time reverses the answer, with nothing left over', () {
+      // Under a genuinely flat prior there is no anchor at either end, so the
+      // symmetry of the cubic spline kernel is exact rather than asymptotic.
+      final data = _series();
+      final span = data.last.time + data.first.time;
+      final reversed = [
+        for (final o in data.reversed) Observation(span - o.time, o.value)
+      ];
+      final model = StructuralModel.localLinearTrend(
+        processVariance: 5e-4,
+        measurementVariance: 0.2,
+      );
+
+      final forward = model.smooth(data);
+      final backward = model.smooth(reversed);
+      final n = data.length;
+      for (var i = 0; i < n; i++) {
+        expect(backward.level[n - 1 - i], closeTo(forward.level[i], 1e-10),
+            reason: 'level at $i');
+        expect(backward.slope![n - 1 - i], closeTo(-forward.slope![i], 1e-11),
+            reason: 'slope at $i');
+        expect(backward.levelVariance[n - 1 - i],
+            closeTo(forward.levelVariance[i], 1e-12),
+            reason: 'variance at $i');
+      }
+    });
+  });
+
   group('invariances the model is supposed to have', () {
     test('shifting every time by a constant changes nothing', () {
       final data = _series();
