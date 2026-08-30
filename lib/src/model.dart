@@ -153,6 +153,52 @@ class StructuralModel {
     return _report(timeline, filtered);
   }
 
+  /// Projects the signal past the last observation, at each time in
+  /// [horizon].
+  ///
+  /// One forward pass and then a walk along the horizon, so `O(N + H)` time
+  /// and no history kept. [horizon] must be sorted ascending and must not
+  /// start before the last observation; for output *within* the data, ask
+  /// [smooth] for a grid instead, which conditions on the whole series rather
+  /// than only on the past.
+  ForecastResult forecast(List<Observation> observations, Float64List horizon) {
+    if (observations.isEmpty) {
+      throw ArgumentError('nothing to forecast from: no observations');
+    }
+    final last = observations.last.time;
+    for (var i = 0; i < horizon.length; i++) {
+      if (!horizon[i].isFinite) {
+        throw ArgumentError.value(horizon[i], 'horizon[$i]', 'not finite');
+      }
+      if (i > 0 && horizon[i] < horizon[i - 1]) {
+        throw ArgumentError('horizon must be sorted ascending, but horizon[$i] '
+            '(${horizon[i]}) precedes horizon[${i - 1}] (${horizon[i - 1]})');
+      }
+      if (horizon[i] < last) {
+        throw ArgumentError('horizon[$i] (${horizon[i]}) is before the last '
+            'observation at $last. Use smooth(observations, grid: ...) for '
+            'times inside the data; it conditions on everything, not just on '
+            'what came before.');
+      }
+    }
+
+    final timeline = Timeline.merge(observations, null);
+    final filter = KalmanFilter(
+      components,
+      measurementVariance: measurementVariance,
+      initialization: initialization,
+    );
+    final result = filter.run(timeline);
+    final projected = filter.project(last, horizon, result);
+
+    return ForecastResult(
+      times: Float64List.fromList(horizon),
+      mean: projected.mean,
+      variance: projected.variance,
+      measurementVariance: measurementVariance,
+    );
+  }
+
   FilterResult _filter(Timeline timeline, {required bool keepHistory}) {
     final filter = KalmanFilter(
       components,

@@ -367,6 +367,75 @@ class KalmanFilter {
     );
   }
 
+  /// Walks the state forward past the end of the data, with nothing to
+  /// update on.
+  ///
+  /// Must be called on the same filter that produced [result], directly after
+  /// [run], because it continues from the workspace that pass left behind.
+  /// Forecasting is just prediction with the update skipped, which is the same
+  /// thing the recursion does over any gap in the middle of a series -- the
+  /// only difference is that no observation ever arrives to close it.
+  ({Float64List mean, Float64List variance}) project(
+      double from, Float64List horizon, FilterResult result) {
+    final n = stateDim;
+    final d = diffuseDim;
+    final estimate = result.diffuseMean;
+    final spread = result.diffuseCovariance;
+    final mean = Float64List(horizon.length);
+    final variance = Float64List(horizon.length);
+    final loading = Float64List(d);
+
+    var previous = from;
+    for (var k = 0; k < horizon.length; k++) {
+      _predict(horizon[k] - previous);
+      _x.setAll(0, _xPred);
+      _p.setAll(0, _pPred);
+      if (d > 0) _xb.setAll(0, _xbPred);
+      previous = horizon[k];
+
+      for (var b = 0; b < components.length; b++) {
+        components[b].observationAt(horizon[k], _hSlices[b]);
+      }
+
+      var signal = 0.0;
+      for (var i = 0; i < n; i++) {
+        signal += _h[i] * _x[i];
+      }
+      var spreadHere = 0.0;
+      for (var i = 0; i < n; i++) {
+        if (_h[i] == 0) continue;
+        var row = 0.0;
+        for (var j = 0; j < n; j++) {
+          row += _p[i * n + j] * _h[j];
+        }
+        spreadHere += _h[i] * row;
+      }
+
+      if (d > 0) {
+        // The flat directions contribute through H dx/dd, exactly as they do
+        // to a smoothed step.
+        for (var c = 0; c < d; c++) {
+          var sum = 0.0;
+          for (var i = 0; i < n; i++) {
+            sum += _h[i] * _xb[i * d + c];
+          }
+          loading[c] = sum;
+          signal += sum * estimate![c];
+        }
+        for (var r = 0; r < d; r++) {
+          for (var c = 0; c < d; c++) {
+            spreadHere += loading[r] * spread![r * d + c] * loading[c];
+          }
+        }
+      }
+
+      mean[k] = signal;
+      variance[k] = spreadHere;
+    }
+
+    return (mean: mean, variance: variance);
+  }
+
   /// Integrates the flat directions out of the likelihood.
   ///
   /// With a flat prior on `d`, the joint density is Gaussian in `d`, so the

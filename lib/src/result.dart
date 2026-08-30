@@ -98,6 +98,54 @@ class SmoothingResult {
   }
 }
 
+/// The signal projected past the end of the data.
+///
+/// Forecast uncertainty grows quickly and does so at a rate the model
+/// determines: for a local linear trend the variance of the level grows like
+/// the cube of the horizon, so the band widens like its three-halves power.
+/// That is a statement about the model, not a defect of it — a trend whose
+/// slope is free to wander really does become unknowable, and a band that
+/// stayed narrow would be lying.
+class ForecastResult {
+  /// Built by [StructuralModel.forecast].
+  ForecastResult({
+    required this.times,
+    required this.mean,
+    required this.variance,
+    required this.measurementVariance,
+  });
+
+  /// The requested horizon, ascending.
+  final Float64List times;
+
+  /// Posterior mean of the signal at each horizon time.
+  final Float64List mean;
+
+  /// Its variance, excluding measurement noise.
+  final Float64List variance;
+
+  /// The model's measurement variance, for [predictiveInterval].
+  final double measurementVariance;
+
+  /// Number of horizon points.
+  int get length => times.length;
+
+  /// Where the signal itself is heading.
+  Interval credibleInterval(int i, {double coverage = 0.95}) {
+    final half = twoSidedZ(coverage) * math.sqrt(variance[i]);
+    return (lo: mean[i] - half, hi: mean[i] + half);
+  }
+
+  /// Where an actual future reading would fall: the same band widened by the
+  /// measurement noise. This is the one to use for a question like "when will
+  /// the scale read 75?", because the scale reading includes the noise.
+  Interval predictiveInterval(int i, {double coverage = 0.95}) {
+    final half =
+        twoSidedZ(coverage) * math.sqrt(variance[i] + measurementVariance);
+    return (lo: mean[i] - half, hi: mean[i] + half);
+  }
+}
+
 /// What [StructuralModel] fitting returned, together with enough diagnostics
 /// to tell a well-determined answer from a shrug.
 class FitResult {
