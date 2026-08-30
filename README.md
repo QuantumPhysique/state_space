@@ -216,8 +216,11 @@ multivariate observations.
 * Hartikainen & Särkkä (2010), *IEEE MLSP*: 379–384 — GP to state space
 * Särkkä & Solin (2019), *Applied Stochastic Differential Equations*, CUP
 
+## Used by
+
+[trale](https://github.com/QuantumPhysique/trale), a privacy-respecting body
+weight diary, for its trend curve and uncertainty band.
+
 ## Licence
 
-[GNU AGPLv3+](LICENSE), the same licence as
-[trale](https://github.com/QuantumPhysique/trale), the application this package
-was written for.
+[GNU AGPLv3+](LICENSE).

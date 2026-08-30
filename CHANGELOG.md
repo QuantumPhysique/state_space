@@ -1,6 +1,6 @@
 ## 0.1.0
 
-First release. Licensed GNU AGPLv3+, matching trale. A generic dense state-space engine, two components, and the
+First release, under the GNU AGPLv3+. A generic dense state-space engine, two components, and the
 validation harness that makes the rest believable.
 
 * `StructuralModel` composes a list of `Component`s block-diagonally and
