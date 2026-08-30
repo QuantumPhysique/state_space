@@ -20,6 +20,8 @@ final trend = fitted.model.smooth(data, grid: everyDay);
 trend.level;                  // the smoothed curve
 trend.slope;                  // its rate of change, for free
 trend.credibleInterval(12);   // and how sure it is, at output point 12
+
+fitted.model.forecast(data, nextThirtyDays);   // and where it is heading
 ```
 
 Nothing is interpolated, nothing is resampled, and no gap is filled. Missing
@@ -86,20 +88,48 @@ a dev dependency used for nothing else. The smoothed mean and the log likelihood
 1e-9, and the posterior variance to 1e-9 absolute, at observation times and at
 grid points between them. This validates the *model*, not just the implementation.
 
-**Cross-language golden fixtures.** `tool/generate_fixtures.py` builds the same
-model in statsmodels as an `MLEModel` with time-varying system matrices, and
-dumps the filtered, predicted and smoothed states, their covariances, and the
-per-observation likelihood to JSON. Script and fixtures are both committed.
-Filtered and predicted states agree to 1e-10 relative and their covariances to
-1e-9; smoothed states to 1e-9 and smoothed covariances to 1e-11, once the
-diffuse prior has washed out. Over the first two steps the smoothed covariance
-is the difference of two quantities of order 1e5 giving an answer of order
-1e-3, so the two implementations agree there to about four digits — which the
-tests assert as a floor rather than paper over.
+**The diffuse likelihood equals the restricted likelihood.** Exact diffuse
+initialisation leaves a `log|M|` term behind when the flat prior is integrated
+out. Get its sign or scale wrong and every likelihood shifts by a constant that
+nothing else would notice — fits still converge, to the same place, and only
+comparisons across models of different diffuse dimension are silently wrong.
+Densely, the same quantity is REML, so the test computes
+`-2 log L = (N-d) log 2pi + log|C| + log|B' C^-1 B| + y' P y` and checks both
+the total and `log|M|` on its own.
 
-Note that `UnobservedComponents(level='local linear trend')` is the *discrete*
-model and is not what this package implements — comparing against it would be
-comparing against a different model.
+**Cross-language golden fixtures, for both initialisations.**
+`tool/generate_fixtures.py` builds the same model in statsmodels as an
+`MLEModel` with time-varying system matrices, once with a wide proper prior and
+once with `initialization='diffuse'`, and dumps the filtered, predicted and
+smoothed states, their covariances, and the per-observation likelihood to JSON.
+Script and both fixture sets are committed, so the claim that exact
+initialisation changes the first few steps and nothing else is testable rather
+than asserted.
+
+Under the exact prior everything agrees to 1e-10 at every step including the
+first. Under the wide one, the first two steps agree to about four digits,
+because there the smoothed covariance is the difference of two quantities of
+order 1e5 giving an answer of order 1e-3 — asserted as a floor rather than
+papered over.
+
+Two things worth knowing about the reference. `UnobservedComponents(level=
+'local linear trend')` is the *discrete* model and is not what this package
+implements, so comparing against it would be comparing against a different
+model. And statsmodels' exact diffuse smoother disagrees with a dense
+generalised-least-squares computation about the smoothed slope at the very
+first step when the transition matrix is genuinely time-varying: it agrees to
+1e-14 whenever the step is constant — at unit steps, at 2.5, at 0.5 — and
+diverges only once the steps vary, while this package agrees with the dense
+form in every case. Those four numbers are pinned against the dense form
+instead, which is a sharper test anyway.
+
+**The fast path is held to the engine it specialises.** A single two-state
+component runs its forward pass in unrolled scalars.
+`fast_path_equivalence_test.dart` asserts agreement with the generic engine to
+1e-12 across irregular gaps, a repeated timestamp, a two-month hole, missing
+observations, unequal weights and all three initialisations. The generic engine
+came first and remains the definition of the answer; if the two disagree, the
+fast path is wrong.
 
 **Analytic limits.** Sending the process variance to zero reproduces ordinary
 least squares for the two-state model and the precision-weighted mean for the
@@ -125,13 +155,28 @@ M-series Mac. `smooth` is filter plus smoother plus the reported posterior.
 
 | N | `logLikelihood` | `smooth` | per observation | `O(N^2)` kernel smoother |
 |---|---|---|---|---|
-| 100 | 0.01 ms | 0.02 ms | 228 ns | 0.04 ms |
-| 1 000 | 0.07 ms | 0.22 ms | 223 ns | 3.67 ms |
-| 10 000 | 0.70 ms | 2.22 ms | 222 ns | 368 ms |
-| 100 000 | 7.09 ms | 23.35 ms | 234 ns | — |
+| 100 | 0.00 ms | 0.02 ms | 206 ns | 0.04 ms |
+| 1 000 | 0.02 ms | 0.21 ms | 208 ns | 3.67 ms |
+| 10 000 | 0.23 ms | 2.21 ms | 221 ns | 368 ms |
+| 100 000 | 2.41 ms | 23.21 ms | 232 ns | — |
 
 Flat cost per observation across three orders of magnitude, which is what
 linear means. Ten years of daily readings smooth in about a millisecond.
+
+The `logLikelihood` column is where the two-state fast path shows up — about
+four times faster than the generic engine, steadily, from a thousand points to
+a hundred thousand:
+
+| N | generic engine | fast path | |
+|---|---|---|---|
+| 1 000 | 0.09 ms | 0.02 ms | 4.0x |
+| 10 000 | 0.93 ms | 0.23 ms | 4.1x |
+| 100 000 | 9.37 ms | 2.43 ms | 3.9x |
+
+`smooth` barely moves, because the backward pass dominates it and is
+deliberately left generic. That is the point of specialising only the forward
+pass: `fit` runs one per likelihood evaluation, some fifty per call, while the
+backward pass runs once.
 
 ### On the linear algebra dependency
 
@@ -174,10 +219,20 @@ strategy enum, and no `Matrix` in the public API.
   same expression algebraically and worse numerically.
 * The smoother solves `P- G' = A P` by Cholesky rather than forming an inverse,
   and jitters the diagonal before giving up.
-* The diffuse prior is `1e6` times the *measurement variance*, not `1e6`
-  absolute. Scaling it with the model is what keeps the whole thing
-  scale-equivariant, and that is what makes the profile likelihood in `fit`
-  exact rather than merely close. Exact diffuse initialisation lands in 0.2.
+* Non-stationary states get **exact diffuse initialisation** by default, done
+  by augmentation rather than by a second set of recursions. The state is
+  written `x(0) = a + B d` with `d` unknown and flat; everything downstream is
+  affine in `d`, so the filter carries `dx/dd` alongside the state — one extra
+  mean propagation per flat direction, no extra covariance work at all — and
+  the flat directions are integrated out in closed form at the end of the pass.
+  The smoother reuses the same gains and recombines by the law of total
+  variance.
+* Because it is exact, the data has to actually determine those directions. A
+  two-state trend needs readings at two distinct times; given one, the package
+  says so rather than returning a variance whose size is an artefact of a
+  prior. `ApproximateDiffuse` is still available for callers who would rather
+  have the large number, and its error falls as `1/kappa` until rounding takes
+  over around `1e7`.
 * `fit` concentrates the measurement variance out analytically, so a
   one-component model is a one-dimensional search over `log q`: a coarse scan
   for the right basin, then golden section inside it, around fifty filter
@@ -189,11 +244,10 @@ strategy enum, and no `Matrix` in the public API.
 
 ## Roadmap
 
-0.1 is the engine, two components, the output grid, one-parameter fitting, and
-the validation harness above.
+0.1 was the engine, two components, the output grid, one-parameter fitting, and
+the validation harness above. 0.2 adds exact diffuse initialisation, the scalar
+two-state fast path, and `forecast()`.
 
-* **0.2** — exact diffuse initialisation; a scalar 2x2 fast path *with an
-  equivalence test against the generic engine*; `forecast()`.
 * **0.3** — trigonometric seasonal components; Nelder-Mead over several
   variance ratios; penalised ML; innovation diagnostics.
 * **0.4** — regression components for holidays and tagged events; annual

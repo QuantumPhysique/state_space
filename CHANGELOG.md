@@ -1,3 +1,50 @@
+## 0.2.0
+
+Numerical maturity: the flat prior directions are handled exactly, the pass
+that fitting hammers is four times faster, and the model can project forward.
+
+* **Exact diffuse initialisation**, by augmentation rather than by a second
+  set of recursions. The state is written `x(0) = a + B d` with `d` unknown and
+  flat; everything downstream is affine in `d`, so the filter carries `dx/dd`
+  beside the state and the flat directions are integrated out in closed form at
+  the end of the pass. The smoother reuses the same gains and recombines by the
+  law of total variance. This is now the default; `ApproximateDiffuse` remains
+  available by name.
+* **`forecast()`**, which is prediction with the update skipped — the same
+  thing the recursion already does over a gap inside a series. `O(N + H)` time,
+  no history kept, and it agrees with smoothing on a trailing grid to 1e-9.
+* **A scalar two-state fast path** for the forward pass, about four times
+  faster than the generic engine, with `fast_path_equivalence_test.dart`
+  holding it to that engine at 1e-12. The generic engine came first and remains
+  the definition of the answer.
+* Golden fixtures for both initialisations, and a dense restricted-likelihood
+  check on the `log|M|` term that exact initialisation introduces.
+
+Breaking changes:
+
+* `StructuralModel`'s `diffuseVariance` parameter is replaced by
+  `initialization`, taking `ExactDiffuse()` (the default) or
+  `ApproximateDiffuse(variance: ...)`. The old constant said how wide the prior
+  was but not what kind of prior it was, which left nowhere to put the exact
+  case except a second, mutually exclusive knob.
+* Two calls that used to return an answer now raise, because the answer they
+  returned was an artefact. A single observation under a two-state trend, and
+  an output grid with no observations behind it, do not determine the flat
+  directions; exact initialisation says so. Pass `ApproximateDiffuse()` to get
+  the old behaviour.
+
+Everything else gets quietly sharper. The closed-form limits — a rigid trend is
+ordinary least squares, reversing time reverses the answer — used to hold to
+1e-4 as the prior widened. They now hold outright, to between 1e-9 and 1e-12.
+
+One note on the reference implementation, since it took some pinning down.
+statsmodels' exact diffuse smoother disagrees with a dense
+generalised-least-squares computation about the smoothed slope at the very
+first step when the transition matrix is genuinely time-varying. It agrees to
+1e-14 whenever the step is constant — at unit steps, at 2.5, at 0.5 — and
+diverges only once the steps vary; this package agrees with the dense form in
+every case. Those four numbers are asserted against the dense form instead.
+
 ## 0.1.0
 
 First release, under the GNU AGPLv3+. A generic dense state-space engine, two components, and the
