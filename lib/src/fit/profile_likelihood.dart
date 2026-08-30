@@ -1,5 +1,6 @@
 import 'dart:typed_data';
 
+import '../engine/fast_path_2x2.dart';
 import '../engine/kalman.dart';
 import '../engine/timeline.dart';
 import '../model.dart';
@@ -44,12 +45,12 @@ class ProfileLikelihood {
     final model = template
         .withParameters(Float64List.fromList([logRatio]))
         .withMeasurementVariance(1);
-    final filter = KalmanFilter(
+    _cached = forwardPass(
       model.components,
+      _timeline,
       measurementVariance: 1,
       initialization: model.initialization,
     );
-    _cached = filter.run(_timeline);
     _cachedArgument = logRatio;
     _evaluations++;
     return _cached;

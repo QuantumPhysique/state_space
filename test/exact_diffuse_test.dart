@@ -225,7 +225,11 @@ void main() {
       }
     });
 
-    test('the model API produces the same posterior as the engine', () {
+    test('the model API produces the same posterior as the generic engine', () {
+      // Not bit-identical any more: StructuralModel dispatches a single
+      // two-state component to the scalar fast path, which reassociates the
+      // same arithmetic. fast_path_equivalence_test.dart is where that is
+      // pinned properly; this only checks the wiring reaches the same answer.
       final data = series();
       final model = StructuralModel([trend],
           measurementVariance: measurementVariance,
@@ -234,9 +238,9 @@ void main() {
       final engine = posterior(data, const ExactDiffuse());
 
       for (var t = 0; t < data.length; t++) {
-        expect(result.level[t], closeTo(engine.mean[t * 2], 1e-15));
+        expect(result.level[t], closeTo(engine.mean[t * 2], 1e-12));
         expect(
-            result.levelVariance[t], closeTo(engine.covariance[t * 4], 1e-15));
+            result.levelVariance[t], closeTo(engine.covariance[t * 4], 1e-12));
       }
     });
   });

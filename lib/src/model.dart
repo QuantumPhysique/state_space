@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'component.dart';
 import 'components/local_level.dart';
 import 'components/local_linear_trend.dart';
+import 'engine/fast_path_2x2.dart';
 import 'engine/kalman.dart';
 import 'engine/rts.dart';
 import 'engine/timeline.dart';
@@ -199,14 +200,14 @@ class StructuralModel {
     );
   }
 
-  FilterResult _filter(Timeline timeline, {required bool keepHistory}) {
-    final filter = KalmanFilter(
-      components,
-      measurementVariance: measurementVariance,
-      initialization: initialization,
-    );
-    return filter.run(timeline, keepHistory: keepHistory);
-  }
+  FilterResult _filter(Timeline timeline, {required bool keepHistory}) =>
+      forwardPass(
+        components,
+        timeline,
+        measurementVariance: measurementVariance,
+        initialization: initialization,
+        keepHistory: keepHistory,
+      );
 
   /// Collapses the smoothed states down to the quantities callers actually
   /// plot: the signal, its variance, each component's share, and a slope if
