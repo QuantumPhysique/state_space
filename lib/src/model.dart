@@ -142,7 +142,9 @@ class StructuralModel {
   SmoothingResult smooth(List<Observation> observations, {Float64List? grid}) {
     final timeline = Timeline.merge(observations, grid);
     final filtered = _filter(timeline, keepHistory: true);
-    RtsSmoother(components).smoothInPlace(timeline, filtered);
+    RtsSmoother(components)
+      ..smoothInPlace(timeline, filtered)
+      ..combineDiffuse(filtered);
     return _report(timeline, filtered);
   }
 

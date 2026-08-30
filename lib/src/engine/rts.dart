@@ -38,6 +38,7 @@ class RtsSmoother {
     _left = Float64List(n * n);
     _delta = Float64List(n * n);
     _residual = Float64List(n);
+    _sensitivityResidual = Float64List(n);
 
     for (var b = 0; b < components.length; b++) {
       final dim = components[b].stateDim;
@@ -57,6 +58,7 @@ class RtsSmoother {
   late final Float64List _left;
   late final Float64List _delta;
   late final Float64List _residual;
+  late final Float64List _sensitivityResidual;
 
   double _cachedGap = double.nan;
 
@@ -87,6 +89,14 @@ class RtsSmoother {
     // As in the forward pass: read the workspace fields once rather than on
     // every array access.
     final gain = _gain, left = _left, delta = _delta, residual = _residual;
+    final diffuseDim = filtered.diffuseDim;
+    final sensitivity = filtered.filteredSensitivity;
+    final predictedSensitivity = filtered.predictedSensitivity;
+    if (diffuseDim > 0 &&
+        (sensitivity == null || predictedSensitivity == null)) {
+      throw ArgumentError('the forward pass tracked diffuse directions but '
+          'kept no sensitivity history');
+    }
 
     // The last step is already conditioned on everything.
     for (var t = timeline.length - 2; t >= 0; t--) {
@@ -113,6 +123,11 @@ class RtsSmoother {
         mean[t * n + i] = sum;
       }
 
+      if (diffuseDim > 0) {
+        _smoothSensitivity(
+            sensitivity!, predictedSensitivity!, diffuseDim, t, gain);
+      }
+
       for (var i = 0; i < square; i++) {
         delta[i] = cov[next + i] - predCov[next + i];
       }
@@ -136,6 +151,95 @@ class RtsSmoother {
           final value = cov[here + i * n + j] + sum;
           cov[here + i * n + j] = value;
           cov[here + j * n + i] = value;
+        }
+      }
+    }
+  }
+
+  /// The same backward recursion, applied to each column of the sensitivity.
+  ///
+  /// The gains depend only on covariances, and the recursion is affine in the
+  /// mean, so smoothing `xa` and each column of `dx/dd` separately and
+  /// recombining afterwards gives the same answer as smoothing the combined
+  /// state would have.
+  void _smoothSensitivity(Float64List sensitivity,
+      Float64List predictedSensitivity, int d, int t, Float64List gain) {
+    final n = stateDim;
+    final residual = _sensitivityResidual;
+    final here = t * n * d;
+    final next = (t + 1) * n * d;
+
+    for (var c = 0; c < d; c++) {
+      for (var i = 0; i < n; i++) {
+        residual[i] = sensitivity[next + i * d + c] -
+            predictedSensitivity[next + i * d + c];
+      }
+      for (var i = 0; i < n; i++) {
+        var sum = sensitivity[here + i * d + c];
+        for (var j = 0; j < n; j++) {
+          sum += gain[i * n + j] * residual[j];
+        }
+        sensitivity[here + i * d + c] = sum;
+      }
+    }
+  }
+
+  /// Folds the estimated flat directions back into the smoothed moments.
+  ///
+  /// Given the flat directions, the smoothed state is normal with mean
+  /// `xa + Xb d` and covariance `Ps` — a covariance that does not depend on
+  /// `d` at all. The flat directions are themselves normal with mean `dhat`
+  /// and covariance `S`. So the law of total variance gives the whole answer
+  /// in one line each:
+  ///
+  /// ```text
+  /// E[x]   = xa + Xb dhat
+  /// Var[x] = Ps + Xb S Xb'
+  /// ```
+  ///
+  /// Written back in place, so that everything downstream sees an ordinary
+  /// smoothed mean and covariance and needs to know nothing about any of this.
+  void combineDiffuse(FilterResult filtered) {
+    final d = filtered.diffuseDim;
+    if (d == 0) return;
+
+    final n = stateDim;
+    final mean = filtered.filteredMean!;
+    final cov = filtered.filteredCovariance!;
+    final sensitivity = filtered.filteredSensitivity!;
+    final estimate = filtered.diffuseMean!;
+    final spread = filtered.diffuseCovariance!;
+    final scaled = Float64List(n * d);
+
+    for (var t = 0; t < filtered.stepCount; t++) {
+      final block = t * n * d;
+
+      for (var i = 0; i < n; i++) {
+        var shift = 0.0;
+        for (var c = 0; c < d; c++) {
+          shift += sensitivity[block + i * d + c] * estimate[c];
+        }
+        mean[t * n + i] += shift;
+      }
+
+      for (var i = 0; i < n; i++) {
+        for (var c = 0; c < d; c++) {
+          var sum = 0.0;
+          for (var e = 0; e < d; e++) {
+            sum += sensitivity[block + i * d + e] * spread[e * d + c];
+          }
+          scaled[i * d + c] = sum;
+        }
+      }
+      final here = t * n * n;
+      for (var i = 0; i < n; i++) {
+        for (var j = i; j < n; j++) {
+          var sum = 0.0;
+          for (var c = 0; c < d; c++) {
+            sum += scaled[i * d + c] * sensitivity[block + j * d + c];
+          }
+          cov[here + i * n + j] += sum;
+          if (i != j) cov[here + j * n + i] += sum;
         }
       }
     }
