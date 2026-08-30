@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../component.dart';
 import '../initialization.dart';
+import 'cholesky.dart';
 import 'matrix_block.dart';
 import 'timeline.dart';
 
@@ -24,10 +25,16 @@ class FilterResult {
     required this.sumWeightedSquares,
     required this.usedObservations,
     required this.measurementVariance,
+    required this.diffuseDim,
+    this.diffuseLogDeterminant = 0,
+    this.diffuseMean,
+    this.diffuseCovariance,
     this.filteredMean,
     this.filteredCovariance,
     this.predictedMean,
     this.predictedCovariance,
+    this.filteredSensitivity,
+    this.predictedSensitivity,
   });
 
   final int stateDim;
@@ -49,10 +56,46 @@ class FilterResult {
   /// The measurement variance the pass was run with.
   final double measurementVariance;
 
+  /// Number of flat directions handled exactly, zero under an approximate
+  /// prior.
+  final int diffuseDim;
+
+  /// `log|M|`, where `M` is the information the data carries about the flat
+  /// directions. Zero when there are none.
+  ///
+  /// This is the term that makes the diffuse likelihood a *marginal*
+  /// likelihood: integrating a flat prior out of a Gaussian leaves behind the
+  /// determinant of its precision, and dropping it would make likelihoods
+  /// incomparable across models with different diffuse dimensions.
+  final double diffuseLogDeterminant;
+
+  /// Generalised-least-squares estimate of the flat directions, length
+  /// [diffuseDim].
+  final Float64List? diffuseMean;
+
+  /// Its covariance, `M^-1`, laid out row-major.
+  final Float64List? diffuseCovariance;
+
   final Float64List? filteredMean;
   final Float64List? filteredCovariance;
   final Float64List? predictedMean;
   final Float64List? predictedCovariance;
+
+  /// Sensitivity of the filtered state to the flat directions, step-major and
+  /// `stateDim x diffuseDim` per step. Null under an approximate prior.
+  ///
+  /// Note what combining this with [diffuseMean] does and does not give. The
+  /// estimate of the flat directions uses every observation, so
+  /// `filteredMean + filteredSensitivity * diffuseMean` is conditioned on all
+  /// the data in those directions and on the data so far in the others. That
+  /// is the right combination after the backward pass, and at the last step,
+  /// and a mixture of two conditionings anywhere else. A genuine filtered
+  /// state under a flat prior needs the estimate rebuilt from the data up to
+  /// that step, which nothing in this package currently asks for.
+  final Float64List? filteredSensitivity;
+
+  /// The same, before each step's update.
+  final Float64List? predictedSensitivity;
 
   /// Maximum-likelihood measurement variance given the *ratios* of all the
   /// other variances to it.
@@ -75,7 +118,8 @@ class FilterResult {
     return -0.5 *
         (n * (_log2pi + 1) +
             n * math.log(sumWeightedSquares / n) +
-            sumLogInnovationVariance);
+            sumLogInnovationVariance +
+            diffuseLogDeterminant);
   }
 }
 
@@ -90,10 +134,17 @@ class KalmanFilter {
     required this.measurementVariance,
     required this.initialization,
     int? burnIn,
-  })  : burnIn = burnIn ?? _diffuseStateCount(components),
+  })  : diffuseDim =
+            initialization is ExactDiffuse ? _diffuseStateCount(components) : 0,
+        burnIn = burnIn ??
+            (initialization is ExactDiffuse
+                ? 0
+                : _diffuseStateCount(components)),
         stateDim = components.fold(0, (n, c) => n + c.stateDim),
-        _offsets = _blockOffsets(components) {
+        _offsets = _blockOffsets(components),
+        _diffuseStates = _diffuseStateIndices(components) {
     final n = stateDim;
+    final d = diffuseDim;
     _x = Float64List(n);
     _p = Float64List(n * n);
     _xPred = Float64List(n);
@@ -104,6 +155,11 @@ class KalmanFilter {
     _h = Float64List(n);
     _ph = Float64List(n);
     _gain = Float64List(n);
+    _xb = Float64List(n * d);
+    _xbPred = Float64List(n * d);
+    _information = Float64List(d * d);
+    _diffuseRhs = Float64List(d);
+    _vb = Float64List(d);
 
     for (var b = 0; b < components.length; b++) {
       final dim = components[b].stateDim;
@@ -119,6 +175,10 @@ class KalmanFilter {
   final Initialization initialization;
   final int stateDim;
 
+  /// Number of flat directions carried exactly. Zero under an approximate
+  /// prior, in which case none of the sensitivity machinery runs.
+  final int diffuseDim;
+
   /// How many leading observations are excluded from the likelihood.
   ///
   /// Defaults to the number of diffuse states: with a flat prior, the first
@@ -129,6 +189,10 @@ class KalmanFilter {
   final int burnIn;
 
   final List<int> _offsets;
+
+  /// Global state index of each flat direction, in order.
+  final List<int> _diffuseStates;
+
   final List<MatrixBlock> _aBlocks = [];
   final List<MatrixBlock> _qBlocks = [];
   final List<Float64List> _hSlices = [];
@@ -143,6 +207,17 @@ class KalmanFilter {
   late final Float64List _h;
   late final Float64List _ph;
   late final Float64List _gain;
+
+  /// `dx/dd`, the sensitivity of the state to the flat directions, laid out
+  /// `stateDim x diffuseDim` row-major.
+  late final Float64List _xb;
+  late final Float64List _xbPred;
+
+  /// The generalised-least-squares system for the flat directions: `M` and
+  /// the right-hand side, accumulated one observation at a time.
+  late final Float64List _information;
+  late final Float64List _diffuseRhs;
+  late final Float64List _vb;
 
   /// Innovation and its variance from the most recent [_update]. Kept as
   /// fields rather than returned in a wrapper so that the loop over a long
@@ -165,6 +240,18 @@ class KalmanFilter {
     return offsets;
   }
 
+  static List<int> _diffuseStateIndices(List<Component> components) {
+    final indices = <int>[];
+    var next = 0;
+    for (final c in components) {
+      for (final flag in c.diffuseStates) {
+        if (flag) indices.add(next);
+        next++;
+      }
+    }
+    return indices;
+  }
+
   static int _diffuseStateCount(List<Component> components) {
     var count = 0;
     for (final c in components) {
@@ -179,12 +266,17 @@ class KalmanFilter {
   /// moments are retained for the RTS backward pass.
   FilterResult run(Timeline timeline, {bool keepHistory = false}) {
     final n = stateDim;
+    final d = diffuseDim;
     final steps = timeline.length;
 
     final filteredMean = keepHistory ? Float64List(steps * n) : null;
     final filteredCov = keepHistory ? Float64List(steps * n * n) : null;
     final predictedMean = keepHistory ? Float64List(steps * n) : null;
     final predictedCov = keepHistory ? Float64List(steps * n * n) : null;
+    final filteredSensitivity =
+        keepHistory && d > 0 ? Float64List(steps * n * d) : null;
+    final predictedSensitivity =
+        keepHistory && d > 0 ? Float64List(steps * n * d) : null;
 
     _initialise();
 
@@ -199,6 +291,7 @@ class KalmanFilter {
         // to propagate through yet.
         _pPred.setAll(0, _p);
         _xPred.setAll(0, _x);
+        if (d > 0) _xbPred.setAll(0, _xb);
       } else {
         _predict(timeline.gaps[t]);
       }
@@ -206,6 +299,7 @@ class KalmanFilter {
       if (keepHistory) {
         predictedMean!.setRange(t * n, (t + 1) * n, _xPred);
         predictedCov!.setRange(t * n * n, (t + 1) * n * n, _pPred);
+        predictedSensitivity?.setRange(t * n * d, (t + 1) * n * d, _xbPred);
       }
 
       if (timeline.hasObservation(t)) {
@@ -220,27 +314,96 @@ class KalmanFilter {
       } else {
         _x.setAll(0, _xPred);
         _p.setAll(0, _pPred);
+        if (d > 0) _xb.setAll(0, _xbPred);
       }
 
       if (keepHistory) {
         filteredMean!.setRange(t * n, (t + 1) * n, _x);
         filteredCov!.setRange(t * n * n, (t + 1) * n * n, _p);
+        filteredSensitivity?.setRange(t * n * d, (t + 1) * n * d, _xb);
       }
+    }
+
+    Float64List? diffuseMean;
+    Float64List? diffuseCovariance;
+    var diffuseLogDeterminant = 0.0;
+    if (d > 0) {
+      final solved = _solveDiffuseSystem(timeline.observationCount);
+      diffuseMean = solved.mean;
+      diffuseCovariance = solved.covariance;
+      diffuseLogDeterminant = solved.logDeterminant;
+      // Substituting the estimate back into the weighted residual sum leaves
+      // `rss(dhat) = rss(0) + rhs' dhat`, because `M dhat = -rhs` collapses the
+      // quadratic term onto the linear one.
+      for (var c = 0; c < d; c++) {
+        sumWeighted += _diffuseRhs[c] * diffuseMean[c];
+      }
+      // Each flat direction costs one degree of freedom, exactly as it would
+      // in an ordinary regression.
+      used = timeline.observationCount - d;
     }
 
     return FilterResult(
       stateDim: n,
       stepCount: steps,
-      logLikelihood: -0.5 * (used * _log2pi + sumLogS + sumWeighted),
+      logLikelihood: -0.5 *
+          (used * _log2pi + sumLogS + sumWeighted + diffuseLogDeterminant),
       sumLogInnovationVariance: sumLogS,
       sumWeightedSquares: sumWeighted,
       usedObservations: used,
       measurementVariance: measurementVariance,
+      diffuseDim: d,
+      diffuseLogDeterminant: diffuseLogDeterminant,
+      diffuseMean: diffuseMean,
+      diffuseCovariance: diffuseCovariance,
       filteredMean: filteredMean,
       filteredCovariance: filteredCov,
       predictedMean: predictedMean,
       predictedCovariance: predictedCov,
+      filteredSensitivity: filteredSensitivity,
+      predictedSensitivity: predictedSensitivity,
     );
+  }
+
+  /// Integrates the flat directions out of the likelihood.
+  ///
+  /// With a flat prior on `d`, the joint density is Gaussian in `d`, so the
+  /// integral is available in closed form: the estimate is the weighted
+  /// least-squares solution of `M d = -rhs`, its covariance is `M^-1`, and the
+  /// integration leaves `log|M|` behind in the likelihood.
+  ({Float64List mean, Float64List covariance, double logDeterminant})
+      _solveDiffuseSystem(int observationCount) {
+    final d = diffuseDim;
+    final factor = Float64List.fromList(_information);
+    if (!choleskyFactor(factor, d)) {
+      throw StateError('the data does not determine the model\'s $d diffuse '
+          'states: $observationCount observations left the diffuse '
+          'information matrix singular. A local linear trend needs readings at '
+          'two distinct times before its level and slope mean anything. Either '
+          'supply more data, or fall back to ApproximateDiffuse, which returns '
+          'a very large variance instead of refusing.');
+    }
+
+    var logDeterminant = 0.0;
+    for (var i = 0; i < d; i++) {
+      logDeterminant += 2 * math.log(factor[i * d + i]);
+    }
+
+    final mean = Float64List(d);
+    for (var c = 0; c < d; c++) {
+      mean[c] = -_diffuseRhs[c];
+    }
+    choleskySolve(factor, d, mean, 0);
+
+    // M is symmetric, so its inverse is too: solving against each unit vector
+    // in turn fills one row, which is also one column.
+    final covariance = Float64List(d * d);
+    for (var r = 0; r < d; r++) {
+      covariance[r * d + r] = 1;
+      choleskySolve(factor, d, covariance, r * d);
+    }
+
+    return (mean: mean, covariance: covariance, logDeterminant: logDeterminant);
   }
 
   /// Prior at the first step: a large multiple of the measurement variance on
@@ -254,7 +417,11 @@ class KalmanFilter {
     _x.fillRange(0, n, 0);
     _p.fillRange(0, n * n, 0);
 
+    // Under exact initialisation the flat directions get no prior variance at
+    // all: they are carried in the sensitivity instead, and integrated out at
+    // the end of the pass.
     final kappa = switch (initialization) {
+      ExactDiffuse() => 0.0,
       ApproximateDiffuse(:final variance) => variance * measurementVariance,
     };
     for (var b = 0; b < components.length; b++) {
@@ -277,6 +444,15 @@ class KalmanFilter {
         _p[row * n + row] = kappa;
       }
     }
+
+    final d = diffuseDim;
+    if (d == 0) return;
+    _xb.fillRange(0, n * d, 0);
+    for (var c = 0; c < d; c++) {
+      _xb[_diffuseStates[c] * d + c] = 1;
+    }
+    _information.fillRange(0, d * d, 0);
+    _diffuseRhs.fillRange(0, d, 0);
   }
 
   /// `x- = A x`, `P- = A P A' + Q`, exploiting the block-diagonal structure of
@@ -293,6 +469,7 @@ class KalmanFilter {
     // worth the two extra lines.
     final x = _x, p = _p, xPred = _xPred, pPred = _pPred;
     final a = _a, q = _q, work = _work;
+    final d = diffuseDim;
 
     if (dt == 0) {
       // A = I and Q = 0, so the prediction is the previous posterior. This is
@@ -300,6 +477,7 @@ class KalmanFilter {
       // updates.
       xPred.setAll(0, x);
       pPred.setAll(0, p);
+      if (d > 0) _xbPred.setAll(0, _xb);
       return;
     }
 
@@ -322,6 +500,27 @@ class KalmanFilter {
           sum += a[(start + i) * n + start + j] * x[start + j];
         }
         xPred[start + i] = sum;
+      }
+    }
+
+    // The sensitivity to the flat directions rides along on the same
+    // transition. It is d extra mean propagations and no extra covariance
+    // work, which is the whole reason exact initialisation is affordable here.
+    if (d > 0) {
+      final xb = _xb, xbPred = _xbPred;
+      for (var b = 0; b < components.length; b++) {
+        final start = _offsets[b];
+        final dim = components[b].stateDim;
+        for (var i = 0; i < dim; i++) {
+          final row = (start + i) * n + start;
+          for (var c = 0; c < d; c++) {
+            var sum = 0.0;
+            for (var j = 0; j < dim; j++) {
+              sum += a[row + j] * xb[(start + j) * d + c];
+            }
+            xbPred[(start + i) * d + c] = sum;
+          }
+        }
       }
     }
 
@@ -429,7 +628,47 @@ class KalmanFilter {
       }
     }
 
+    if (diffuseDim > 0) _updateSensitivity(v, s);
+
     _innovation = v;
     _innovationVariance = s;
+  }
+
+  /// Carries the sensitivity through the same update, and accumulates this
+  /// observation's contribution to the least-squares system for the flat
+  /// directions.
+  ///
+  /// The innovation is affine in the unknown `d`: `v(d) = va + Vb d`, where
+  /// `va` is the innovation the filter just computed and `Vb = -H dx/dd`. The
+  /// sensitivity updates exactly like the state does, but against zero data,
+  /// because the gain does not depend on `d`.
+  void _updateSensitivity(double va, double s) {
+    final n = stateDim;
+    final d = diffuseDim;
+    final xb = _xb, xbPred = _xbPred, vb = _vb, h = _h, gain = _gain;
+    final information = _information, rhs = _diffuseRhs;
+
+    for (var c = 0; c < d; c++) {
+      var sum = 0.0;
+      for (var i = 0; i < n; i++) {
+        sum += h[i] * xbPred[i * d + c];
+      }
+      vb[c] = -sum;
+    }
+
+    for (var i = 0; i < n; i++) {
+      final g = gain[i];
+      for (var c = 0; c < d; c++) {
+        xb[i * d + c] = xbPred[i * d + c] + g * vb[c];
+      }
+    }
+
+    for (var r = 0; r < d; r++) {
+      final weighted = vb[r] / s;
+      rhs[r] += weighted * va;
+      for (var c = 0; c < d; c++) {
+        information[r * d + c] += weighted * vb[c];
+      }
+    }
   }
 }

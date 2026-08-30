@@ -32,3 +32,29 @@ final class ApproximateDiffuse extends Initialization {
   @override
   String toString() => 'ApproximateDiffuse(variance: $variance)';
 }
+
+/// Exact diffuse initialisation: the flat directions are handled exactly,
+/// as the limit of an infinitely wide prior, rather than approximated by a
+/// wide one (Durbin & Koopman 2012, ch. 5).
+///
+/// The engine does this by augmentation rather than by a separate diffuse
+/// recursion. Write the initial state as `x(0) = a + B d`, where `B` selects
+/// the diffuse directions and `d` is an unknown vector with a flat prior.
+/// Everything downstream is affine in `d`, so the filter carries the
+/// sensitivity `dx(t)/dd` alongside the state, at the cost of one extra mean
+/// propagation per diffuse direction and no extra covariance work at all.
+/// The flat directions are then integrated out in closed form: a generalised
+/// least squares problem of the size of the diffuse dimension, solved once at
+/// the end of the pass.
+///
+/// This is exact, so the shrinkage and the lost digits of
+/// [ApproximateDiffuse] both disappear. The price is that the diffuse
+/// directions must actually be determined by the data — a two-state trend
+/// needs observations at two distinct times before it means anything, and the
+/// engine says so rather than returning a very large number.
+final class ExactDiffuse extends Initialization {
+  const ExactDiffuse();
+
+  @override
+  String toString() => 'ExactDiffuse()';
+}
