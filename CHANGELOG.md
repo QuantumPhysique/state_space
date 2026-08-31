@@ -1,3 +1,66 @@
+## 0.3.0
+
+Seasonality, fitting several variances at once, and a way to tell whether the
+model deserves to be believed.
+
+* **`TrigonometricSeasonal`**, in rotation form. Dummy-variable seasonality has
+  no transition matrix for a non-integer gap, which rules it out of a package
+  whose whole design rests on being exact over an arbitrary one; the rotation
+  has one, and `A(a) A(b) = A(a + b)` is asserted directly. Harmonics at or past
+  the Nyquist frequency are refused rather than diagnosed later, because at
+  `lambda = pi` the rotation degenerates to `-I` on unit steps and leaves a
+  state nothing can ever observe.
+* **Multi-parameter fitting.** The measurement variance is still concentrated
+  out, so a `k`-component model is a `k`-dimensional search. A coordinate scan
+  finds the basin and Nelder-Mead with one restart refines it. On five hundred
+  simulated readings of a trend plus an evolving weekly pattern, both variance
+  ratios come back within a factor of `e` and the decomposition is recovered to
+  about a quarter of the measurement noise.
+* **Innovation diagnostics.** `StructuralModel.diagnose` returns the
+  standardised prediction errors, their autocorrelations and a Ljung-Box test
+  with a p-value. On four hundred daily readings carrying a weekly cycle, a
+  trend alone looks like a perfectly reasonable fit and is caught immediately:
+  lag-7 autocorrelation 0.70 and `p = 1.2e-225`.
+* **The residuals are the recursive ones**, with the starting point estimated
+  from what came strictly before each observation rather than from the whole
+  series. Substituting the final estimate is the tempting shortcut and it
+  conditions every residual on its own future.
+* A closed-form kernel for the seasonal component,
+  `k(t, t') = sigma^2 min(t, t') sum_j cos(lambda_j (t - t'))`, and a dense
+  `O(N^3)` test against it — including a three-component decomposition checked
+  against the dense per-component posterior.
+* `ComplexityPenalty`, a penalised-complexity penalty on the variances.
+
+Breaking changes:
+
+* `FitResult.varianceRatio` now throws for a model with more than one variance,
+  where there is no single ratio to report. Use `varianceRatios`, which is in
+  component order.
+* `FitResult.plateauDecades` is measured differently and its value will change.
+  It used to be read off the coarse scan grid, which quantised it to the scan
+  step — 1.25 decades with the default bracket, coarse enough that `isFlat` was
+  closer to a coin toss than a diagnostic. Each parameter is now probed along
+  its own axis, and `plateauDecadesByParameter` reports them separately.
+* `fit` no longer refuses models with more than one free parameter, which is
+  the point of the release. A model whose components cannot be told apart now
+  fails in the engine, with a message explaining which failure it is.
+* `Component` gains two members, which matters only if you have written one of
+  your own: `wanderOver`, giving the spread of the component's contribution
+  over a window, and `identifiabilityHint`, which has a default.
+
+One thing did not work out as planned. The roadmap expected the penalty to be
+on by default, on the grounds that plain maximum likelihood gives unstable
+trend/seasonal splits on short histories. Measured against the paths that
+generated the data, over twelve replications at three sample sizes, it makes no
+difference to the decomposition — 0.0867 against 0.0870 at `N = 60`, 0.0759
+against 0.0759 at `N = 500` — and it is clearly worse at recovering the
+variances, with the root-mean-square error of the log ratio going from 0.37 to
+0.59 at `N = 500`. It does not even reduce the spread of the estimates, which
+is the usual consolation. So it ships, off by default, with the measurements
+recorded next to it. What it does do reliably is drive a component's drift
+parameter to the floor when there is no drift to find, which is a different and
+narrower thing to want.
+
 ## 0.2.0
 
 Numerical maturity: the flat prior directions are handled exactly, the pass

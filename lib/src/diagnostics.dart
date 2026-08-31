@@ -65,8 +65,16 @@ class InnovationDiagnostics {
   ///
   /// Reliably above one means the model is more confident than it has earned
   /// — the measurement variance, or a process variance, is too small. Below
-  /// one means the opposite, and usually that a variance has been fitted on
-  /// the same data the residuals are being read from.
+  /// one means the opposite.
+  ///
+  /// **This says nothing at all about a model that has just been fitted.**
+  /// Fitting concentrates the measurement variance out, which is to say it
+  /// chooses the noise level that makes this number one, so it will be one
+  /// whether or not the model is any good. It is informative for a model whose
+  /// variances were set by hand, and for a fitted model the thing to look at
+  /// is the fitted noise level itself: a model missing a component has to
+  /// explain that component as noise, and reports a scale far noisier than it
+  /// is.
   double get variance {
     final centre = mean;
     var total = 0.0;

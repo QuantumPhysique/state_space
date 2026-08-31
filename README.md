@@ -24,6 +24,21 @@ trend.credibleInterval(12);   // and how sure it is, at output point 12
 fitted.model.forecast(data, nextThirtyDays);   // and where it is heading
 ```
 
+Components add up, and the posterior comes apart the same way:
+
+```dart
+final model = StructuralModel([
+  const LocalLinearTrend(processVariance: 1e-3),
+  TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
+]);
+
+final posterior = fit(model, data).model.smooth(data);
+posterior.componentMean(0);   // the trend
+posterior.componentMean(1);   // the weekly pattern, separately
+
+model.diagnose(data).ljungBox(lags: 14);   // and whether to believe any of it
+```
+
 Nothing is interpolated, nothing is resampled, and no gap is filled. Missing
 data is a step with no update; an irregular gap is a different `dt`; a repeated
 timestamp is `dt = 0`. All three fall out of the recursion rather than being
@@ -87,6 +102,17 @@ kernel from the equations above, adds the noise, and computes the textbook
 a dev dependency used for nothing else. The smoothed mean and the log likelihood agree to
 1e-9, and the posterior variance to 1e-9 absolute, at observation times and at
 grid points between them. This validates the *model*, not just the implementation.
+
+**The seasonal component equals its own closed-form kernel.** The rotation is
+orthogonal and its driving noise isotropic, so `A(t-u) Q A(t'-u)'` does not
+depend on `u` at all and the integral over the noise collapses to
+`k(t, t') = sigma^2 min(t, t') sum_j cos(lambda_j (t - t'))` — Brownian motion
+multiplied by a comb of cosines. `test/seasonal_reference_test.dart` builds that
+matrix densely and checks the filter against it, then does the same for a trend
+plus two seasonals of different periods and checks each component's share
+against the dense per-component posterior. Confounding between a trend and a
+weekly pattern leaves the total fit intact and shows up only in the
+decomposition.
 
 **The diffuse likelihood equals the restricted likelihood.** Exact diffuse
 initialisation leaves a `log|M|` term behind when the flat prior is integrated
@@ -234,22 +260,42 @@ strategy enum, and no `Matrix` in the public API.
   have the large number, and its error falls as `1/kappa` until rounding takes
   over around `1e7`.
 * `fit` concentrates the measurement variance out analytically, so a
-  one-component model is a one-dimensional search over `log q`: a coarse scan
-  for the right basin, then golden section inside it, around fifty filter
-  passes. With `k` components you will search `k` ratios instead of `k + 1`
-  variances — the saving survives to every future version.
-* `FitResult.plateauDecades` reports how wide the near-maximum region is. If
-  the likelihood cannot tell a stiff curve from a flexible one, the result says
-  so rather than returning a confident number.
+  `k`-component model is a `k`-dimensional search rather than a `k + 1`
+  dimensional one — the saving is exact and does not shrink as components are
+  added. A coordinate scan finds the basin, then golden section for one
+  parameter or Nelder-Mead with a restart for several.
+* `FitResult.plateauDecadesByParameter` reports how far each parameter can move
+  on its own before the fit loses half a nat. If the likelihood cannot tell a
+  stiff curve from a flexible one, the result says so rather than returning a
+  confident number. Each width is conditional on the other parameters, so when
+  two components trade off against each other the joint region is wider than
+  any of these slices.
+* Standardised residuals are the **recursive** ones. Under a flat prior the
+  innovation is an affine function of the unknown starting point rather than a
+  number, and substituting the final estimate would condition every residual on
+  the whole series — including its own future. Instead the starting point is
+  re-estimated from what came strictly before each observation, which gives
+  errors that are exactly independent under the model. Their sum of squares
+  reproduces the likelihood's own quadratic form to 6e-11 relative, which it
+  must: the restricted likelihood factorises into precisely these predictive
+  densities.
+* A penalised-complexity penalty on the variances is available and is **off by
+  default**, which was not the plan. It was expected to stabilise the
+  trend/seasonal split on short histories; measured against the simulated paths
+  it generates, over twelve replications, it makes no difference to the
+  decomposition at any sample size (seasonal RMSE 0.0867 against 0.0870 at
+  N = 60, 0.0759 against 0.0759 at N = 500) and is clearly worse at recovering
+  the variances themselves. What it does do reliably is drive a component's
+  drift parameter to the floor when there is no drift to find. The numbers are
+  in `ComplexityPenalty`'s documentation.
 
 ## Roadmap
 
 0.1 was the engine, two components, the output grid, one-parameter fitting, and
-the validation harness above. 0.2 adds exact diffuse initialisation, the scalar
-two-state fast path, and `forecast()`.
+the validation harness above. 0.2 added exact diffuse initialisation, the scalar
+two-state fast path, and `forecast()`. 0.3 adds trigonometric seasonality,
+fitting over several variance ratios at once, and innovation diagnostics.
 
-* **0.3** — trigonometric seasonal components; Nelder-Mead over several
-  variance ratios; penalised ML; innovation diagnostics.
 * **0.4** — regression components for holidays and tagged events; annual
   seasonality.
 * **0.5** — a damped stochastic cycle with an *estimated* period, a grid scan
