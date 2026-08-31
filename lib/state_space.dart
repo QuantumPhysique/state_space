@@ -45,6 +45,7 @@ export 'src/components/trigonometric_seasonal.dart';
 export 'src/diagnostics.dart';
 export 'src/engine/matrix_block.dart' show MatrixBlock;
 export 'src/fit/fit.dart' show fit;
+export 'src/fit/penalty.dart';
 export 'src/initialization.dart';
 export 'src/model.dart';
 export 'src/observation.dart';

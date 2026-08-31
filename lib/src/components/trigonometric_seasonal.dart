@@ -150,6 +150,22 @@ class TrigonometricSeasonal extends Component {
     }
   }
 
+  /// The kernel at equal times is `processVariance * span * sum_j cos(0)`, so
+  /// the harmonics add rather than average: a pattern resolved by three
+  /// sinusoids drifts faster than one resolved by a single sinusoid at the
+  /// same noise intensity. Averaged over the path that halves, giving
+  /// `processVariance * span * harmonics / 2`.
+  ///
+  /// The exact figure subtracts a further
+  /// `2 sigma^2 sum_j (T - sin(lambda_j T) / lambda_j) / (lambda_j^2 T^2)`,
+  /// which the oscillation drives down like `1 / (lambda_j^2 T)`. Over a
+  /// window of a single period that term is about three per cent of the
+  /// total, and it falls away from there; a component observed over less than
+  /// one period is refused anyway by the time anything reads this.
+  @override
+  double wanderOver(double span) =>
+      math.sqrt(processVariance * span * harmonics / 2);
+
   @override
   List<bool> get diffuseStates => List.filled(stateDim, true);
 

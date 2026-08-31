@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'fit/fit.dart';
+import 'fit/penalty.dart';
 import 'model.dart';
 import 'stats/normal.dart';
 
@@ -150,13 +151,15 @@ class ForecastResult {
 /// to tell a well-determined answer from a shrug.
 class FitResult {
   /// Built by [fit].
-  const FitResult({
+  FitResult({
     required this.model,
     required this.logMarginalLikelihood,
-    required this.varianceRatio,
+    required this.logPenalty,
+    required this.penalty,
+    required this.varianceRatios,
     required this.evaluations,
     required this.converged,
-    required this.plateauDecades,
+    required this.plateauDecadesByParameter,
     required this.atBracketEdge,
   });
 
@@ -164,31 +167,73 @@ class FitResult {
   /// analytically concentrated measurement variance.
   final StructuralModel model;
 
-  /// The maximised profile log-likelihood.
+  /// The maximised profile log-likelihood, *without* the penalty.
+  ///
+  /// This is the number to compare across models. The penalised objective is
+  /// the right thing to maximise and the wrong thing to compare: two models
+  /// penalised differently are not on the same scale.
   final double logMarginalLikelihood;
 
-  /// The estimated ratio of process to measurement variance. Its reciprocal is
-  /// the smoothing-spline parameter `lambda`: small values give a stiff curve,
-  /// large values a curve that chases the data.
-  final double varianceRatio;
+  /// What the penalty contributed at the optimum, so that the objective that
+  /// was actually maximised is [logMarginalLikelihood] plus this. Zero under
+  /// [NoPenalty].
+  final double logPenalty;
 
-  /// Number of filter passes the search took.
+  /// The penalty the fit used, which [fit] chooses for you unless you say
+  /// otherwise.
+  final Penalty penalty;
+
+  /// The estimated ratio of each component's process variance to the
+  /// measurement variance, in component order.
+  final Float64List varianceRatios;
+
+  /// Number of filter passes the search took, including the axis probes that
+  /// produced [plateauDecadesByParameter].
   final int evaluations;
 
   /// Whether the search met its tolerance rather than running out of steps.
   final bool converged;
 
-  /// Width, in decades of the variance ratio, of the region where the profile
-  /// likelihood is within half a nat of its maximum.
+  /// Width, in decades, of the region around the optimum where the objective
+  /// stays within half a nat of its maximum, one entry per parameter.
   ///
-  /// A well-determined fit gives well under a decade. Several decades means
-  /// the data does not distinguish a stiff curve from a flexible one, and the
-  /// point estimate should be treated as a convention rather than a finding.
-  final double plateauDecades;
+  /// Each is measured along its own axis with the others held at the optimum,
+  /// so it answers "how well pinned down is this one number" and not "how well
+  /// pinned down is the fit". When two components trade off against each other
+  /// the joint region is wider than any of these slices, and these numbers
+  /// understate how undetermined things are.
+  final Float64List plateauDecadesByParameter;
 
   /// Whether the maximum sits at the edge of the search bracket, in which case
   /// the true optimum is probably outside it.
   final bool atBracketEdge;
+
+  /// The estimated ratio of process to measurement variance, for a model with
+  /// exactly one of them. Its reciprocal is the smoothing-spline parameter
+  /// `lambda`: small values give a stiff curve, large values one that chases
+  /// the data.
+  double get varianceRatio {
+    if (varianceRatios.length != 1) {
+      throw StateError('this model has ${varianceRatios.length} variance '
+          'ratios, so there is no single one to report. Use varianceRatios, '
+          'which is in component order.');
+    }
+    return varianceRatios.first;
+  }
+
+  /// The widest of [plateauDecadesByParameter]: how undetermined the least
+  /// determined parameter is.
+  ///
+  /// A well-determined fit gives well under a decade. Several decades means
+  /// the data does not distinguish a stiff curve from a flexible one, and the
+  /// point estimate should be treated as a convention rather than a finding.
+  double get plateauDecades {
+    var widest = 0.0;
+    for (final width in plateauDecadesByParameter) {
+      if (width > widest) widest = width;
+    }
+    return widest;
+  }
 
   /// True when the likelihood surface is too flat to support the estimate.
   bool get isFlat => plateauDecades > 2;
@@ -197,9 +242,12 @@ class FitResult {
   double get measurementVariance => model.measurementVariance;
 
   @override
-  String toString() => 'FitResult(varianceRatio: '
-      '${varianceRatio.toStringAsPrecision(4)}, measurementVariance: '
-      '${measurementVariance.toStringAsPrecision(4)}, logLik: '
-      '${logMarginalLikelihood.toStringAsFixed(3)}, evaluations: '
-      '$evaluations, converged: $converged)';
+  String toString() {
+    final ratios =
+        varianceRatios.map((r) => r.toStringAsPrecision(4)).join(', ');
+    return 'FitResult(varianceRatios: [$ratios], measurementVariance: '
+        '${measurementVariance.toStringAsPrecision(4)}, logLik: '
+        '${logMarginalLikelihood.toStringAsFixed(3)}, evaluations: '
+        '$evaluations, converged: $converged)';
+  }
 }

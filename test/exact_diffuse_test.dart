@@ -33,6 +33,8 @@ class AnchoredTrend extends Component {
   void observationAt(double time, Float64List out) =>
       inner.observationAt(time, out);
   @override
+  double wanderOver(double span) => inner.wanderOver(span);
+  @override
   List<bool> get diffuseStates => const [false, false];
   @override
   void properPrior(Float64List mean, MatrixBlock covariance) {

@@ -37,6 +37,11 @@ class LocalLevel extends Component {
   @override
   void observationAt(double time, Float64List out) => out[0] = 1;
 
+  /// `sigma^2 T / 6` for the spread of the path, against `sigma^2 T` at the
+  /// end of it.
+  @override
+  double wanderOver(double span) => math.sqrt(processVariance * span / 6);
+
   @override
   List<bool> get diffuseStates => const [true];
 

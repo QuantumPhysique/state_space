@@ -69,6 +69,15 @@ class LocalLinearTrend extends Component {
     out[1] = 0;
   }
 
+  /// The path spread of integrated Brownian motion works out at
+  /// `sigma^2 T^3 / 30`, against `sigma^2 T^3 / 3` for the variance it
+  /// reaches at the end of the window: a factor of ten, because most of the
+  /// terminal variance is accumulated near the end and the average over the
+  /// path never sees it.
+  @override
+  double wanderOver(double span) =>
+      math.sqrt(processVariance * span * span * span / 30);
+
   @override
   List<bool> get diffuseStates => const [true, true];
 

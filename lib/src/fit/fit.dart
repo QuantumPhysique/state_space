@@ -5,29 +5,43 @@ import '../model.dart';
 import '../observation.dart';
 import '../result.dart';
 import 'golden_section.dart';
+import 'nelder_mead.dart';
+import 'penalty.dart';
 import 'profile_likelihood.dart';
 
 const double _ln10 = 2.302585092994046;
+
+/// Half a nat: the conventional "indistinguishable on this data" threshold,
+/// and the drop a single extra parameter has to beat to be worth having.
+const double _halfNat = 0.5;
 
 /// Estimates a model's variances from [observations] by maximum marginal
 /// likelihood.
 ///
 /// The measurement variance is concentrated out analytically, so what is
-/// actually searched is the single ratio `q = processVariance /
-/// measurementVariance`. The search runs in `log q`: first a coarse scan of
-/// [scanPoints] across the bracket to find the right basin, then golden
-/// section inside it. The scan matters — a likelihood that is flat over
-/// decades will happily strand a local search wherever it started.
+/// searched is one log variance ratio per component rather than one variance
+/// per component plus the noise. That saving of a dimension is exact and
+/// applies at any number of components.
 ///
-/// The bracket defaults are generous but they are still finite, and the right
-/// range depends on the time unit: `q` is a variance per cubed time unit for a
+/// The search runs in three stages. A coordinate scan sweeps each ratio in
+/// turn across the bracket, which finds the right basin — a likelihood that is
+/// flat over decades will strand a local search wherever it started. Then
+/// golden section for a one-parameter model, or Nelder-Mead with one restart
+/// for several. Finally each parameter is probed along its own axis to see how
+/// far it can move before the fit deteriorates by half a nat, which is what
+/// [FitResult.plateauDecades] reports.
+///
+/// The bracket defaults are generous but still finite, and the right range
+/// depends on the time unit: `q` is a variance per cubed time unit for a
 /// trend, so measuring time in seconds rather than days moves the optimum by
 /// about fifteen decades. Check [FitResult.atBracketEdge] before believing the
 /// answer.
 ///
-/// This release fits models with exactly one free parameter, and assumes that
-/// parameter is a log variance. Multi-component fitting needs a proper
-/// multivariate optimiser and arrives with the seasonal components in 0.3.
+/// [penalty] defaults to none, including for several components. That was not
+/// the plan — the expectation was that a penalty would be needed to stabilise
+/// the trend/seasonal split on short histories — but the measurement says
+/// otherwise, and [ComplexityPenalty] records what was measured. Pass one
+/// explicitly when you have a reason to.
 FitResult fit(
   StructuralModel initial,
   List<Observation> observations, {
@@ -35,11 +49,9 @@ FitResult fit(
   double upperLogRatio = 10,
   int scanPoints = 25,
   double tolerance = 1e-4,
+  Penalty? penalty,
 }) {
-  if (initial.parameterCount != 1) {
-    throw UnsupportedError('fit() handles one free parameter; this model has '
-        '${initial.parameterCount}. Multi-parameter fitting lands in 0.3.');
-  }
+  final k = initial.parameterCount;
   if (!(lowerLogRatio < upperLogRatio)) {
     throw ArgumentError('empty bracket [$lowerLogRatio, $upperLogRatio]');
   }
@@ -47,61 +59,174 @@ FitResult fit(
     throw ArgumentError.value(scanPoints, 'scanPoints', 'must be at least 3');
   }
 
-  final profile = ProfileLikelihood(initial, observations);
-  if (profile.evaluate(lowerLogRatio).usedObservations < 1) {
+  final chosen = penalty ?? const NoPenalty();
+  final profile = ProfileLikelihood(initial, observations, penalty: chosen);
+
+  final origin = Float64List(k)
+    ..fillRange(0, k, (lowerLogRatio + upperLogRatio) / 2);
+  if (profile.evaluate(origin).usedObservations < 1) {
     throw ArgumentError('too few observations to estimate anything: the model '
         'has ${initial.stateDim} states, and the first few observations are '
         'spent pinning them down.');
   }
 
-  final step = (upperLogRatio - lowerLogRatio) / (scanPoints - 1);
-  final scan = Float64List(scanPoints);
-  var best = 0;
-  for (var i = 0; i < scanPoints; i++) {
-    scan[i] = profile.at(lowerLogRatio + i * step);
-    if (scan[i] > scan[best]) best = i;
+  // Anything outside the bracket is refused without running a filter, which
+  // both bounds the simplex and keeps a degenerate variance from reaching the
+  // recursion at all.
+  double objective(Float64List theta) {
+    for (final value in theta) {
+      if (value < lowerLogRatio || value > upperLogRatio) {
+        return -double.maxFinite;
+      }
+    }
+    return profile.at(theta);
   }
 
-  final refined = maximise(
-    profile.at,
-    lowerLogRatio + math.max(0, best - 1) * step,
-    lowerLogRatio + math.min(scanPoints - 1, best + 1) * step,
-    tolerance: tolerance,
-  );
+  final step = (upperLogRatio - lowerLogRatio) / (scanPoints - 1);
+  final current = Float64List(k);
+  var scanHitEnd = false;
+  var bestScanIndex = 0;
+  final scan = Float64List(scanPoints);
 
-  final atOptimum = profile.evaluate(refined.argument);
-  final varianceRatio = math.exp(refined.argument);
+  // Coordinate scan: sweep each ratio across the whole bracket in turn,
+  // holding the others where the previous sweeps left them. With one
+  // parameter this is an exhaustive scan; with several it is one pass of
+  // coordinate ascent, which is not an optimiser but is a much better place to
+  // start one than wherever the caller's initial guess happened to be.
+  for (var axis = 0; axis < k; axis++) {
+    var best = 0;
+    for (var i = 0; i < scanPoints; i++) {
+      current[axis] = lowerLogRatio + i * step;
+      scan[i] = objective(current);
+      if (scan[i] > scan[best]) best = i;
+    }
+    current[axis] = lowerLogRatio + best * step;
+    if (best == 0 || best == scanPoints - 1) scanHitEnd = true;
+    bestScanIndex = best;
+  }
+
+  Float64List optimum;
+  double peak;
+  bool converged;
+
+  if (k == 1) {
+    final refined = maximise(
+      (x) => objective(Float64List.fromList([x])),
+      lowerLogRatio + math.max(0, bestScanIndex - 1) * step,
+      lowerLogRatio + math.min(scanPoints - 1, bestScanIndex + 1) * step,
+      tolerance: tolerance,
+    );
+    optimum = Float64List.fromList([refined.argument]);
+    peak = refined.value;
+    converged = refined.converged;
+  } else {
+    // The restart is the standard insurance against a simplex that has
+    // collapsed along one direction and stopped making progress. A second run
+    // that finds nothing new is decent evidence the first one finished.
+    var simplex = maximiseSimplex(objective, current,
+        step: 2 * step, tolerance: tolerance);
+    simplex = maximiseSimplex(objective, simplex.argument,
+        step: 0.5, tolerance: tolerance);
+    optimum = simplex.argument;
+    peak = simplex.value;
+    converged = simplex.converged;
+  }
+
+  final widths = Float64List(k);
+  for (var axis = 0; axis < k; axis++) {
+    widths[axis] = _halfNatWidth(
+            objective, optimum, axis, peak, lowerLogRatio, upperLogRatio) /
+        _ln10;
+  }
+
+  final atOptimum = profile.evaluate(optimum);
   final measurementVariance = atOptimum.profileMeasurementVariance;
+  final shift = math.log(measurementVariance);
+  final absolute = Float64List(k);
+  final ratios = Float64List(k);
+  for (var i = 0; i < k; i++) {
+    absolute[i] = optimum[i] + shift;
+    ratios[i] = math.exp(optimum[i]);
+  }
 
-  final fitted = initial
-      .withParameters(Float64List.fromList(
-          [refined.argument + math.log(measurementVariance)]))
-      .withMeasurementVariance(measurementVariance);
+  var nearBound = false;
+  for (final value in optimum) {
+    if ((value - lowerLogRatio).abs() < 1e-6 ||
+        (value - upperLogRatio).abs() < 1e-6) {
+      nearBound = true;
+    }
+  }
 
   return FitResult(
-    model: fitted,
-    logMarginalLikelihood: refined.value,
-    varianceRatio: varianceRatio,
+    model: initial
+        .withParameters(absolute)
+        .withMeasurementVariance(measurementVariance),
+    logMarginalLikelihood: profile.likelihoodAt(optimum),
+    logPenalty: profile.penaltyAt(optimum),
+    penalty: chosen,
+    varianceRatios: ratios,
     evaluations: profile.evaluations,
-    converged: refined.converged,
-    plateauDecades: _plateauWidth(scan, refined.value, step) / _ln10,
-    atBracketEdge: best == 0 || best == scanPoints - 1,
+    converged: converged,
+    plateauDecadesByParameter: widths,
+    atBracketEdge: scanHitEnd || nearBound,
   );
 }
 
-/// Width in log units of the scanned region within half a nat of the peak.
+/// How far parameter [axis] can move on its own before the objective falls
+/// half a nat below [peak].
 ///
-/// Half a nat is the conventional "indistinguishable on this data" threshold;
-/// it is the drop a single extra parameter has to beat to be worth having.
-double _plateauWidth(Float64List scan, double peak, double step) {
-  final floor = peak - 0.5;
-  var lowest = -1;
-  var highest = -1;
-  for (var i = 0; i < scan.length; i++) {
-    if (scan[i] < floor) continue;
-    if (lowest < 0) lowest = i;
-    highest = i;
+/// Conditional on the others, which is the honest caveat: when two components
+/// trade off against one another the joint region is wider than any of these
+/// slices, and the number here understates how undetermined the fit really is.
+/// It is still the question a reader asks first — "how well pinned down is
+/// this one number" — and it costs about three dozen filter passes per
+/// parameter to answer.
+double _halfNatWidth(
+  double Function(Float64List) objective,
+  Float64List optimum,
+  int axis,
+  double peak,
+  double lower,
+  double upper,
+) {
+  final probe = Float64List.fromList(optimum);
+  final floor = peak - _halfNat;
+
+  double edge(int direction) {
+    // Expand until the objective drops through the floor or the bracket runs
+    // out, then bisect what is left.
+    var inside = 0.0;
+    var outside = double.nan;
+    for (var reach = 0.25; reach <= 64; reach *= 2) {
+      probe[axis] = optimum[axis] + direction * reach;
+      if (probe[axis] < lower || probe[axis] > upper) {
+        outside = direction > 0 ? upper - optimum[axis] : optimum[axis] - lower;
+        break;
+      }
+      if (objective(probe) < floor) {
+        outside = reach;
+        break;
+      }
+      inside = reach;
+    }
+    if (outside.isNaN) return inside;
+
+    for (var i = 0; i < 10; i++) {
+      final middle = (inside + outside) / 2;
+      probe[axis] = optimum[axis] + direction * middle;
+      if (probe[axis] < lower || probe[axis] > upper) {
+        outside = middle;
+      } else if (objective(probe) < floor) {
+        outside = middle;
+      } else {
+        inside = middle;
+      }
+    }
+    return inside;
   }
-  if (lowest < 0) return 0;
-  return (highest - lowest) * step;
+
+  final up = edge(1);
+  final down = edge(-1);
+  probe[axis] = optimum[axis];
+  return up + down;
 }

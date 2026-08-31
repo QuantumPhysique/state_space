@@ -166,7 +166,11 @@ void main() {
       expect(result.measurementVariance, closeTo(0.25, 0.05));
     });
 
-    test('refuses a model it cannot fit', () {
+    test('refuses a model whose components cannot be told apart', () {
+      // A trend and a level both supply a level, so no amount of data
+      // separates them. Until 0.3 this was refused by fit() itself, which
+      // handled only one parameter; now the search runs and the engine
+      // refuses it for the real reason, on the first evaluation.
       expect(
         () => fit(
             StructuralModel([
@@ -179,7 +183,8 @@ void main() {
               measurementVariance: 0.1,
               seed: 1,
             )),
-        throwsUnsupportedError,
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('the same signal'))),
       );
     });
 
