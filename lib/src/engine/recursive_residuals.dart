@@ -107,8 +107,15 @@ class ResidualPieces {
     final row = i * d;
     final s = pieces.variance[i];
 
+    // Two guards, and both are needed. The count is the exact one: `i`
+    // observations cannot determine more than `i` directions, so before `d`
+    // of them the information matrix is singular by construction. The
+    // factorisation catches the rest -- repeated timestamps, a component the
+    // data cannot see -- but on its own it does not catch the first, because
+    // a matrix that is singular in exact arithmetic can still hand back a
+    // tiny positive pivot and a residual that means nothing.
     factor.setAll(0, information);
-    if (choleskyFactor(factor, d)) {
+    if (i >= d && choleskyFactor(factor, d)) {
       estimate.setAll(0, rhs);
       for (var c = 0; c < d; c++) {
         estimate[c] = -estimate[c];

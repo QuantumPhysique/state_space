@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'component.dart';
 import 'components/local_level.dart';
 import 'components/local_linear_trend.dart';
+import 'diagnostics.dart';
 import 'engine/fast_path_2x2.dart';
 import 'engine/kalman.dart';
 import 'engine/rts.dart';
@@ -128,6 +129,28 @@ class StructuralModel {
   double logLikelihood(List<Observation> observations) =>
       _filter(Timeline.merge(observations, null), keepHistory: false)
           .logLikelihood;
+
+  /// What the one-step-ahead prediction errors say about this model on
+  /// [observations].
+  ///
+  /// One forward pass, and it is a separate one: [smooth] does not compute
+  /// residuals, because reconstructing them costs about as much again as the
+  /// backward pass and most callers plotting a trend never look at them. Ask
+  /// for them when you want to know whether the model deserves to be
+  /// believed, which is usually once per model rather than once per redraw.
+  InnovationDiagnostics diagnose(List<Observation> observations) {
+    final result = forwardPass(
+      components,
+      Timeline.merge(observations, null),
+      measurementVariance: measurementVariance,
+      initialization: initialization,
+      keepResiduals: true,
+    );
+    return InnovationDiagnostics(
+      times: result.residualTimes!,
+      residuals: result.standardisedResiduals!,
+    );
+  }
 
   /// Posterior of the states given [observations], reported at the observation
   /// times or, if [grid] is given, at the grid times.

@@ -42,6 +42,7 @@ export 'src/component.dart';
 export 'src/components/local_level.dart';
 export 'src/components/local_linear_trend.dart';
 export 'src/components/trigonometric_seasonal.dart';
+export 'src/diagnostics.dart';
 export 'src/engine/matrix_block.dart' show MatrixBlock;
 export 'src/fit/fit.dart' show fit;
 export 'src/initialization.dart';
