@@ -330,7 +330,8 @@ class KalmanFilter {
     // With no steps there is nothing to report and nothing to estimate, so
     // the diffuse system is left unsolved rather than declared singular.
     if (d > 0 && steps > 0) {
-      final solved = _solveDiffuseSystem(timeline.observationCount);
+      final solved = _solveDiffuseSystem(timeline.observationCount,
+          timeline.times[steps - 1] - timeline.times[0]);
       diffuseMean = solved.mean;
       diffuseCovariance = solved.covariance;
       diffuseLogDeterminant = solved.logDeterminant;
@@ -443,16 +444,12 @@ class KalmanFilter {
   /// least-squares solution of `M d = -rhs`, its covariance is `M^-1`, and the
   /// integration leaves `log|M|` behind in the likelihood.
   ({Float64List mean, Float64List covariance, double logDeterminant})
-      _solveDiffuseSystem(int observationCount) {
+      _solveDiffuseSystem(int observationCount, double span) {
     final d = diffuseDim;
     final factor = Float64List.fromList(_information);
     if (!choleskyFactor(factor, d)) {
-      throw StateError('the data does not determine the model\'s $d diffuse '
-          'states: $observationCount observations left the diffuse '
-          'information matrix singular. A local linear trend needs readings at '
-          'two distinct times before its level and slope mean anything. Either '
-          'supply more data, or fall back to ApproximateDiffuse, which returns '
-          'a very large variance instead of refusing.');
+      throw StateError(
+          singularDiffuseMessage(components, d, observationCount, span));
     }
 
     var logDeterminant = 0.0;
@@ -742,4 +739,44 @@ class KalmanFilter {
       }
     }
   }
+}
+
+/// Explains a singular diffuse information matrix as well as the model
+/// allows.
+///
+/// Shared by both forward-pass implementations so that the two never drift
+/// apart on the one error a caller is actually likely to hit. The engine
+/// contributes the arithmetic — how many flat directions there are and how
+/// much data there was — and the components contribute whatever they know
+/// about their own identifiability, which is knowledge the engine is
+/// deliberately kept clear of.
+String singularDiffuseMessage(List<Component> components, int diffuseDim,
+    int observationCount, double span) {
+  final reasons = <String>[];
+  if (observationCount < diffuseDim) {
+    reasons.add('there are only $observationCount observations for '
+        '$diffuseDim flat directions, and each one costs a degree of freedom');
+  }
+  for (final component in components) {
+    final hint = component.identifiabilityHint(span);
+    if (hint != null) reasons.add(hint);
+  }
+  if (reasons.isEmpty && components.length > 1) {
+    reasons.add('two components can produce the same signal on this data — a '
+        'trend and a level both supply a level, and two seasonals that share '
+        'a harmonic are the same function of time');
+  }
+
+  final buffer = StringBuffer('the data does not determine the model\'s '
+      '$diffuseDim diffuse states: $observationCount observations left the '
+      'diffuse information matrix singular');
+  if (reasons.isEmpty) {
+    buffer.write('. ');
+  } else {
+    buffer.write(', because ${reasons.join('; and ')}. ');
+  }
+  buffer.write('Either supply more data, drop a component, or fall back to '
+      'ApproximateDiffuse, which returns a very large variance instead of '
+      'refusing.');
+  return buffer.toString();
 }

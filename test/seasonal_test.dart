@@ -194,4 +194,51 @@ void main() {
       }
     });
   });
+
+  group('when the flat directions are not determined', () {
+    test('names both the count and the short span when both apply', () {
+      // Six flat directions and five readings, spread over three days. The
+      // engine knows only that the information matrix came out singular; it
+      // knows the count itself, and asks the component about the rest.
+      final short = [
+        for (var i = 0; i < 5; i++) Observation(i * 0.75, 1.0 + 0.1 * i)
+      ];
+      expect(
+        () => StructuralModel([
+          TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 1e-3)
+        ]).smooth(short),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('degree of freedom'))
+            .having((e) => e.message, 'message',
+                contains('has not been round once'))),
+      );
+    });
+
+    test('two components that supply the same level say that instead', () {
+      final data = [
+        for (var i = 0; i < 30; i++) Observation(i.toDouble(), 5.0 + 0.1 * i)
+      ];
+      expect(
+        () => StructuralModel([
+          const LocalLinearTrend(processVariance: 1e-3),
+          const LocalLevel(processVariance: 1e-3),
+        ]).smooth(data),
+        throwsA(isA<StateError>()
+            .having((e) => e.message, 'message', contains('the same signal'))),
+      );
+    });
+
+    test('a long enough series is fine', () {
+      final random = math.Random(2);
+      final data = [
+        for (var i = 0; i < 40; i++)
+          Observation(i * 0.75,
+              math.cos(2 * math.pi * i * 0.75 / 7) + 0.05 * random.nextDouble())
+      ];
+      final result = StructuralModel([
+        TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 1e-3)
+      ]).smooth(data);
+      expect(result.logMarginalLikelihood.isFinite, isTrue);
+    });
+  });
 }

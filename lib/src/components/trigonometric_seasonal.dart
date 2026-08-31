@@ -159,6 +159,19 @@ class TrigonometricSeasonal extends Component {
     // large it is, are both for the data to say.
   }
 
+  /// A seasonal that has not been round once is not, strictly, degenerate --
+  /// sinusoids stay linearly independent on any handful of distinct times.
+  /// It is merely so badly conditioned that it is the first thing worth
+  /// suspecting when something else tips the solve over, which is what this
+  /// hint is for: a lead, offered only once the engine has already failed.
+  @override
+  String? identifiabilityHint(double span) {
+    if (span >= period) return null;
+    return 'a seasonal component of period $period was given a series '
+        'spanning only $span, so it has not been round once and over that '
+        'stretch looks much like a constant with a slope';
+  }
+
   @override
   Float64List get parameters =>
       Float64List.fromList([math.log(processVariance)]);

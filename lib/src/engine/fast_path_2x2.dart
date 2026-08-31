@@ -283,13 +283,11 @@ class FastPath2x2 {
       // instead of merely to twelve digits.
       final information = Float64List.fromList([m00, m01, m01, m11]);
       if (!choleskyFactor(information, 2)) {
-        throw StateError('the data does not determine the model\'s 2 diffuse '
-            'states: ${timeline.observationCount} observations left the '
-            'diffuse information matrix singular. A local linear trend needs '
-            'readings at two distinct times before its level and slope mean '
-            'anything. Either supply more data, or fall back to '
-            'ApproximateDiffuse, which returns a very large variance instead '
-            'of refusing.');
+        throw StateError(singularDiffuseMessage(
+            [component],
+            2,
+            timeline.observationCount,
+            timeline.times[steps - 1] - timeline.times[0]));
       }
       diffuseLogDeterminant =
           2 * (math.log(information[0]) + math.log(information[3]));

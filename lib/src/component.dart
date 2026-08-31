@@ -63,6 +63,16 @@ abstract class Component {
   /// A copy of this component with [theta] as its [parameters].
   Component withParameters(Float64List theta);
 
+  /// Why this component's flat directions might not be identifiable on a
+  /// series spanning [span] time units, or null if nothing about it is
+  /// suspect.
+  ///
+  /// The engine knows nothing about seasonal periods and is not about to
+  /// start. When the diffuse system comes out singular it asks each component
+  /// whether it can explain itself and pastes together whatever comes back,
+  /// which keeps the diagnosis where the knowledge is.
+  String? identifiabilityHint(double span) => null;
+
   /// Index within this component's block of a state holding the instantaneous
   /// rate of change of the component's contribution, or null if it has none.
   ///
