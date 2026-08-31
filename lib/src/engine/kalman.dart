@@ -5,6 +5,7 @@ import '../component.dart';
 import '../initialization.dart';
 import 'cholesky.dart';
 import 'matrix_block.dart';
+import 'recursive_residuals.dart';
 import 'timeline.dart';
 
 const double _log2pi = 1.8378770664093456;
@@ -35,6 +36,8 @@ class FilterResult {
     this.predictedCovariance,
     this.filteredSensitivity,
     this.predictedSensitivity,
+    this.residualTimes,
+    this.standardisedResiduals,
   });
 
   final int stateDim;
@@ -96,6 +99,15 @@ class FilterResult {
 
   /// The same, before each step's update.
   final Float64List? predictedSensitivity;
+
+  /// Time of each standardised residual, populated only when the pass was
+  /// asked for them.
+  final Float64List? residualTimes;
+
+  /// Standardised one-step-ahead prediction errors, `N - d` of them: see
+  /// [recursiveResiduals] for what they are under a flat prior, which is not
+  /// quite the obvious thing.
+  final Float64List? standardisedResiduals;
 
   /// Maximum-likelihood measurement variance given the *ratios* of all the
   /// other variances to it.
@@ -264,10 +276,13 @@ class KalmanFilter {
 
   /// Runs the forward pass. With [keepHistory] the filtered and predicted
   /// moments are retained for the RTS backward pass.
-  FilterResult run(Timeline timeline, {bool keepHistory = false}) {
+  FilterResult run(Timeline timeline,
+      {bool keepHistory = false, bool keepResiduals = false}) {
     final n = stateDim;
     final d = diffuseDim;
     final steps = timeline.length;
+    final pieces =
+        keepResiduals ? ResidualPieces(timeline.observationCount, d) : null;
 
     final filteredMean = keepHistory ? Float64List(steps * n) : null;
     final filteredCov = keepHistory ? Float64List(steps * n * n) : null;
@@ -305,6 +320,7 @@ class KalmanFilter {
       if (timeline.hasObservation(t)) {
         final r = timeline.variances[t] * measurementVariance;
         _update(timeline.times[t], timeline.values[t], r);
+        pieces?.add(timeline.times[t], _innovation, _innovationVariance, _vb);
         seen++;
         if (seen > burnIn) {
           used++;
@@ -346,6 +362,9 @@ class KalmanFilter {
       used = timeline.observationCount - d;
     }
 
+    final residuals =
+        pieces == null ? null : recursiveResiduals(pieces, burnIn: burnIn);
+
     return FilterResult(
       stateDim: n,
       stepCount: steps,
@@ -365,6 +384,8 @@ class KalmanFilter {
       predictedCovariance: predictedCov,
       filteredSensitivity: filteredSensitivity,
       predictedSensitivity: predictedSensitivity,
+      residualTimes: residuals?.times,
+      standardisedResiduals: residuals?.values,
     );
   }
 

@@ -6,6 +6,7 @@ import '../initialization.dart';
 import 'cholesky.dart';
 import 'kalman.dart';
 import 'matrix_block.dart';
+import 'recursive_residuals.dart';
 import 'timeline.dart';
 
 const double _log2pi = 1.8378770664093456;
@@ -22,20 +23,21 @@ FilterResult forwardPass(
   required Initialization initialization,
   int? burnIn,
   bool keepHistory = false,
+  bool keepResiduals = false,
 }) {
   if (burnIn == null && FastPath2x2.handles(components, initialization)) {
     return FastPath2x2(
       components.single,
       measurementVariance: measurementVariance,
       initialization: initialization,
-    ).run(timeline, keepHistory: keepHistory);
+    ).run(timeline, keepHistory: keepHistory, keepResiduals: keepResiduals);
   }
   return KalmanFilter(
     components,
     measurementVariance: measurementVariance,
     initialization: initialization,
     burnIn: burnIn,
-  ).run(timeline, keepHistory: keepHistory);
+  ).run(timeline, keepHistory: keepHistory, keepResiduals: keepResiduals);
 }
 
 /// The forward pass for a model that is one two-state component, written out
@@ -108,9 +110,13 @@ class FastPath2x2 {
   }
 
   /// The same contract as [KalmanFilter.run].
-  FilterResult run(Timeline timeline, {bool keepHistory = false}) {
+  FilterResult run(Timeline timeline,
+      {bool keepHistory = false, bool keepResiduals = false}) {
     final steps = timeline.length;
     final dim = _exact ? 2 : 0;
+    final pieces =
+        keepResiduals ? ResidualPieces(timeline.observationCount, dim) : null;
+    final loading = Float64List(dim);
 
     final filteredMean = keepHistory ? Float64List(steps * 2) : null;
     final filteredCov = keepHistory ? Float64List(steps * 4) : null;
@@ -232,9 +238,10 @@ class FastPath2x2 {
         p01 += s * k0 * k1 - ph0 * k1 - k0 * ph1;
         p11 += s * k1 * k1 - 2 * ph1 * k1;
 
+        var vb0 = 0.0, vb1 = 0.0;
         if (_exact) {
-          final vb0 = -(h0 * b00 + h1 * b10);
-          final vb1 = -(h0 * b01 + h1 * b11);
+          vb0 = -(h0 * b00 + h1 * b10);
+          vb1 = -(h0 * b01 + h1 * b11);
           b00 += k0 * vb0;
           b01 += k0 * vb1;
           b10 += k1 * vb0;
@@ -246,6 +253,14 @@ class FastPath2x2 {
           m11 += w1 * vb1;
           rhs0 += w0 * v;
           rhs1 += w1 * v;
+        }
+
+        if (pieces != null) {
+          if (_exact) {
+            loading[0] = vb0;
+            loading[1] = vb1;
+          }
+          pieces.add(timeline.times[t], v, s, loading);
         }
 
         seen++;
@@ -305,6 +320,9 @@ class FastPath2x2 {
       used = timeline.observationCount - 2;
     }
 
+    final residuals =
+        pieces == null ? null : recursiveResiduals(pieces, burnIn: burn);
+
     return FilterResult(
       stateDim: 2,
       stepCount: steps,
@@ -324,6 +342,8 @@ class FastPath2x2 {
       predictedCovariance: predictedCov,
       filteredSensitivity: filteredSensitivity,
       predictedSensitivity: predictedSensitivity,
+      residualTimes: residuals?.times,
+      standardisedResiduals: residuals?.values,
     );
   }
 }
