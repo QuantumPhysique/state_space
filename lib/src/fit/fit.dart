@@ -84,7 +84,6 @@ FitResult fit(
 
   final step = (upperLogRatio - lowerLogRatio) / (scanPoints - 1);
   final current = Float64List(k);
-  var scanHitEnd = false;
   var bestScanIndex = 0;
   final scan = Float64List(scanPoints);
 
@@ -101,7 +100,6 @@ FitResult fit(
       if (scan[i] > scan[best]) best = i;
     }
     current[axis] = lowerLogRatio + best * step;
-    if (best == 0 || best == scanPoints - 1) scanHitEnd = true;
     bestScanIndex = best;
   }
 
@@ -157,13 +155,20 @@ FitResult fit(
     ratios[i] = math.exp(optimum[i]);
   }
 
-  var nearBound = false;
-  for (final value in optimum) {
-    if ((value - lowerLogRatio).abs() < 1e-6 ||
-        (value - upperLogRatio).abs() < 1e-6) {
-      nearBound = true;
-    }
-  }
+  // A parameter counts as sitting on a bound when it finishes in the last
+  // cell of the scan that found it. An exact comparison would miss the usual
+  // case: golden section refines inside the outermost scan interval and stops
+  // a little short of the bound, and the simplex is repelled from it by the
+  // objective going to minus infinity just outside.
+  final status = [
+    for (final value in optimum)
+      if (value <= lowerLogRatio + step)
+        ParameterStatus.shrunkToNothing
+      else if (value >= upperLogRatio - step)
+        ParameterStatus.beyondBracket
+      else
+        ParameterStatus.determined
+  ];
 
   return FitResult(
     model: initial
@@ -176,7 +181,7 @@ FitResult fit(
     evaluations: profile.evaluations,
     converged: converged,
     plateauDecadesByParameter: widths,
-    atBracketEdge: scanHitEnd || nearBound,
+    parameterStatus: status,
   );
 }
 

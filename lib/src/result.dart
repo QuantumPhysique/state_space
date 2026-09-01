@@ -197,6 +197,32 @@ class ForecastResult {
   }
 }
 
+/// What became of one parameter during a fit.
+enum ParameterStatus {
+  /// The optimum is inside the search bracket, with the likelihood falling
+  /// away on both sides of it. The estimate means what it says.
+  determined,
+
+  /// The optimum sits at the bottom of the bracket: the component has been
+  /// shrunk out of the model rather than estimated.
+  ///
+  /// A variance of zero is the edge of the parameter space, not an interior
+  /// point, and the usual asymptotics do not hold there. Whatever width is
+  /// reported for such a parameter is one-sided — the likelihood cannot fall
+  /// away below a boundary it cannot cross — so it is not an error bar and
+  /// should not be quoted as one. The useful reading is qualitative: the data
+  /// gives this component nothing to do.
+  shrunkToNothing,
+
+  /// The optimum sits at the top of the bracket, so the real one is probably
+  /// outside it.
+  ///
+  /// Almost always a unit problem. A trend's variance is per cubed time unit,
+  /// so measuring time in seconds rather than days moves the optimum about
+  /// fifteen decades; widen the bracket or change the unit.
+  beyondBracket,
+}
+
 /// What [StructuralModel] fitting returned, together with enough diagnostics
 /// to tell a well-determined answer from a shrug.
 class FitResult {
@@ -210,8 +236,8 @@ class FitResult {
     required this.evaluations,
     required this.converged,
     required this.plateauDecadesByParameter,
-    required this.atBracketEdge,
-  });
+    required List<ParameterStatus> parameterStatus,
+  }) : parameterStatus = List.unmodifiable(parameterStatus);
 
   /// The fitted model: components at their estimated variances, and the
   /// analytically concentrated measurement variance.
@@ -252,11 +278,22 @@ class FitResult {
   /// pinned down is the fit". When two components trade off against each other
   /// the joint region is wider than any of these slices, and these numbers
   /// understate how undetermined things are.
+  ///
+  /// For a parameter whose [parameterStatus] is not
+  /// [ParameterStatus.determined] the width is one-sided and is not an error
+  /// bar; see that enum for why.
   final Float64List plateauDecadesByParameter;
 
-  /// Whether the maximum sits at the edge of the search bracket, in which case
-  /// the true optimum is probably outside it.
-  final bool atBracketEdge;
+  /// What became of each parameter, in the same order as [varianceRatios].
+  final List<ParameterStatus> parameterStatus;
+
+  /// Whether any parameter finished at an edge of the search bracket.
+  ///
+  /// Kept as a single flag because it is the first thing worth checking;
+  /// [parameterStatus] says which parameter and which edge, which is what
+  /// determines whether the answer is wrong or merely uninteresting.
+  bool get atBracketEdge =>
+      parameterStatus.any((s) => s != ParameterStatus.determined);
 
   /// The estimated ratio of process to measurement variance, for a model with
   /// exactly one of them. Its reciprocal is the smoothing-spline parameter
