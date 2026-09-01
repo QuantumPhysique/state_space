@@ -1,5 +1,13 @@
 ## 0.4.0
 
+**Relicensed to MIT**, from AGPLv3+. AGPL is a reasonable position for an
+application and the wrong one for a library, where it is inherited by
+everything built on top, network clause and all. Nothing is lost in the
+direction that matters: an AGPL application may use an MIT library freely, so
+[trale](https://github.com/QuantumPhysique/trale) is unaffected. The 0.1.0 entry
+below still says AGPLv3+ and stays that way, because it was true when it was
+written.
+
 Events that are not periodic, annual seasonality, and a fit that says when a
 variance has been shrunk out rather than estimated.
 
@@ -25,9 +33,21 @@ variance has been shrunk out rather than estimated.
   A variance of zero is the edge of the parameter space rather than an interior
   point, so the half-nat width reported there is one-sided and is not an error
   bar.
-* Regressors are data rather than closures, so a model still survives being
-  sent to another isolate, and they are defined by knots rather than samples,
-  so an output grid can ask for the signal between readings.
+* Regressors are data rather than closures, and are defined by knots rather
+  than samples, so an output grid can ask for the signal between readings.
+* An **isolate round-trip test**, for a promise the package had been making
+  without checking: a model goes across, a posterior, a forecast and a set of
+  diagnostics come back, and all of them match what the same code computes in
+  process. Writing it corrected a misconception in two doc comments — a plain
+  closure crosses an isolate boundary perfectly well, since Dart 2.15 closures
+  are sendable within an isolate group. What fails is anything holding a port
+  or a file handle, including a closure that captured one, which is a runtime
+  failure in the caller's code over something the type system never showed
+  them. That, rather than sendability, is why regressors are data.
+* `relativeVariance` is documented in the README rather than only in the API
+  docs, and the README no longer claims there is no matrix type in the public
+  API — there is one, `MatrixBlock`, and it is how a component writes its own
+  transition and noise blocks.
 
 Breaking changes:
 
