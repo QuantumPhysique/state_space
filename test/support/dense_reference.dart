@@ -167,6 +167,7 @@ Kernel sumOf(List<Kernel> parts) => (s, t) {
   double logLikelihood,
   double logDeterminant,
   List<double> estimate,
+  List<double> variance,
 }) restrictedLikelihood(
   List<Observation> data,
   Kernel kernel,
@@ -214,12 +215,17 @@ Kernel sumOf(List<Kernel> parts) => (s, t) {
   for (var k = 0; k < d; k++) {
     informationLogDeterminant += 2 * math.log(m.lower(k, k));
   }
-  final estimate = m.solve(Matrix64.fromRows([
-    for (var k = 0; k < d; k++) [projected[k]]
+  // One right-hand side for the estimate, then the identity, so that the
+  // diagonal of `M^-1` comes back alongside it -- that is the posterior
+  // variance of each flat direction under the flat prior, and it is what a
+  // reported standard error has to match.
+  final solvedSystem = m.solve(Matrix64.fromRows([
+    for (var k = 0; k < d; k++)
+      [projected[k], for (var l = 0; l < d; l++) k == l ? 1.0 : 0.0]
   ]));
   var explained = 0.0;
   for (var k = 0; k < d; k++) {
-    explained += projected[k] * estimate(k, 0);
+    explained += projected[k] * solvedSystem(k, 0);
   }
 
   return (
@@ -230,6 +236,7 @@ Kernel sumOf(List<Kernel> parts) => (s, t) {
             quadratic -
             explained),
     logDeterminant: informationLogDeterminant,
-    estimate: [for (var k = 0; k < d; k++) estimate(k, 0)],
+    estimate: [for (var k = 0; k < d; k++) solvedSystem(k, 0)],
+    variance: [for (var k = 0; k < d; k++) solvedSystem(k, k + 1)],
   );
 }
