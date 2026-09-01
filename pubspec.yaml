@@ -3,7 +3,7 @@ description: >-
   Exact Gaussian process regression for irregular time series in linear time.
   Kalman filtering, RTS smoothing, and marginal-likelihood hyperparameter
   estimation. Pure Dart, no dependencies.
-version: 0.2.0
+version: 0.3.0
 repository: https://github.com/QuantumPhysique/state_space
 issue_tracker: https://github.com/QuantumPhysique/state_space/issues
 
