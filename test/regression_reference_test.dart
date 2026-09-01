@@ -125,14 +125,17 @@ void main() {
       // different route.
       final model =
           StructuralModel(components, measurementVariance: measurementVariance);
-      final early = model.smooth(data.sublist(0, data.length));
+      final plain = model.smooth(data);
       final onAGrid = model.smooth(data,
-          grid: Timeline.merge(data.sublist(0, 5), null).times);
+          grid:
+              Float64List.fromList([for (var i = 0; i < 5; i++) data[i].time]));
       for (var j = 0; j < 2; j++) {
         expect(onAGrid.coefficients[j].estimate,
-            closeTo(early.coefficients[j].estimate, 1e-12));
+            closeTo(plain.coefficients[j].estimate, 1e-12),
+            reason: plain.coefficients[j].name);
         expect(onAGrid.coefficients[j].variance,
-            closeTo(early.coefficients[j].variance, 1e-14));
+            closeTo(plain.coefficients[j].variance, 1e-14),
+            reason: plain.coefficients[j].name);
       }
     });
   });
