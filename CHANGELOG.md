@@ -1,3 +1,72 @@
+## 0.5.0
+
+The first stationary components, the noise floor issue #1 asked for, and a
+calibration harness that turned out to contradict what the roadmap expected.
+
+* **`Matern`** at ν = 1/2, 3/2 and 5/2 — one, two and three states, exactly.
+  The standard Gaussian process kernel and the obvious gap in the component
+  list. `ν = 1/2` is an Ornstein-Uhlenbeck process, the exact continuous-time
+  AR(1), which is the shape of hydration wobble in a weight series and of a
+  great many other things a trend should not be chasing. The order also chooses
+  how rough the curve may be, which matters: the cubic spline of
+  `LocalLinearTrend` assumes a differentiable trend, and plenty of series are
+  not.
+* **`StochasticCycle`**, the quasi-periodic kernel `σ² ρ^|τ| cos(2πτ/p)`, with
+  the period estimated rather than given. Unlike a `TrigonometricSeasonal` it
+  says the rhythm is *approximate* — the cycle drifts out of step and finds its
+  way back — which is what a physiological rhythm actually does.
+* **Both are stationary**, which is new. Everything shipped before this is
+  diffuse, and `properPrior` had existed since 0.1 as a hook nothing
+  implemented. That is why the two arrive together: getting a stationary prior
+  right once serves both, and it is what saves a component whose variance
+  shrinks towards nothing from still drawing a pattern that is not there.
+* Both are pinned against dense `O(N³)` Gaussian process references to 1e-9 on
+  the likelihood and 1e-10 on the posterior, the same way the trend and the
+  seasonal are. For a model of stationary components alone there are no flat
+  directions at all, so the comparison is against the plain textbook likelihood
+  with no restricted-likelihood correction in the way.
+
+* **A noise floor.** `fit(model, data, minimumMeasurementVariance: ...)` runs
+  normally and redoes the fit with the noise pinned only if the estimate lands
+  below the floor; `fixedMeasurementVariance` pins it outright. Requested in
+  issue #1, and a real gap: a run of nearly identical readings would let the
+  model claim a precision no kitchen scale can deliver, and draw a band to
+  match. A floor cannot be a clamp applied afterwards — pinning one variance in
+  absolute units breaks the scale equivariance that lets everything else be
+  searched as a ratio, so the rest must be re-estimated against it, which moves
+  the process variance by 0.6 decades on the test series.
+* **`ParameterSpec`** tells `fit` which parameters are variances. A length
+  scale must not be multiplied back up by the fitted noise level at the end,
+  and a period has no business being searched over a bracket meant for variance
+  ratios. `Component.parameterSpecs` defaults to all-variances, so nothing
+  outside this package needs changing.
+* **The coordinate scan runs twice** for a model with more than one parameter.
+  The first sweep scans each axis against arbitrary values of everything it has
+  not reached yet, which is harmless when the axes barely interact and wrong
+  for a cycle whose period is scanned against a cycle that is not there. The
+  period axis is also scanned far more finely than the others, because its
+  likelihood is multimodal — a cycle at half the period explains every second
+  peak and sits on its own maximum.
+* `FitResult` gains `parameterSpecs` and `measurementVariancePinned`.
+  `varianceRatios` now reports `NaN` for a parameter that is not a variance,
+  since a ratio of a period to a variance is not a quantity; `varianceRatio`
+  looks for a single *variance* rather than a single parameter, so it still
+  works for a `Matern` with its two.
+
+* **`tool/calibration/`**, a harness that fits candidate models to a real weight
+  diary — a trale export, or any file of date-and-weight lines — and prints what
+  each says, both over the whole history and at each stage of its growth. It is
+  offline and read-only.
+* It contradicted the plan, which is why it exists. The roadmap expected a
+  hydration component to stabilise a trend fit by giving the autocorrelation
+  somewhere to go. It does whiten the residuals — Ljung-Box from under 0.0001 to
+  0.02–0.06 — and it makes the trend's own variance *worse*, undetermined over
+  five decades or more, because the two compete for the same slow variation.
+  What actually stabilises the fit is a weekly seasonal: with one, the fitted
+  bandwidth lands at 1.8 to 2.2 days on all four synthetic diaries with a
+  plateau of 0.4 to 0.85 decades, where a trend alone gives 2.0 to 3.5 days and
+  half a decade to over a decade of plateau.
+
 ## 0.4.0
 
 **Relicensed to MIT**, from AGPLv3+. AGPL is a reasonable position for an

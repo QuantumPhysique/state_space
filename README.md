@@ -4,6 +4,10 @@ Exact Gaussian process regression for irregular time series, in linear time.
 Kalman filtering, RTS smoothing, and marginal-likelihood hyperparameter
 estimation. Pure Dart, no runtime dependencies.
 
+**What comes back** is the posterior as a time trace: a mean, a variance and an
+interval at every output time, at the observation times or on any grid you ask
+for, including between readings and beyond both ends of the data.
+
 ```dart
 final data = [
   Observation(0, 81.2),
@@ -72,6 +76,71 @@ Observation(6, 79.1, relativeVariance: 4.0);   // trusted half as much
 
 It is relative rather than absolute so that one number still sets the scale of
 the noise and these weights only say how the readings differ from each other.
+
+And when you know something about the instrument, you can say so. Left alone,
+the noise level is whatever explains the data best, which on a run of nearly
+identical readings can be a number no real scale could deliver and a band far
+too narrow to believe:
+
+```dart
+fit(model, data, minimumMeasurementVariance: 0.05 * 0.05);   // reads to 100 g
+fit(model, data, fixedMeasurementVariance: 0.05 * 0.05);     // and no arguing
+```
+
+The floor costs nothing when the data agrees — the fit runs normally, and only
+if the estimate lands below the floor is it redone with the noise held there.
+It cannot be a clamp applied afterwards, because pinning one variance in
+absolute units breaks the scale equivariance that lets everything else be
+searched as a ratio; the other variances have to be found again against it.
+
+## Which kernels
+
+The components are additive blocks of a structural model, and each one is a
+Gaussian process kernel written in the form that makes it fast.
+
+| component | kernel | states | prior |
+|---|---|---|---|
+| `LocalLevel` | Brownian motion | 1 | diffuse |
+| `LocalLinearTrend` | cubic spline, `min(s,t)³/3 + min(s,t)²|s−t|/2` | 2 | diffuse |
+| `TrigonometricSeasonal` | `min(s,t) Σⱼ cos λⱼ(s−t)` | 2 per harmonic | diffuse |
+| `RegressionComponent` | a constant per column | 1 per column | diffuse |
+| `Matern` | Matérn, ν = 1/2, 3/2, 5/2 | 1, 2, 3 | stationary |
+| `StochasticCycle` | `ρ^\|τ\| cos(2πτ/p)`, period estimated | 2 | stationary |
+
+You do not hand the package a covariance function; you implement `Component`
+and it composes block-diagonally with everything else. The reason is the whole
+premise: linear time comes from the Markov property, and only kernels with a
+finite-dimensional state-space form have it. A general `k(s, t)` puts you back
+at `O(N³)`, which is the thing being replaced. So the useful question is not
+"can I supply a kernel" but **is my kernel reachable**, and the table is the
+answer. The squared exponential is not on it: it has no exact finite-state
+form, only a Padé approximation of its spectral density costing about six
+states, which is a lot of machinery for a kernel whose infinite smoothness is
+rarely what anyone actually believes.
+
+`Matern` is the one to reach for when a series has structure the trend should
+not be chasing. Put `ν = 1/2` — an Ornstein-Uhlenbeck process, the exact
+continuous-time AR(1) — alongside a trend and it absorbs the correlated wobble
+that a trend-only model has nowhere to put but the noise:
+
+```dart
+StructuralModel([
+  const LocalLinearTrend(processVariance: 1e-4),
+  Matern.oneHalf(variance: 0.1, lengthScale: 3),
+]);
+```
+
+The order also decides how rough the curve may be, which is the modelling
+choice worth making deliberately: the cubic spline assumes a trend with a
+continuous derivative, and `ν = 1/2` assumes nothing of the sort.
+
+`StochasticCycle` is the *approximate* rhythm — a cosine that fades and finds
+its way back, rather than a pattern that repeats forever. Its period is
+estimated rather than given, which makes it the one component here whose
+likelihood is multimodal: a cycle at half the period explains every second peak
+and sits on its own maximum. `fit` scans that axis far more finely than the
+others before anything local runs, and `plateauDecadesByParameter` on the
+period is the number that says whether to believe the answer.
 
 ## One object, three descriptions
 
@@ -361,12 +430,38 @@ deliberate.
 the validation harness above. 0.2 added exact diffuse initialisation, the scalar
 two-state fast path, and `forecast()`. 0.3 added trigonometric seasonality,
 fitting over several variance ratios at once, and innovation diagnostics. 0.4
-adds regression components for events and holidays, and annual seasonality.
-* **0.5** — a damped stochastic cycle with an *estimated* period, a grid scan
-  for its multimodal likelihood, and an identifiability report.
+added regression components for events and holidays, and annual seasonality. 0.5
+adds the first stationary components — Matérn and a damped cycle — along with
+the noise floor and the parameter machinery both of them needed.
+
+* **0.6** — the rigid periodic kernel, if anyone wants it. It is the same
+  rotation blocks `TrigonometricSeasonal` already builds, with no process noise
+  and a Bessel stationary prior, so it is small now that the stationary work is
+  done. Whether it earns its place is a real question: the drifting seasonal is
+  the more defensible model for most data, since a pattern identical every week
+  for three years is a strong claim.
 
 Not planned: calendar-monthly seasonality, EKF/UKF, particle filters,
 multivariate observations.
+
+## Calibration
+
+Computing the right thing and being useful are different claims, and only the
+first is a test. `tool/calibration/` is the second: it fits several candidate
+models to a weight diary — a real export, or four synthetic ones — and prints
+the fitted smoothing, how well determined it is, the noise level and a
+portmanteau test, both for the whole history and at each stage of its growth.
+
+```sh
+dart run tool/calibration/calibrate.dart --all
+dart run tool/calibration/calibrate.dart --all my-export.txt
+```
+
+It is how the advice in this README about which components to use was arrived
+at, and it found one thing worth repeating here: adding a Matérn deviation
+*and* leaving the trend free is worse than not adding it at all, because the
+two compete for the same slow variation and the trend's variance ends up
+undetermined over five decades. Whitening the residuals is not free.
 
 ## References
 
@@ -379,6 +474,11 @@ multivariate observations.
   ed. — exact diffuse initialisation, ch. 5
 * Hartikainen & Särkkä (2010), *IEEE MLSP*: 379–384 — GP to state space
 * Särkkä & Solin (2019), *Applied Stochastic Differential Equations*, CUP
+* Solin & Särkkä (2014), *AISTATS*: 904–912 — periodic covariance functions as
+  state-space models
+* Silverman (1984), *Ann. Statist.* 12(3): 898–916 — the spline's equivalent
+  kernel, which is how the calibration tool turns a variance ratio into a
+  bandwidth in days
 
 ## Used by
 
