@@ -7,12 +7,14 @@ version: 0.3.0
 repository: https://github.com/QuantumPhysique/state_space
 issue_tracker: https://github.com/QuantumPhysique/state_space/issues
 
+# pub.dev allows five. These are the browse axes; "gaussian process" and
+# "regression" are in the description, which its full-text search does read.
 topics:
   - statistics
   - time-series
   - kalman-filter
-  - gaussian-process
   - forecasting
+  - smoothing
 
 environment:
   sdk: ^3.5.0

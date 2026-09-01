@@ -59,6 +59,20 @@ data is a step with no update; an irregular gap is a different `dt`; a repeated
 timestamp is `dt = 0`. All three fall out of the recursion rather than being
 handled.
 
+Readings need not be equally trustworthy, either. `relativeVariance` weights a
+single observation against the model's noise level, so an average of two
+weighings and a hurried single one can sit in the same series and be given
+their due:
+
+```dart
+Observation(4, 80.4);                          // an ordinary reading
+Observation(5, 80.5, relativeVariance: 0.5);   // trusted twice as much
+Observation(6, 79.1, relativeVariance: 4.0);   // trusted half as much
+```
+
+It is relative rather than absolute so that one number still sets the scale of
+the noise and these weights only say how the readings differ from each other.
+
 ## One object, three descriptions
 
 The whole value of the package is that these are the same thing, and it
@@ -257,8 +271,17 @@ the thing to re-measure is a whole pass rather than one product.
 
 It knows nothing about your domain. No dates, no units, no calendars, no
 locales. Time is a `double` in whatever unit you like, and the process
-variances are expressed per that unit. There is no configuration object, no
-strategy enum, and no `Matrix` in the public API.
+variances are expressed per that unit. There is no configuration object and no
+strategy enum.
+
+Nor is there a matrix type in anything a caller receives: every result is
+`Float64List`s and doubles, which is also what lets a whole model and its
+posterior cross an isolate boundary unchanged. There is exactly one matrix type
+in the API, `MatrixBlock`, and it appears only where a component writes its own
+transition and noise blocks — a view onto the engine's buffer, so a component
+fills its block in place without knowing where that block sits. Implementing a
+`Component` is the one place the engine's internals are visible, and that is
+deliberate.
 
 ## Numerical notes
 
