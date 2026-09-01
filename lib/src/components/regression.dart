@@ -9,10 +9,20 @@ typedef Span = ({double from, double to});
 /// One column of a regression design: a known function of time whose
 /// coefficient is unknown.
 ///
-/// Deliberately data rather than a closure. A model is expected to survive
-/// being sent to another isolate, which is how the application this package
-/// was written for keeps smoothing off the interface thread, and a closure
-/// cannot make that trip.
+/// Deliberately data rather than a closure, though not for the reason one
+/// might assume: a plain closure crosses an isolate boundary perfectly well on
+/// the Dart VM. The problem is what it can carry. A closure captures whatever
+/// happens to be in scope where it was written, and if any of that turns out
+/// to be unsendable — a port, a file handle, a native resource — the send
+/// fails at runtime, in the caller's code, over something the type system
+/// never showed them. A model is expected to survive being handed to another
+/// isolate, which is how the application this package was written for keeps
+/// smoothing off the interface thread, and that promise is only as good as the
+/// least inspectable thing in the model.
+///
+/// Data has the other advantages too. An [IndicatorRegressor] can say when it
+/// fires, print itself, and be compared with another; a closure can do none of
+/// those, so neither could the model holding it.
 ///
 /// A regressor must be evaluable at *any* time, not only at the observation
 /// times, because an output grid asks for the signal between readings and
