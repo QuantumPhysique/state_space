@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'component.dart';
 import 'components/local_level.dart';
 import 'components/local_linear_trend.dart';
+import 'components/regression.dart';
 import 'diagnostics.dart';
 import 'engine/fast_path_2x2.dart';
 import 'engine/kalman.dart';
@@ -318,6 +319,7 @@ class StructuralModel {
     }
 
     return SmoothingResult(
+      coefficients: _coefficients(timeline, filtered, offsets),
       times: times,
       level: level,
       levelVariance: levelVariance,
@@ -328,6 +330,37 @@ class StructuralModel {
       componentMeans: componentMeans,
       componentVariances: componentVariances,
     );
+  }
+
+  /// Reads the regression coefficients off the smoothed states.
+  ///
+  /// They are taken at the last step rather than the last output time, because
+  /// a caller may ask for an empty grid and there would then be no output to
+  /// read. It makes no difference otherwise: a state with `A = I` and `Q = 0`
+  /// has the same full-data posterior at every step, which is the whole reason
+  /// a single number is the right thing to report.
+  List<Coefficient> _coefficients(
+      Timeline timeline, FilterResult filtered, List<int> offsets) {
+    final found = <Coefficient>[];
+    final n = stateDim;
+    final last = timeline.length - 1;
+    if (last < 0) return const [];
+    final mean = filtered.filteredMean!;
+    final covariance = filtered.filteredCovariance!;
+
+    for (var b = 0; b < components.length; b++) {
+      final component = components[b];
+      if (component is! RegressionComponent) continue;
+      for (var i = 0; i < component.regressors.length; i++) {
+        final at = offsets[b] + i;
+        found.add(Coefficient(
+          name: component.regressors[i].name,
+          estimate: mean[last * n + at],
+          variance: covariance[last * n * n + at * n + at],
+        ));
+      }
+    }
+    return found;
   }
 
   /// The single global state index holding a rate of change, if the model has

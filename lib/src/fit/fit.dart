@@ -109,7 +109,15 @@ FitResult fit(
   double peak;
   bool converged;
 
-  if (k == 1) {
+  if (k == 0) {
+    // A model of nothing but regression components has no variance to search
+    // over: the coefficients are states, and the measurement variance is
+    // concentrated out in closed form. There is one evaluation to make and
+    // then the answer is already exact.
+    optimum = current;
+    peak = objective(current);
+    converged = true;
+  } else if (k == 1) {
     final refined = maximise(
       (x) => objective(Float64List.fromList([x])),
       lowerLogRatio + math.max(0, bestScanIndex - 1) * step,

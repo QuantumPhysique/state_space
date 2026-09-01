@@ -9,6 +9,45 @@ import 'stats/normal.dart';
 /// A central interval, in the units of the observations.
 typedef Interval = ({double lo, double hi});
 
+/// The posterior of one regression coefficient.
+///
+/// A constant state under a flat prior, so the smoother returns the same
+/// number at every step and there is one figure to report rather than a curve.
+class Coefficient {
+  const Coefficient({
+    required this.name,
+    required this.estimate,
+    required this.variance,
+  });
+
+  /// The name given to the regressor this belongs to.
+  final String name;
+
+  /// Posterior mean, in signal units per unit of the column.
+  final double estimate;
+
+  /// Its posterior variance.
+  final double variance;
+
+  /// The posterior standard deviation, which is the `plus or minus` figure.
+  double get standardError => math.sqrt(variance);
+
+  /// A central credible interval for the coefficient.
+  ///
+  /// Note that this is a posterior interval and not a confidence interval
+  /// derived from asymptotics. Nothing here is at a boundary — a coefficient
+  /// is free to be any real number — so the usual warning about parameters
+  /// pinned at zero does not apply to these, only to the variances.
+  Interval interval({double coverage = 0.95}) {
+    final half = twoSidedZ(coverage) * standardError;
+    return (lo: estimate - half, hi: estimate + half);
+  }
+
+  @override
+  String toString() => '$name: ${estimate.toStringAsFixed(3)} '
+      '+/- ${standardError.toStringAsFixed(3)}';
+}
+
 /// The posterior of a fitted model, evaluated at each requested output time.
 ///
 /// Every array has the same length and the same ordering: the observation
@@ -26,8 +65,10 @@ class SmoothingResult {
     required this.measurementVariance,
     required List<Float64List> componentMeans,
     required List<Float64List> componentVariances,
+    List<Coefficient> coefficients = const [],
   })  : _componentMeans = componentMeans,
-        _componentVariances = componentVariances;
+        _componentVariances = componentVariances,
+        coefficients = List.unmodifiable(coefficients);
 
   /// Output times, ascending.
   final Float64List times;
@@ -55,6 +96,15 @@ class SmoothingResult {
 
   /// The model's measurement variance, needed for [predictiveInterval].
   final double measurementVariance;
+
+  /// Every regression coefficient in the model, in the order the regressors
+  /// appear across the model's components. Empty when there are none.
+  ///
+  /// This is where "the fortnight over Christmas was worth 1.2 kg, give or
+  /// take 0.3" comes from. The coefficients are states rather than parameters,
+  /// so they cost the optimiser nothing and arrive with the rest of the
+  /// posterior.
+  final List<Coefficient> coefficients;
 
   final List<Float64List> _componentMeans;
   final List<Float64List> _componentVariances;
