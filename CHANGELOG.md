@@ -1,3 +1,62 @@
+## 0.4.0
+
+Events that are not periodic, annual seasonality, and a fit that says when a
+variance has been shrunk out rather than estimated.
+
+* **`RegressionComponent`**, with `IndicatorRegressor` for events with a start
+  and an end — a fortnight over Christmas, a conference, a course of medication
+  — and `StepRegressor` for a covariate that changes at known instants. Asking
+  a sum of sinusoids for a two-week rectangle costs a dozen harmonics and rings
+  on both sides of it; an indicator represents it exactly with one state.
+* **Coefficients cost the optimiser nothing.** They are states with `A = I` and
+  `Q = 0` under a flat prior, which is exactly the sort of flat direction exact
+  diffuse initialisation already integrates out. `parameterCount` is zero, a
+  trend plus twenty indicators is still a one-dimensional fit, and `fit` now
+  handles a model with no free variance at all: one forward pass, and the
+  measurement variance in closed form.
+* `SmoothingResult.coefficients` reports each one with a posterior standard
+  error and a credible interval. Pinned against dense generalised least squares
+  to 1e-9 on the estimate and 1e-11 on the variance.
+* **Annual seasonality** needs no new component, only a period of 365.25. Three
+  years of daily data separates a trend, a weekly pattern and an annual one to
+  within 0.15 on every amplitude.
+* **`FitResult.parameterStatus`** distinguishes a variance that was estimated
+  from one shrunk out at the bottom of the bracket and one pushed past the top.
+  A variance of zero is the edge of the parameter space rather than an interior
+  point, so the half-nat width reported there is one-sided and is not an error
+  bar.
+* Regressors are data rather than closures, so a model still survives being
+  sent to another isolate, and they are defined by knots rather than samples,
+  so an output grid can ask for the signal between readings.
+
+Breaking changes:
+
+* `FitResult.atBracketEdge` is now derived from `parameterStatus` rather than
+  stored. It still means what it did; `parameterStatus` says which parameter
+  and which edge, which is what determines whether the answer is wrong or
+  merely uninteresting.
+* `Component.identifiabilityHint` takes the two endpoints of the series rather
+  than its duration. An event indicator whose occurrences all fall outside the
+  data contributes a column of zeros, and a duration cannot tell it that. This
+  matters only if you have written a `Component` of your own.
+
+Another piece of roadmap advice did not survive contact with a measurement. It
+said to always include the annual component and let the marginal likelihood
+shrink it to zero rather than gating on how much history there is. Shrinking
+the variance does not remove the component, it only stops it evolving; what is
+left is a rigid Fourier series whose starting coefficients have a flat prior
+that nothing shrinks, and over less than one period a rigid sinusoid is very
+nearly a constant plus a slope. On 180 days of data with no annual cycle in it
+at all, the annual component draws 1.14 peak to trough while reporting its
+variance at the floor.
+
+The advice survives, for a different reason than the one given. The component
+says plainly that it does not know its own share: its posterior standard
+deviation there is 1.27, larger than the pattern it drew and eighteen times the
+0.07 the total signal is known to. Read the component's band rather than its
+mean and the spurious cycle is obviously consistent with nothing. By a year
+that figure is 0.065 and by two it is 0.026.
+
 ## 0.3.0
 
 Seasonality, fitting several variances at once, and a way to tell whether the

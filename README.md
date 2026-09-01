@@ -39,6 +39,21 @@ posterior.componentMean(1);   // the weekly pattern, separately
 model.diagnose(data).ljungBox(lags: 14);   // and whether to believe any of it
 ```
 
+Events that are not periodic — a fortnight over Christmas, a conference, a
+course of medication — go in as indicator columns, and cost the optimiser
+nothing at all, because their coefficients are states rather than parameters:
+
+```dart
+StructuralModel([
+  const LocalLinearTrend(processVariance: 1e-4),
+  RegressionComponent([
+    IndicatorRegressor('christmas', [(from: 350, to: 364)]),
+  ]),
+]);   // still a one-dimensional fit
+
+posterior.coefficients.first;   // christmas: 1.121 +/- 0.091
+```
+
 Nothing is interpolated, nothing is resampled, and no gap is filled. Missing
 data is a step with no update; an irregular gap is a different `dt`; a repeated
 timestamp is `dt = 0`. All three fall out of the recursion rather than being
@@ -113,6 +128,15 @@ plus two seasonals of different periods and checks each component's share
 against the dense per-component posterior. Confounding between a trend and a
 weekly pattern leaves the total fit intact and shows up only in the
 decomposition.
+
+**A regression coefficient equals its generalised least-squares estimate.** A
+coefficient is a flat direction like any other, so the exact diffuse machinery
+estimates it as a by-product. `test/regression_reference_test.dart` is what
+makes "by-product" mean exactly rather than approximately: the smoothed
+coefficient matches the dense GLS estimate to 1e-9 and its variance matches the
+corresponding diagonal of `(B' C^-1 B)^-1` to 1e-11, with the trend's own level
+and slope checked from the same solve to show the regression columns have not
+disturbed them.
 
 **The diffuse likelihood equals the restricted likelihood.** Exact diffuse
 initialisation leaves a `log|M|` term behind when the flat prior is integrated
@@ -279,6 +303,25 @@ strategy enum, and no `Matrix` in the public API.
   reproduces the likelihood's own quadratic form to 6e-11 relative, which it
   must: the restricted likelihood factorises into precisely these predictive
   densities.
+* Regression coefficients are states with `A = I` and `Q = 0` under a flat
+  prior, so `parameterCount` for a regression component is zero. A trend plus
+  twenty holiday indicators is still a one-dimensional fit, and the twenty
+  coefficients arrive with posterior standard errors from the same recursion
+  that produced the trend.
+* `FitResult.parameterStatus` says whether each variance was estimated, shrunk
+  out at the bottom of the bracket, or pushed past the top of it. A variance of
+  zero is the edge of the parameter space rather than an interior point, so the
+  half-nat width reported for such a parameter is one-sided and is not an error
+  bar.
+* **Shrinking a seasonal's variance to zero does not remove the component**, it
+  only stops it evolving — what is left is a rigid Fourier series whose
+  starting coefficients have a flat prior that nothing shrinks. Over less than
+  one period a rigid sinusoid is very nearly a constant plus a slope, so an
+  annual component on 180 days of data draws a cycle of 1.14 peak to trough out
+  of a series that has none, while reporting its variance at the floor. It does
+  say so, in the place worth looking: that component's own posterior standard
+  deviation there is 1.27 — larger than the pattern it drew, and eighteen times
+  the 0.07 the total signal is known to. By a year it is 0.065.
 * A penalised-complexity penalty on the variances is available and is **off by
   default**, which was not the plan. It was expected to stabilise the
   trend/seasonal split on short histories; measured against the simulated paths
@@ -293,11 +336,9 @@ strategy enum, and no `Matrix` in the public API.
 
 0.1 was the engine, two components, the output grid, one-parameter fitting, and
 the validation harness above. 0.2 added exact diffuse initialisation, the scalar
-two-state fast path, and `forecast()`. 0.3 adds trigonometric seasonality,
-fitting over several variance ratios at once, and innovation diagnostics.
-
-* **0.4** — regression components for holidays and tagged events; annual
-  seasonality.
+two-state fast path, and `forecast()`. 0.3 added trigonometric seasonality,
+fitting over several variance ratios at once, and innovation diagnostics. 0.4
+adds regression components for events and holidays, and annual seasonality.
 * **0.5** — a damped stochastic cycle with an *estimated* period, a grid scan
   for its multimodal likelihood, and an identifiability report.
 
