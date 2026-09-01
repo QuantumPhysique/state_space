@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'fit/fit.dart';
 import 'fit/penalty.dart';
 import 'model.dart';
+import 'parameter_spec.dart';
 import 'stats/normal.dart';
 
 /// A central interval, in the units of the observations.
@@ -237,7 +238,10 @@ class FitResult {
     required this.converged,
     required this.plateauDecadesByParameter,
     required List<ParameterStatus> parameterStatus,
-  }) : parameterStatus = List.unmodifiable(parameterStatus);
+    required List<ParameterSpec> parameterSpecs,
+    this.measurementVariancePinned = false,
+  })  : parameterStatus = List.unmodifiable(parameterStatus),
+        parameterSpecs = List.unmodifiable(parameterSpecs);
 
   /// The fitted model: components at their estimated variances, and the
   /// analytically concentrated measurement variance.
@@ -259,8 +263,14 @@ class FitResult {
   /// otherwise.
   final Penalty penalty;
 
-  /// The estimated ratio of each component's process variance to the
-  /// measurement variance, in component order.
+  /// The estimated ratio of each variance to the measurement variance, in
+  /// parameter order.
+  ///
+  /// Not every parameter is a variance. Entries belonging to a shape parameter
+  /// — a Matérn length scale, a cycle's period — are [double.nan], because a
+  /// ratio of a period to a variance is not a quantity. [parameterSpecs] says
+  /// which is which, and the fitted values themselves are on the components of
+  /// [model], which is where a caller should read a period from anyway.
   final Float64List varianceRatios;
 
   /// Number of filter passes the search took, including the axis probes that
@@ -287,6 +297,18 @@ class FitResult {
   /// What became of each parameter, in the same order as [varianceRatios].
   final List<ParameterStatus> parameterStatus;
 
+  /// What each parameter is, in the same order again.
+  final List<ParameterSpec> parameterSpecs;
+
+  /// Whether the measurement variance was asserted rather than estimated.
+  ///
+  /// True when `fixedMeasurementVariance` was passed to [fit], and also when
+  /// `minimumMeasurementVariance` was passed and the free estimate came out
+  /// below it, so the fit was redone with the noise held at the floor. False
+  /// means [measurementVariance] is the maximum-likelihood estimate, floor or
+  /// no floor.
+  final bool measurementVariancePinned;
+
   /// Whether any parameter finished at an edge of the search bracket.
   ///
   /// Kept as a single flag because it is the first thing worth checking;
@@ -300,12 +322,16 @@ class FitResult {
   /// `lambda`: small values give a stiff curve, large values one that chases
   /// the data.
   double get varianceRatio {
-    if (varianceRatios.length != 1) {
-      throw StateError('this model has ${varianceRatios.length} variance '
-          'ratios, so there is no single one to report. Use varianceRatios, '
-          'which is in component order.');
+    final variances = [
+      for (var i = 0; i < parameterSpecs.length; i++)
+        if (parameterSpecs[i] is VarianceParameter) varianceRatios[i]
+    ];
+    if (variances.length != 1) {
+      throw StateError('this model has ${variances.length} variance ratios, so '
+          'there is no single one to report. Use varianceRatios, which is in '
+          'parameter order.');
     }
-    return varianceRatios.first;
+    return variances.first;
   }
 
   /// The widest of [plateauDecadesByParameter]: how undetermined the least

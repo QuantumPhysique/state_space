@@ -39,10 +39,13 @@ const double _shrink = 0.5;
 /// the accuracy the recursion delivers.
 ///
 /// The initial simplex is [start] together with one vertex per coordinate,
-/// displaced by [step]. In the units this package searches in — log variance
-/// ratios — a step of two is about an order of magnitude, which is the right
-/// scale for a surface whose interesting region is usually a decade or two
-/// wide.
+/// displaced by [step]. In log variance ratios a step of two is about an order
+/// of magnitude, which is the right scale for a surface whose interesting
+/// region is usually a decade or two wide.
+///
+/// [steps] overrides that per coordinate, which a model mixing log variances
+/// with a period in days needs: the two axes have nothing to do with one
+/// another, and one displacement cannot suit both.
 ///
 /// Convergence is on the spread of the objective across the simplex rather
 /// than on the size of the simplex itself. For a log-likelihood that spread is
@@ -59,6 +62,7 @@ SimplexResult maximiseSimplex(
   double Function(Float64List) objective,
   Float64List start, {
   double step = 2,
+  Float64List? steps,
   double tolerance = 1e-4,
   int maxEvaluations = 2000,
 }) {
@@ -66,12 +70,16 @@ SimplexResult maximiseSimplex(
   if (k < 1) {
     throw ArgumentError.value(start, 'start', 'needs at least one dimension');
   }
+  if (steps != null && steps.length != k) {
+    throw ArgumentError.value(
+        steps, 'steps', 'expected one per dimension, got ${steps.length}');
+  }
 
   final vertices = [
     for (var i = 0; i <= k; i++) Float64List.fromList(start),
   ];
   for (var i = 1; i <= k; i++) {
-    vertices[i][i - 1] += step;
+    vertices[i][i - 1] += steps?[i - 1] ?? step;
   }
   final values = Float64List(k + 1);
   var evaluations = 0;

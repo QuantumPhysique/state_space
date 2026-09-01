@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import 'engine/matrix_block.dart';
+import 'parameter_spec.dart';
 
 /// One additive block of a structural time-series model.
 ///
@@ -62,6 +63,16 @@ abstract class Component {
 
   /// A copy of this component with [theta] as its [parameters].
   Component withParameters(Float64List theta);
+
+  /// What each entry of [parameters] is, in the same order.
+  ///
+  /// Defaults to a log variance for every one, which is what every component
+  /// shipped before v0.5 had and all it needed. A component with a length
+  /// scale, a period or a damping factor among its parameters must override
+  /// this, or [fit] will rescale that parameter by the fitted noise level and
+  /// search it over a bracket meant for variance ratios. See [ParameterSpec].
+  List<ParameterSpec> get parameterSpecs =>
+      List.filled(parameterCount, const VarianceParameter());
 
   /// Root-mean-square deviation of this component's contribution from its own
   /// average, over a window of [span] time units of its own driving noise.

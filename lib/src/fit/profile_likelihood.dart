@@ -6,6 +6,7 @@ import '../engine/kalman.dart';
 import '../engine/timeline.dart';
 import '../model.dart';
 import '../observation.dart';
+import '../parameter_spec.dart';
 import 'penalty.dart';
 
 /// The likelihood of a model as a function of its log variance ratios, with
@@ -21,12 +22,21 @@ import 'penalty.dart';
 ///
 /// The timeline is built once and reused, so an evaluation is one forward pass
 /// and nothing else.
+///
+/// With [fixedMeasurementVariance] set the concentrating step is skipped: the
+/// filter runs at that noise level and the objective becomes the ordinary log
+/// likelihood. The search still moves in log ratios, so the bracket means the
+/// same thing either way, but there is one real dimension more to explore
+/// because the noise level is no longer solved for. That is the price of
+/// asserting what the scale can measure, and it is the point.
 class ProfileLikelihood {
   ProfileLikelihood(
     this.template,
     List<Observation> observations, {
     this.penalty = const NoPenalty(),
+    this.fixedMeasurementVariance,
   })  : _timeline = Timeline.merge(observations, null),
+        _specs = template.parameterSpecs,
         span = observations.isEmpty
             ? 0
             : observations.last.time - observations.first.time,
@@ -39,6 +49,10 @@ class ProfileLikelihood {
   /// What is added to the likelihood before [at] returns it.
   final Penalty penalty;
 
+  /// The measurement variance to hold the filter at, or null to concentrate it
+  /// out analytically.
+  final double? fixedMeasurementVariance;
+
   /// Length of the series, which is what the penalty measures wandering over.
   final double span;
 
@@ -47,6 +61,10 @@ class ProfileLikelihood {
   /// Sample standard deviation of the observed values, which is the yardstick
   /// the penalty measures a component's wandering against.
   final double _dataSpread;
+
+  /// Which entries of the parameter vector are log variances, and so have to
+  /// be lifted from a ratio to an absolute value before the filter sees them.
+  final List<ParameterSpec> _specs;
 
   int _evaluations = 0;
   Float64List? _cachedArgument;
@@ -60,14 +78,25 @@ class ProfileLikelihood {
   /// penalty.
   double at(Float64List logRatios) {
     evaluate(logRatios);
-    return _cached.profileLogLikelihood + _penaltyHere();
+    return logLikelihoodOf(_cached) + _penaltyHere();
   }
+
+  /// Whichever likelihood this instance is maximising: the profile one when
+  /// the noise level is being concentrated out, the plain one when it is held.
+  double logLikelihoodOf(FilterResult pass) => fixedMeasurementVariance == null
+      ? pass.profileLogLikelihood
+      : pass.logLikelihood;
+
+  /// The measurement variance a pass implies, which is the fixed one if there
+  /// is one and the concentrated estimate otherwise.
+  double measurementVarianceOf(FilterResult pass) =>
+      fixedMeasurementVariance ?? pass.profileMeasurementVariance;
 
   /// The profile log-likelihood alone, which is the number to report and to
   /// compare across models. A penalised objective is fine to maximise and
   /// meaningless to compare.
   double likelihoodAt(Float64List logRatios) =>
-      evaluate(logRatios).profileLogLikelihood;
+      logLikelihoodOf(evaluate(logRatios));
 
   /// The penalty alone at the same point.
   double penaltyAt(Float64List logRatios) {
@@ -83,7 +112,7 @@ class ProfileLikelihood {
   /// noise, and the penalty is stated relative to the data.
   double _penaltyHere() {
     if (_dataSpread <= 0) return 0;
-    final noise = math.sqrt(_cached.profileMeasurementVariance);
+    final noise = math.sqrt(measurementVarianceOf(_cached));
     return penalty.at(_cachedModel.components, span, noise / _dataSpread);
   }
 
@@ -94,17 +123,37 @@ class ProfileLikelihood {
     final cached = _cachedArgument;
     if (cached != null && _sameAs(cached, logRatios)) return _cached;
 
-    _cachedModel =
-        template.withParameters(logRatios).withMeasurementVariance(1);
+    final scale = fixedMeasurementVariance ?? 1.0;
+    // The search coordinate is a ratio to the measurement variance in both
+    // modes, so that the bracket a caller passes means one thing. Lifting the
+    // ratios to absolute variances is what makes the filter agree: scaling
+    // every variance in the model by the same constant is exactly the
+    // equivariance the concentrating step relies on, and holding the noise
+    // level fixed is the same model looked at from the other end.
+    _cachedModel = template
+        .withParameters(_lift(logRatios, scale))
+        .withMeasurementVariance(scale);
     _cached = forwardPass(
       _cachedModel.components,
       _timeline,
-      measurementVariance: 1,
+      measurementVariance: scale,
       initialization: _cachedModel.initialization,
     );
     _cachedArgument = Float64List.fromList(logRatios);
     _evaluations++;
     return _cached;
+  }
+
+  /// Multiplies the variance entries of [logRatios] up by [scale], leaving the
+  /// shape parameters — a length scale, a period — untouched.
+  Float64List _lift(Float64List logRatios, double scale) {
+    if (scale == 1) return logRatios;
+    final shift = math.log(scale);
+    final lifted = Float64List.fromList(logRatios);
+    for (var i = 0; i < lifted.length; i++) {
+      if (_specs[i] is VarianceParameter) lifted[i] += shift;
+    }
+    return lifted;
   }
 
   static bool _sameAs(Float64List a, Float64List b) {

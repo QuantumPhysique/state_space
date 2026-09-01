@@ -11,6 +11,7 @@ import 'engine/rts.dart';
 import 'engine/timeline.dart';
 import 'initialization.dart';
 import 'observation.dart';
+import 'parameter_spec.dart';
 import 'result.dart';
 
 /// An additive structural time-series model: a list of components plus
@@ -83,6 +84,10 @@ class StructuralModel {
 
   /// Total number of free parameters across all components.
   int get parameterCount => components.fold(0, (n, c) => n + c.parameterCount);
+
+  /// What each entry of [parameters] is, concatenated in the same order.
+  List<ParameterSpec> get parameterSpecs =>
+      [for (final component in components) ...component.parameterSpecs];
 
   /// The concatenated unconstrained parameter vectors of every component.
   Float64List get parameters {

@@ -41,6 +41,42 @@ Kernel seasonalKernel(double period, int harmonics, double processVariance) =>
       return processVariance * math.min(s, t) * comb;
     };
 
+/// The Matérn covariance function, written from the textbook formula.
+///
+/// Deliberately not `Matern.covariance`, and deliberately not derived from the
+/// state-space matrices. The point of a reference is that it comes from a
+/// different place than the thing it checks: this is the kernel as a Gaussian
+/// process textbook states it, and the component has to agree with it after
+/// going all the way round through a transition matrix, a stationary prior and
+/// a recursion.
+Kernel maternKernel(MaternOrder order, double variance, double lengthScale) {
+  final nu = switch (order) {
+    MaternOrder.oneHalf => 0.5,
+    MaternOrder.threeHalves => 1.5,
+    MaternOrder.fiveHalves => 2.5,
+  };
+  final scale = math.sqrt(2 * nu) / lengthScale;
+  return (s, t) {
+    final a = scale * (s - t).abs();
+    final polynomial = switch (order) {
+      MaternOrder.oneHalf => 1.0,
+      MaternOrder.threeHalves => 1 + a,
+      MaternOrder.fiveHalves => 1 + a + a * a / 3,
+    };
+    return variance * polynomial * math.exp(-a);
+  };
+}
+
+/// The quasi-periodic kernel of a [StochasticCycle]: a cosine at the cycle
+/// frequency, damped by `rho` per time unit.
+Kernel cycleKernel(double period, double damping, double stationaryVariance) =>
+    (s, t) {
+      final lag = (s - t).abs();
+      return stationaryVariance *
+          math.pow(damping, lag) *
+          math.cos(2 * math.pi * lag / period);
+    };
+
 Basis trendBasis() => (s) => [1, s];
 
 Basis seasonalBasis(double period, int harmonics) => (s) => [

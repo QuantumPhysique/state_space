@@ -62,6 +62,8 @@ StructuralModel _model() => StructuralModel([
         StepRegressor('dose', Float64List.fromList([0, 90]),
             Float64List.fromList([0, 1])),
       ]),
+      Matern.oneHalf(variance: 1e-2, lengthScale: 4),
+      StochasticCycle(period: 28, damping: 0.95, stationaryVariance: 1e-2),
     ]);
 
 void main() {
@@ -109,7 +111,7 @@ void main() {
       expect(returned.$2, data.length);
       expect(returned.$1.stateDim, model.stateDim);
       expect(returned.$1.parameterCount, model.parameterCount);
-      expect(returned.$1.components.length, 3);
+      expect(returned.$1.components.length, model.components.length);
       expect(returned.$1.toString(), model.toString());
       // And it still works over there, which is the point of sending it.
       expect(returned.$1.logLikelihood(data),
