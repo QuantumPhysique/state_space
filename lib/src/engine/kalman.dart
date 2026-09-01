@@ -347,7 +347,7 @@ class KalmanFilter {
     // the diffuse system is left unsolved rather than declared singular.
     if (d > 0 && steps > 0) {
       final solved = _solveDiffuseSystem(timeline.observationCount,
-          timeline.times[steps - 1] - timeline.times[0]);
+          timeline.times[0], timeline.times[steps - 1]);
       diffuseMean = solved.mean;
       diffuseCovariance = solved.covariance;
       diffuseLogDeterminant = solved.logDeterminant;
@@ -465,12 +465,12 @@ class KalmanFilter {
   /// least-squares solution of `M d = -rhs`, its covariance is `M^-1`, and the
   /// integration leaves `log|M|` behind in the likelihood.
   ({Float64List mean, Float64List covariance, double logDeterminant})
-      _solveDiffuseSystem(int observationCount, double span) {
+      _solveDiffuseSystem(int observationCount, double from, double to) {
     final d = diffuseDim;
     final factor = Float64List.fromList(_information);
     if (!choleskyFactor(factor, d)) {
       throw StateError(
-          singularDiffuseMessage(components, d, observationCount, span));
+          singularDiffuseMessage(components, d, observationCount, from, to));
     }
 
     var logDeterminant = 0.0;
@@ -772,14 +772,14 @@ class KalmanFilter {
 /// about their own identifiability, which is knowledge the engine is
 /// deliberately kept clear of.
 String singularDiffuseMessage(List<Component> components, int diffuseDim,
-    int observationCount, double span) {
+    int observationCount, double from, double to) {
   final reasons = <String>[];
   if (observationCount < diffuseDim) {
     reasons.add('there are only $observationCount observations for '
         '$diffuseDim flat directions, and each one costs a degree of freedom');
   }
   for (final component in components) {
-    final hint = component.identifiabilityHint(span);
+    final hint = component.identifiabilityHint(from, to);
     if (hint != null) reasons.add(hint);
   }
   if (reasons.isEmpty && components.length > 1) {

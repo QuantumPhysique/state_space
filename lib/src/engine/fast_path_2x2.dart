@@ -302,7 +302,8 @@ class FastPath2x2 {
             [component],
             2,
             timeline.observationCount,
-            timeline.times[steps - 1] - timeline.times[0]));
+            timeline.times[0],
+            timeline.times[steps - 1]));
       }
       diffuseLogDeterminant =
           2 * (math.log(information[0]) + math.log(information[3]));

@@ -181,7 +181,8 @@ class TrigonometricSeasonal extends Component {
   /// suspecting when something else tips the solve over, which is what this
   /// hint is for: a lead, offered only once the engine has already failed.
   @override
-  String? identifiabilityHint(double span) {
+  String? identifiabilityHint(double from, double to) {
+    final span = to - from;
     if (span >= period) return null;
     return 'a seasonal component of period $period was given a series '
         'spanning only $span, so it has not been round once and over that '

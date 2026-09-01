@@ -91,14 +91,20 @@ abstract class Component {
   double wanderOver(double span);
 
   /// Why this component's flat directions might not be identifiable on a
-  /// series spanning [span] time units, or null if nothing about it is
+  /// series running from [from] to [to], or null if nothing about it is
   /// suspect.
   ///
-  /// The engine knows nothing about seasonal periods and is not about to
-  /// start. When the diffuse system comes out singular it asks each component
-  /// whether it can explain itself and pastes together whatever comes back,
-  /// which keeps the diagnosis where the knowledge is.
-  String? identifiabilityHint(double span) => null;
+  /// The engine knows nothing about seasonal periods or holiday calendars and
+  /// is not about to start. When the diffuse system comes out singular it asks
+  /// each component whether it can explain itself and pastes together whatever
+  /// comes back, which keeps the diagnosis where the knowledge is.
+  ///
+  /// Both endpoints are passed rather than the duration, because a component
+  /// may care where the series sits on the time axis and not only how long it
+  /// is: an event indicator whose occurrences all fall outside the data
+  /// contributes a column of zeros, and that is the most common way for this
+  /// to be reached at all.
+  String? identifiabilityHint(double from, double to) => null;
 
   /// Index within this component's block of a state holding the instantaneous
   /// rate of change of the component's contribution, or null if it has none.
