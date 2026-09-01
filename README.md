@@ -364,4 +364,10 @@ weight diary, for its trend curve and uncertainty band.
 
 ## Licence
 
-[GNU AGPLv3+](LICENSE).
+[MIT](LICENSE).
+
+Deliberately permissive, and deliberately different from the application it was
+written for. trale is AGPL, which is a reasonable position for something people
+run; a library is not, because that licence would be inherited by everything
+built on top of it. An AGPL application can use an MIT library freely, so
+nothing is lost in the direction that matters here.
