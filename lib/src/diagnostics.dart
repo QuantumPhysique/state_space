@@ -48,11 +48,13 @@ class InnovationDiagnostics {
   /// How many residuals there are.
   int get count => residuals.length;
 
-  /// Their sample mean, which should be zero to within `1/sqrt(count)`.
+  /// Their sample mean, which should be zero to within `1/sqrt(count)`, or
+  /// [double.nan] when there are none.
   ///
   /// A mean that is reliably away from zero means the model is biased: the
   /// series is systematically above or below what it predicts one step ahead.
   double get mean {
+    if (count == 0) return double.nan;
     var total = 0.0;
     for (final r in residuals) {
       total += r;
@@ -75,7 +77,12 @@ class InnovationDiagnostics {
   /// is the fitted noise level itself: a model missing a component has to
   /// explain that component as noise, and reports a scale far noisier than it
   /// is.
+  ///
+  /// It is [double.nan] with fewer than two residuals, where a spread is not a
+  /// quantity: one residual around its own mean is zero by construction and
+  /// would read as a model of impossible confidence.
   double get variance {
+    if (count < 2) return double.nan;
     final centre = mean;
     var total = 0.0;
     for (final r in residuals) {
@@ -177,8 +184,12 @@ class InnovationDiagnostics {
   }
 
   @override
-  String toString() => 'InnovationDiagnostics(count: $count, mean: '
-      '${mean.toStringAsFixed(4)}, variance: '
-      '${variance.toStringAsFixed(4)}, lag-1 autocorrelation: '
-      '${count > 1 ? autocorrelation(1).toStringAsFixed(4) : "n/a"})';
+  String toString() {
+    if (count == 0) return 'InnovationDiagnostics(no residuals)';
+    return 'InnovationDiagnostics(count: $count, mean: '
+        '${mean.toStringAsFixed(4)}, variance: '
+        '${count > 1 ? variance.toStringAsFixed(4) : "n/a"}, '
+        'lag-1 autocorrelation: '
+        '${count > 1 ? autocorrelation(1).toStringAsFixed(4) : "n/a"})';
+  }
 }

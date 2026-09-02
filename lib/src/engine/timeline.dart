@@ -45,6 +45,12 @@ class Timeline {
   /// redundant one.
   ///
   /// With no grid, every observation is reported, in input order.
+  ///
+  /// When several observations share a time and a grid point lands on it, the
+  /// grid takes the first of them. That is not the loss it looks like: the gap
+  /// between two such steps is zero, so `A = I` and `Q = 0`, the smoother gain
+  /// between them is the identity, and their smoothed moments are equal to the
+  /// last bit.
   factory Timeline.merge(List<Observation> observations, Float64List? grid) {
     _checkObservations(observations);
     if (grid != null) {

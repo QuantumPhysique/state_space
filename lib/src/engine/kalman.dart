@@ -30,11 +30,11 @@ class FilterResult {
     this.diffuseLogDeterminant = 0,
     this.diffuseMean,
     this.diffuseCovariance,
-    this.filteredMean,
-    this.filteredCovariance,
+    this.stateMean,
+    this.stateCovariance,
     this.predictedMean,
     this.predictedCovariance,
-    this.filteredSensitivity,
+    this.stateSensitivity,
     this.predictedSensitivity,
     this.residualTimes,
     this.standardisedResiduals,
@@ -68,8 +68,17 @@ class FilterResult {
   ///
   /// This is the term that makes the diffuse likelihood a *marginal*
   /// likelihood: integrating a flat prior out of a Gaussian leaves behind the
-  /// determinant of its precision, and dropping it would make likelihoods
-  /// incomparable across models with different diffuse dimensions.
+  /// determinant of its precision. Densely it is `log|B' C^-1 B|`, and with it
+  /// the result is exactly the restricted likelihood.
+  ///
+  /// It does **not** make likelihoods comparable across models with different
+  /// diffuse dimensions, and the opposite claim stood here until it was
+  /// measured. The integral is against an improper flat prior of unit density,
+  /// so `d` carries units and the answer carries them too: scaling one column
+  /// of `B` by `c` scales `|M|` by `c^2` and shifts the log likelihood by
+  /// exactly `-log c`, without changing the model, the data or the posterior.
+  /// Rescaling a regression column or changing the time unit both do this. See
+  /// [diffuseDim] and `FitResult.isComparableWith`.
   final double diffuseLogDeterminant;
 
   /// Generalised-least-squares estimate of the flat directions, length
@@ -79,23 +88,39 @@ class FilterResult {
   /// Its covariance, `M^-1`, laid out row-major.
   final Float64List? diffuseCovariance;
 
-  final Float64List? filteredMean;
-  final Float64List? filteredCovariance;
+  /// The state moments, step-major, populated only when the pass was asked to
+  /// keep a history.
+  ///
+  /// Filtered when the forward pass returns them: `E[x_t | y_1..t]`. The
+  /// backward pass overwrites them in place with the smoothed moments, and
+  /// `RtsSmoother.combineDiffuse` then folds the flat directions in — so what
+  /// these hold depends on how far along the pipeline the caller is, which is
+  /// why they are not named for any one stage. The memory argument for
+  /// overwriting is in `RtsSmoother`.
+  final Float64List? stateMean;
+
+  /// Its covariance, `stateDim x stateDim` per step, row-major.
+  final Float64List? stateCovariance;
+
+  /// The one-step-ahead moments, which stay predicted throughout.
   final Float64List? predictedMean;
   final Float64List? predictedCovariance;
 
-  /// Sensitivity of the filtered state to the flat directions, step-major and
+  /// Sensitivity of the state to the flat directions, step-major and
   /// `stateDim x diffuseDim` per step. Null under an approximate prior.
+  ///
+  /// Smoothed alongside [stateMean], and consumed by
+  /// `RtsSmoother.combineDiffuse`.
   ///
   /// Note what combining this with [diffuseMean] does and does not give. The
   /// estimate of the flat directions uses every observation, so
-  /// `filteredMean + filteredSensitivity * diffuseMean` is conditioned on all
+  /// `stateMean + stateSensitivity * diffuseMean` is conditioned on all
   /// the data in those directions and on the data so far in the others. That
   /// is the right combination after the backward pass, and at the last step,
   /// and a mixture of two conditionings anywhere else. A genuine filtered
   /// state under a flat prior needs the estimate rebuilt from the data up to
   /// that step, which nothing in this package currently asks for.
-  final Float64List? filteredSensitivity;
+  final Float64List? stateSensitivity;
 
   /// The same, before each step's update.
   final Float64List? predictedSensitivity;
@@ -109,23 +134,41 @@ class FilterResult {
   /// quite the obvious thing.
   final Float64List? standardisedResiduals;
 
-  /// Maximum-likelihood measurement variance given the *ratios* of all the
-  /// other variances to it.
+  /// Whether anything is left to estimate a noise level from.
+  ///
+  /// False when every observation went on locating the flat directions —
+  /// exactly `d` readings under a flat prior, or none at all — in which case
+  /// both quantities below are undefined rather than merely imprecise.
+  bool get hasResidualDegreesOfFreedom => usedObservations > 0;
+
+  /// Restricted maximum-likelihood measurement variance given the *ratios* of
+  /// all the other variances to it, or [double.nan] when
+  /// [hasResidualDegreesOfFreedom] is false.
   ///
   /// Scaling every covariance in the model by a constant leaves the Kalman
   /// gains and every innovation `v_t` untouched and scales every `S_t` by that
   /// constant. So the measurement variance can be concentrated out of the
   /// likelihood analytically instead of being searched over — one dimension
   /// less for every fit, no matter how many components there are.
-  double get profileMeasurementVariance =>
-      measurementVariance * sumWeightedSquares / usedObservations;
+  ///
+  /// Restricted rather than plain maximum likelihood: the divisor is
+  /// [usedObservations], which under a flat prior is `N - d` rather than `N`.
+  /// That is the right partner for a likelihood that has integrated `d`
+  /// directions away, and it is a factor of `N / (N - d)` away from the plain
+  /// estimate — twenty-five per cent on thirty readings with six flat
+  /// directions.
+  double get profileMeasurementVariance => hasResidualDegreesOfFreedom
+      ? measurementVariance * sumWeightedSquares / usedObservations
+      : double.nan;
 
   /// The likelihood at [profileMeasurementVariance], as a function of the
-  /// variance ratios alone.
+  /// variance ratios alone, or [double.nan] when there is nothing left to
+  /// profile over.
   ///
   /// Independent of the [measurementVariance] the pass happened to use: the
   /// scale cancels between `sum log S_t` and the fitted variance.
   double get profileLogLikelihood {
+    if (!hasResidualDegreesOfFreedom) return double.nan;
     final n = usedObservations;
     return -0.5 *
         (n * (_log2pi + 1) +
@@ -284,11 +327,11 @@ class KalmanFilter {
     final pieces =
         keepResiduals ? ResidualPieces(timeline.observationCount, d) : null;
 
-    final filteredMean = keepHistory ? Float64List(steps * n) : null;
+    final stateMean = keepHistory ? Float64List(steps * n) : null;
     final filteredCov = keepHistory ? Float64List(steps * n * n) : null;
     final predictedMean = keepHistory ? Float64List(steps * n) : null;
     final predictedCov = keepHistory ? Float64List(steps * n * n) : null;
-    final filteredSensitivity =
+    final stateSensitivity =
         keepHistory && d > 0 ? Float64List(steps * n * d) : null;
     final predictedSensitivity =
         keepHistory && d > 0 ? Float64List(steps * n * d) : null;
@@ -334,9 +377,9 @@ class KalmanFilter {
       }
 
       if (keepHistory) {
-        filteredMean!.setRange(t * n, (t + 1) * n, _x);
+        stateMean!.setRange(t * n, (t + 1) * n, _x);
         filteredCov!.setRange(t * n * n, (t + 1) * n * n, _p);
-        filteredSensitivity?.setRange(t * n * d, (t + 1) * n * d, _xb);
+        stateSensitivity?.setRange(t * n * d, (t + 1) * n * d, _xb);
       }
     }
 
@@ -378,11 +421,11 @@ class KalmanFilter {
       diffuseLogDeterminant: diffuseLogDeterminant,
       diffuseMean: diffuseMean,
       diffuseCovariance: diffuseCovariance,
-      filteredMean: filteredMean,
-      filteredCovariance: filteredCov,
+      stateMean: stateMean,
+      stateCovariance: filteredCov,
       predictedMean: predictedMean,
       predictedCovariance: predictedCov,
-      filteredSensitivity: filteredSensitivity,
+      stateSensitivity: stateSensitivity,
       predictedSensitivity: predictedSensitivity,
       residualTimes: residuals?.times,
       standardisedResiduals: residuals?.values,
@@ -683,6 +726,10 @@ class KalmanFilter {
     }
     final v = value - predicted;
 
+    // Dense over both indices, unlike the reporting code, which skips zero
+    // entries of H. This runs once per observation and is `O(n^2)` either way;
+    // a branch inside it would cost more on the models where H is dense than
+    // it saves on the ones where it is not.
     for (var i = 0; i < n; i++) {
       var sum = 0.0;
       for (var j = 0; j < n; j++) {

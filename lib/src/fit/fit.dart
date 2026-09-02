@@ -12,6 +12,40 @@ import 'profile_likelihood.dart';
 
 const double _ln10 = 2.302585092994046;
 
+/// Where [fit] begins its search.
+enum SearchStart {
+  /// Sweep every parameter across the whole of its bracket first, then refine.
+  ///
+  /// The default, and the only safe choice on a surface that may be flat over
+  /// decades or multimodal — which is every surface with a `StochasticCycle`
+  /// in it. The scan is what finds the basin; a local search started somewhere
+  /// arbitrary would converge confidently to whatever was nearest.
+  bracketScan,
+
+  /// Take the parameters of the model passed to [fit] and refine from there,
+  /// skipping the scan.
+  ///
+  /// This is for refitting as data arrives: a diary that gains a reading a day
+  /// does not move its optimum far, and re-running a scan of hundreds of
+  /// filter passes to rediscover the same basin is waste. Pass the previous
+  /// fit's own model:
+  ///
+  /// ```dart
+  /// var fitted = fit(model, data);                        // cold, once
+  /// fitted = fit(fitted.model, longerData,                // warm, after
+  ///     start: SearchStart.previousParameters);
+  /// ```
+  ///
+  /// The variance parameters are read as ratios to the model's own
+  /// measurement variance, which is what makes a [FitResult.model] round-trip
+  /// exactly. Anything outside the bracket is clamped into it.
+  ///
+  /// Use it only when the surface is one a local search can be trusted on, and
+  /// re-run a cold fit whenever the data changes character rather than merely
+  /// grows.
+  previousParameters,
+}
+
 /// Half a nat: the conventional "indistinguishable on this data" threshold,
 /// and the drop a single extra parameter has to beat to be worth having.
 const double _halfNat = 0.5;
@@ -41,6 +75,19 @@ const double _halfNat = 0.5;
 /// parameters — a Matérn length scale, a cycle's period — are bracketed by the
 /// component that owns them instead, because a range that suits a variance
 /// ratio suits nothing else; see [ParameterSpec].
+///
+/// A shape parameter measured in time units also gets a floor from the data:
+/// the bottom of its bracket is raised to what the sampling can resolve, since
+/// a Matérn shorter than the gap between readings and a cycle faster than
+/// Nyquist are both just another way of writing measurement noise — and the
+/// likelihood prefers them to the truth. See [Component.parameterSpecsAt] and
+/// [samplingResolution].
+///
+/// [start] decides whether the coordinate scan runs. It should stay at
+/// [SearchStart.bracketScan] unless you are refitting as data arrives, in
+/// which case [SearchStart.previousParameters] takes the model's own values as
+/// the starting point and skips straight to the local search. See that
+/// constant for when it is safe.
 ///
 /// [penalty] defaults to none, including for several components. That was not
 /// the plan — the expectation was that a penalty would be needed to stabilise
@@ -82,6 +129,7 @@ FitResult fit(
   Penalty? penalty,
   double? fixedMeasurementVariance,
   double? minimumMeasurementVariance,
+  SearchStart start = SearchStart.bracketScan,
 }) {
   if (fixedMeasurementVariance != null && minimumMeasurementVariance != null) {
     throw ArgumentError('pass fixedMeasurementVariance or '
@@ -106,6 +154,7 @@ FitResult fit(
         tolerance: tolerance,
         penalty: penalty ?? const NoPenalty(),
         fixedMeasurementVariance: fixed,
+        start: start,
       );
 
   if (minimumMeasurementVariance != null) {
@@ -125,6 +174,7 @@ FitResult _search(
   required double tolerance,
   required Penalty penalty,
   required double? fixedMeasurementVariance,
+  required SearchStart start,
 }) {
   final k = initial.parameterCount;
   if (!(lowerLogRatio < upperLogRatio)) {
@@ -136,8 +186,10 @@ FitResult _search(
 
   // Each parameter gets its own bracket and its own scan resolution: the
   // caller's bracket for a variance ratio, and the owning component's for
-  // anything else.
-  final specs = initial.parameterSpecs;
+  // anything else — narrowed, for a shape parameter measured in time units, by
+  // what the sampling can actually resolve. See [Component.parameterSpecsAt].
+  final specs =
+      initial.parameterSpecsAt(resolution: samplingResolution(observations));
   final lower = Float64List(k);
   final upper = Float64List(k);
   final points = List<int>.filled(k, scanPoints);
@@ -181,34 +233,45 @@ FitResult _search(
   }
 
   final current = Float64List.fromList(origin);
-  var bestScanIndex = 0;
 
-  // Coordinate scan: sweep each parameter across the whole of its own bracket
-  // in turn, holding the others where the previous sweeps left them. With one
-  // parameter this is an exhaustive scan. With several it is coordinate
-  // ascent, which is not an optimiser but is a much better place to start one
-  // than wherever the caller's initial guess happened to be.
-  //
-  // Two sweeps rather than one, because the first sweeps a parameter against
-  // arbitrary values of everything it has not reached yet. That is harmless
-  // when the axes barely interact and badly wrong when they do: a cycle's
-  // period scanned at the midpoint of its own variance bracket is scanned
-  // against a cycle that is not there, and the scan reads flat.
-  final sweeps = k > 1 ? 2 : 1;
-  for (var sweep = 0; sweep < sweeps; sweep++) {
-    for (var axis = 0; axis < k; axis++) {
-      var bestValue = -double.infinity;
-      var best = 0;
-      for (var i = 0; i < points[axis]; i++) {
-        current[axis] = lower[axis] + i * step[axis];
-        final value = objective(current);
-        if (value > bestValue) {
-          bestValue = value;
-          best = i;
+  if (start == SearchStart.previousParameters) {
+    // The search coordinate is a ratio to the measurement variance, and the
+    // model carries absolute variances, so the noise level it was fitted at is
+    // what converts one to the other. A shape parameter is neither and is
+    // taken as it stands.
+    final theta = initial.parameters;
+    final shift = math.log(initial.measurementVariance);
+    for (var i = 0; i < k; i++) {
+      final value = specs[i] is VarianceParameter ? theta[i] - shift : theta[i];
+      current[i] = value.clamp(lower[i], upper[i]);
+    }
+  } else {
+    // Coordinate scan: sweep each parameter across the whole of its own bracket
+    // in turn, holding the others where the previous sweeps left them. With one
+    // parameter this is an exhaustive scan. With several it is coordinate
+    // ascent, which is not an optimiser but is a much better place to start one
+    // than wherever the caller's initial guess happened to be.
+    //
+    // Two sweeps rather than one, because the first sweeps a parameter against
+    // arbitrary values of everything it has not reached yet. That is harmless
+    // when the axes barely interact and badly wrong when they do: a cycle's
+    // period scanned at the midpoint of its own variance bracket is scanned
+    // against a cycle that is not there, and the scan reads flat.
+    final sweeps = k > 1 ? 2 : 1;
+    for (var sweep = 0; sweep < sweeps; sweep++) {
+      for (var axis = 0; axis < k; axis++) {
+        var bestValue = -double.infinity;
+        var best = 0;
+        for (var i = 0; i < points[axis]; i++) {
+          current[axis] = lower[axis] + i * step[axis];
+          final value = objective(current);
+          if (value > bestValue) {
+            bestValue = value;
+            best = i;
+          }
         }
+        current[axis] = lower[axis] + best * step[axis];
       }
-      current[axis] = lower[axis] + best * step[axis];
-      bestScanIndex = best;
     }
   }
 
@@ -225,10 +288,13 @@ FitResult _search(
     peak = objective(current);
     converged = true;
   } else if (k == 1) {
+    // Refine within one scan cell either side of where the search currently
+    // sits, whether the scan put it there or the caller's own model did.
+    final cell = ((current[0] - lower[0]) / step[0]).round();
     final refined = maximise(
       (x) => objective(Float64List.fromList([x])),
-      lower[0] + math.max(0, bestScanIndex - 1) * step[0],
-      lower[0] + math.min(points[0] - 1, bestScanIndex + 1) * step[0],
+      lower[0] + math.max(0, cell - 1) * step[0],
+      lower[0] + math.min(points[0] - 1, cell + 1) * step[0],
       tolerance: tolerance,
     );
     optimum = Float64List.fromList([refined.argument]);
@@ -238,11 +304,16 @@ FitResult _search(
     // The restart is the standard insurance against a simplex that has
     // collapsed along one direction and stopped making progress. A second run
     // that finds nothing new is decent evidence the first one finished.
+    // The scan's resolution is a reasonable default displacement, but it is
+    // the wrong one wherever the resolution was chosen for some other reason.
+    // See ShapeParameter.searchStep.
     final wide = Float64List(k);
     final narrow = Float64List(k);
     for (var i = 0; i < k; i++) {
-      wide[i] = 2 * step[i];
-      narrow[i] = step[i] / 4;
+      final spec = specs[i];
+      final chosen = spec is ShapeParameter ? spec.searchStep : null;
+      wide[i] = chosen ?? 2 * step[i];
+      narrow[i] = (chosen ?? step[i]) / 4;
     }
     var simplex =
         maximiseSimplex(objective, current, steps: wide, tolerance: tolerance);
@@ -253,11 +324,18 @@ FitResult _search(
     converged = simplex.converged;
   }
 
+  // Measured in each parameter's own unconstrained coordinate. Dividing by
+  // ln 10 turns that into decades for a log coordinate and into nothing at all
+  // for a logit, so the decade view reports NaN there rather than a number that
+  // reads like an answer -- the same convention varianceRatios already uses for
+  // a parameter that is not a variance.
   final widths = Float64List(k);
+  final decades = Float64List(k);
   for (var axis = 0; axis < k; axis++) {
-    widths[axis] = _halfNatWidth(
-            objective, optimum, axis, peak, lower[axis], upper[axis]) /
-        _ln10;
+    widths[axis] =
+        _halfNatWidth(objective, optimum, axis, peak, lower[axis], upper[axis]);
+    decades[axis] =
+        specs[axis].isLogarithmic ? widths[axis] / _ln10 : double.nan;
   }
 
   final atOptimum = profile.evaluate(optimum);
@@ -302,11 +380,36 @@ FitResult _search(
     varianceRatios: ratios,
     evaluations: profile.evaluations,
     converged: converged,
-    plateauDecadesByParameter: widths,
+    plateauDecadesByParameter: decades,
+    plateauWidthByParameter: widths,
     parameterStatus: status,
     parameterSpecs: specs,
+    diffuseDimension: initial.diffuseDimension,
     measurementVariancePinned: fixedMeasurementVariance != null,
   );
+}
+
+/// The median gap between consecutive distinct observation times, or zero when
+/// there are not enough of them for that to mean anything.
+///
+/// This is what a shape parameter measured in time units has to clear to be a
+/// different model rather than a second spelling of measurement noise; see
+/// [Component.parameterSpecsAt]. The median rather than the mean, because a
+/// diary with a fortnight's holiday in it should still count as daily.
+double samplingResolution(List<Observation> observations) {
+  if (observations.length < 2) return 0;
+  final gaps = <double>[];
+  for (var i = 1; i < observations.length; i++) {
+    final gap = observations[i].time - observations[i - 1].time;
+    // Two readings at one instant say nothing about the sampling rate.
+    if (gap > 0) gaps.add(gap);
+  }
+  if (gaps.isEmpty) return 0;
+  gaps.sort();
+  final middle = gaps.length ~/ 2;
+  return gaps.length.isOdd
+      ? gaps[middle]
+      : (gaps[middle - 1] + gaps[middle]) / 2;
 }
 
 /// How far parameter [axis] can move on its own before the objective falls

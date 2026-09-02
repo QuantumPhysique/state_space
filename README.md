@@ -134,13 +134,34 @@ The order also decides how rough the curve may be, which is the modelling
 choice worth making deliberately: the cubic spline assumes a trend with a
 continuous derivative, and `ν = 1/2` assumes nothing of the sort.
 
+Both of these are *deviations* rather than levels, and both have a shape
+parameter measured in time. That parameter has a floor, and `fit` supplies it
+from the data rather than from the component: a Matérn whose length scale is
+shorter than the gap between readings is measurement noise spelled differently,
+and the likelihood mildly prefers it that way. Left free, a `ν = 1/2` Matérn on
+daily readings with a true noise level of 0.3 will report the noise as 0.002,
+draw a band that covers every point, and hand back a trend that is interpolating
+the noise. The bottom of `lengthScaleBounds` is therefore raised to the median
+sampling interval, and a cycle's `periodBounds` to twice it, which is the same
+refusal `TrigonometricSeasonal` already makes about harmonics past Nyquist —
+moved to where the limit depends on the data. The top of either bracket is
+honoured as given.
+
 `StochasticCycle` is the *approximate* rhythm — a cosine that fades and finds
 its way back, rather than a pattern that repeats forever. Its period is
 estimated rather than given, which makes it the one component here whose
 likelihood is multimodal: a cycle at half the period explains every second peak
 and sits on its own maximum. `fit` scans that axis far more finely than the
-others before anything local runs, and `plateauDecadesByParameter` on the
-period is the number that says whether to believe the answer.
+others before anything local runs.
+
+The number to check first is `atBracketEdge`, and specifically the damping. A
+cycle fitted to a series with no cycle in it pushes the damping to the top of
+its bracket, where the component is a rigid sinusoid and can chase noise. Then
+— and this is the trap — the width reported for the *period* becomes tiny,
+because a rigid sinusoid's likelihood in frequency is as sharp as a periodogram
+spike. On white noise the period width comes back at a thousandth of a decade
+while the answer is meaningless. The width is conditional on the damping, so it
+is worth reading only once the damping is interior.
 
 ## One object, three descriptions
 
@@ -224,11 +245,25 @@ disturbed them.
 **The diffuse likelihood equals the restricted likelihood.** Exact diffuse
 initialisation leaves a `log|M|` term behind when the flat prior is integrated
 out. Get its sign or scale wrong and every likelihood shifts by a constant that
-nothing else would notice — fits still converge, to the same place, and only
-comparisons across models of different diffuse dimension are silently wrong.
-Densely, the same quantity is REML, so the test computes
+nothing else would notice — fits still converge, to the same place, but the
+number reported is not the restricted likelihood it claims to be. Densely, the
+same quantity is REML, so the test computes
 `-2 log L = (N-d) log 2pi + log|C| + log|B' C^-1 B| + y' P y` and checks both
 the total and `log|M|` on its own.
+
+Being REML is also the limit of what the number is good for, and this was
+overclaimed here until it was measured. A restricted likelihood is comparable
+across models that integrate out the *same* flat directions and no further. The
+integral is against an improper prior of unit density, so `d` carries units and
+so does the answer: writing a regression column in grams rather than kilograms
+shifts `logMarginalLikelihood` by exactly `log 1000` while the fit, the
+posterior and the coefficient are unchanged, and measuring time in half-days
+rather than days shifts it by exactly `log 2` per diffuse direction that carries
+a time dimension. Both are pinned in `comparability_test.dart`.
+`FitResult.diffuseDimension` and `FitResult.isComparableWith` are there so the
+check can be made rather than assumed; to choose between a model with a weekly
+component and one without, use the fitted noise level, an out-of-sample error,
+or `diagnose`.
 
 **Cross-language golden fixtures, for both initialisations.**
 `tool/generate_fixtures.py` builds the same model in statsmodels as an
@@ -360,7 +395,11 @@ deliberate.
   gain, and is what the code computes — the textbook `P = (I - KH) P-` is the
   same expression algebraically and worse numerically.
 * The smoother solves `P- G' = A P` by Cholesky rather than forming an inverse,
-  and jitters the diagonal before giving up.
+  and jitters the diagonal before giving up. It solves it over the states that
+  can move: a coefficient with `A = I` and `Q = 0` under a flat prior has zero
+  covariance conditional on the flat directions, so its smoother gain has zero
+  rows *and* zero columns, and the cubic part of the backward pass has no
+  business including it. `Component.isStatic` is how a component says so.
 * Non-stationary states get **exact diffuse initialisation** by default, done
   by augmentation rather than by a second set of recursions. The state is
   written `x(0) = a + B d` with `d` unknown and flat; everything downstream is
@@ -383,9 +422,17 @@ deliberate.
 * `FitResult.plateauDecadesByParameter` reports how far each parameter can move
   on its own before the fit loses half a nat. If the likelihood cannot tell a
   stiff curve from a flexible one, the result says so rather than returning a
-  confident number. Each width is conditional on the other parameters, so when
-  two components trade off against each other the joint region is wider than
-  any of these slices.
+  confident number. It is `NaN` for a parameter that is not searched on a log
+  scale — a damping factor is a logit, and a width in logits over `ln 10` is
+  not decades of anything; `plateauWidthByParameter` has the raw number.
+* Each width is conditional on the other parameters, which matters more than it
+  sounds. When two components trade off, the joint region is wider than any of
+  these slices. Worse, when another parameter has finished on a bound the slice
+  is taken *at* that bound: a `StochasticCycle` on a series with no cycle pins
+  its damping at the top of the bracket, where the component is a rigid
+  sinusoid, and then reports the period as determined to a thousandth of a
+  decade. `FitResult.warnings` says so in words, and is empty when there is
+  nothing to say.
 * Standardised residuals are the **recursive** ones. Under a flat prior the
   innovation is an affine function of the unknown starting point rather than a
   number, and substituting the final estimate would condition every residual on
@@ -399,7 +446,12 @@ deliberate.
   prior, so `parameterCount` for a regression component is zero. A trend plus
   twenty holiday indicators is still a one-dimensional fit, and the twenty
   coefficients arrive with posterior standard errors from the same recursion
-  that produced the trend.
+  that produced the trend. They are also skipped by the backward pass, which
+  is where the saving shows up a second time: a state that never moves has a
+  smoother gain of exactly zero, so the `O(n^3)` recursion runs over the two
+  states that do rather than over all twenty-two. Smoothing twenty thousand
+  points with that model went from 1 480 ms to 663 ms, and a single indicator
+  from 13.5 ms to 7.2 ms.
 * `FitResult.parameterStatus` says whether each variance was estimated, shrunk
   out at the bottom of the bracket, or pushed past the top of it. A variance of
   zero is the edge of the parameter space rather than an interior point, so the

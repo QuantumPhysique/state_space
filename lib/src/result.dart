@@ -93,6 +93,10 @@ class SmoothingResult {
   /// `log p(y | theta)` from the forward pass, with the diffuse burn-in
   /// excluded. The same number the textbook `O(N^3)` Gaussian process
   /// likelihood would give.
+  ///
+  /// Under exact diffuse initialisation it is the *restricted* likelihood, so
+  /// it is comparable only across models that integrate out the same number of
+  /// flat directions. See [FitResult.isComparableWith].
   final double logMarginalLikelihood;
 
   /// The model's measurement variance, needed for [predictiveInterval].
@@ -237,8 +241,10 @@ class FitResult {
     required this.evaluations,
     required this.converged,
     required this.plateauDecadesByParameter,
+    required this.plateauWidthByParameter,
     required List<ParameterStatus> parameterStatus,
     required List<ParameterSpec> parameterSpecs,
+    required this.diffuseDimension,
     this.measurementVariancePinned = false,
   })  : parameterStatus = List.unmodifiable(parameterStatus),
         parameterSpecs = List.unmodifiable(parameterSpecs);
@@ -249,9 +255,28 @@ class FitResult {
 
   /// The maximised profile log-likelihood, *without* the penalty.
   ///
-  /// This is the number to compare across models. The penalised objective is
-  /// the right thing to maximise and the wrong thing to compare: two models
-  /// penalised differently are not on the same scale.
+  /// The penalised objective is the right thing to maximise and the wrong
+  /// thing to compare: two models penalised differently are not on the same
+  /// scale. This is the unpenalised number, which removes that objection.
+  ///
+  /// **It is still comparable only across models of equal [diffuseDimension],**
+  /// and [isComparableWith] is the check. Under exact diffuse initialisation
+  /// this is a restricted likelihood: the flat directions have been integrated
+  /// out against an improper prior of unit density, so the result carries the
+  /// units of those directions. Two consequences, both measurable:
+  ///
+  /// * Writing a regression column in grams rather than kilograms shifts this
+  ///   number by exactly `log 1000`, while the fit, the posterior and the
+  ///   coefficient are unchanged.
+  /// * Measuring [Observation.time] in half-days rather than days shifts it by
+  ///   exactly `log 2` per diffuse direction that carries a time dimension.
+  ///
+  /// So a comparison between a trend and a trend-plus-seasonal, or between a
+  /// model with a holiday indicator and one without, is decided by an
+  /// arbitrary choice of units rather than by the data. To choose between
+  /// models whose diffuse structure differs, use the fitted
+  /// [measurementVariance], an out-of-sample error, or
+  /// `StructuralModel.diagnose`.
   final double logMarginalLikelihood;
 
   /// What the penalty contributed at the optimum, so that the objective that
@@ -287,18 +312,56 @@ class FitResult {
   /// so it answers "how well pinned down is this one number" and not "how well
   /// pinned down is the fit". When two components trade off against each other
   /// the joint region is wider than any of these slices, and these numbers
-  /// understate how undetermined things are.
+  /// understate how undetermined things are. Worse, when another parameter has
+  /// finished on a bound the slice is taken at that bound, which can make a
+  /// width look tiny for a reason that has nothing to do with the data; see
+  /// [warnings].
+  ///
+  /// Entries whose coordinate is not a logarithm — a damping factor, which is
+  /// searched as a logit — are [double.nan], because a width in logits divided
+  /// by `ln 10` is not decades of anything. [plateauWidthByParameter] has the
+  /// raw number for every parameter, and [ParameterSpec.isLogarithmic] says
+  /// which is which. This mirrors what [varianceRatios] already does for a
+  /// parameter that is not a variance.
   ///
   /// For a parameter whose [parameterStatus] is not
   /// [ParameterStatus.determined] the width is one-sided and is not an error
   /// bar; see that enum for why.
   final Float64List plateauDecadesByParameter;
 
+  /// The same widths, in each parameter's own unconstrained coordinate, and
+  /// finite for every parameter.
+  ///
+  /// This is [plateauDecadesByParameter] before the division by `ln 10`, and
+  /// it is what to read for a parameter searched as a logit.
+  final Float64List plateauWidthByParameter;
+
   /// What became of each parameter, in the same order as [varianceRatios].
   final List<ParameterStatus> parameterStatus;
 
   /// What each parameter is, in the same order again.
   final List<ParameterSpec> parameterSpecs;
+
+  /// How many flat directions this fit integrated out.
+  ///
+  /// Zero under [ApproximateDiffuse]. Under [ExactDiffuse] it is the number of
+  /// diffuse states, which is two for a trend, one per harmonic pair for a
+  /// seasonal, one per regression column, and none for a stationary component.
+  /// It is what [logMarginalLikelihood] has to match before two fits can be
+  /// compared.
+  final int diffuseDimension;
+
+  /// Whether [logMarginalLikelihood] means the same thing for this fit and
+  /// [other], so that the two numbers may be subtracted.
+  ///
+  /// True when both integrated out the same number of flat directions. False
+  /// otherwise, and then the difference between the two likelihoods is not a
+  /// statement about the data — see [logMarginalLikelihood] for why.
+  ///
+  /// It does not check that the fits are of the same observations, which no
+  /// [FitResult] retains; that is the caller's to know.
+  bool isComparableWith(FitResult other) =>
+      diffuseDimension == other.diffuseDimension;
 
   /// Whether the measurement variance was asserted rather than estimated.
   ///
@@ -340,12 +403,77 @@ class FitResult {
   /// A well-determined fit gives well under a decade. Several decades means
   /// the data does not distinguish a stiff curve from a flexible one, and the
   /// point estimate should be treated as a convention rather than a finding.
+  ///
+  /// Parameters that are not on a log scale are skipped rather than mixed in,
+  /// since decades and logits do not compare.
   double get plateauDecades {
     var widest = 0.0;
     for (final width in plateauDecadesByParameter) {
+      if (width.isNaN) continue;
       if (width > widest) widest = width;
     }
     return widest;
+  }
+
+  /// What is worth knowing about this fit before quoting anything from it, in
+  /// plain sentences, empty when there is nothing to say.
+  ///
+  /// Three things are reported, and the third is the one that is easy to miss.
+  ///
+  /// 1. A parameter that finished on a bound. Its estimate is a boundary, not
+  ///    an interior optimum, and the width beside it is one-sided.
+  /// 2. A parameter the data barely constrains, meaning a plateau over two
+  ///    decades wide.
+  /// 3. **A parameter whose width was measured while a shape parameter of the
+  ///    same component sat on a bound.** Every width here is conditional on
+  ///    the other parameters, so a bound elsewhere in the component can make
+  ///    one look sharp for a reason that is not about the data. A
+  ///    `StochasticCycle` fitted to a series with no cycle in it pushes the
+  ///    damping to the top of its bracket, where the component is a rigid
+  ///    sinusoid whose likelihood in frequency is as narrow as a periodogram
+  ///    spike — and then reports the period as pinned to a thousandth of a
+  ///    decade. Nothing about that is wrong arithmetically and all of it is
+  ///    misleading.
+  List<String> get warnings {
+    final found = <String>[];
+    var at = 0;
+    for (final component in model.components) {
+      final count = component.parameterCount;
+      final name = component.runtimeType.toString();
+      var pinnedShape = -1;
+      for (var i = at; i < at + count; i++) {
+        if (parameterSpecs[i] is ShapeParameter &&
+            parameterStatus[i] != ParameterStatus.determined) {
+          pinnedShape = i;
+        }
+      }
+      for (var i = at; i < at + count; i++) {
+        final label = '${parameterSpecs[i].label} of $name';
+        switch (parameterStatus[i]) {
+          case ParameterStatus.shrunkToNothing:
+            found.add('the $label was shrunk to the bottom of its bracket '
+                'rather than estimated: the data gives it nothing to do, and '
+                'the width reported for it is one-sided');
+          case ParameterStatus.beyondBracket:
+            found.add('the $label finished at the top of its bracket, so the '
+                'real optimum is probably outside it');
+          case ParameterStatus.determined:
+            if (plateauDecadesByParameter[i] > 2) {
+              found.add('the $label can move '
+                  '${plateauDecadesByParameter[i].toStringAsFixed(1)} decades '
+                  'without the fit getting half a nat worse, so its value is a '
+                  'convention rather than a finding');
+            } else if (pinnedShape >= 0 && pinnedShape != i) {
+              found.add('the width reported for the $label was measured with '
+                  'the ${parameterSpecs[pinnedShape].label} held on its bound, '
+                  'so it says how sharp the likelihood is there and not how '
+                  'well the data determines it');
+            }
+        }
+      }
+      at += count;
+    }
+    return found;
   }
 
   /// True when the likelihood surface is too flat to support the estimate.

@@ -39,11 +39,22 @@ import 'stationary.dart';
 ///
 /// **And it needs a lot of data.** Below about four complete cycles the period
 /// is not estimable at all, and below eight it is very noisy; the fit will
-/// still return a number. The honest check is
-/// `FitResult.plateauDecadesByParameter` on the period axis, which says how far
-/// the period can move before the data notices. A tenth of a decade is a real
-/// estimate. Half a decade means the series has been asked a question it cannot
-/// answer.
+/// still return a number.
+///
+/// **Check the damping first, and only then the period.** The obvious check —
+/// `FitResult.plateauDecadesByParameter` on the period axis — is the right one
+/// only once the damping has an interior optimum, and it is actively
+/// misleading otherwise. On a series with no cycle in it the damping is driven
+/// to the top of its bracket, where the component is a rigid sinusoid whose
+/// likelihood in frequency is as sharp as a periodogram spike; the period width
+/// then comes back at a thousandth of a decade while the answer means nothing.
+/// Measured over five runs of four hundred points of white noise, the fitted
+/// period ranged from 2.2 to 10.4 and the reported width from 0.001 to 0.025
+/// decades. Every width here is conditional on the other parameters, and this
+/// is the case where that caveat does the most work.
+///
+/// `FitResult.warnings` says both things in words: that the damping finished on
+/// a bound, and that the period's width was measured there.
 class StochasticCycle extends Component {
   /// Validates rather than asserts, for the same reason
   /// `TrigonometricSeasonal` does: every failure mode here produces a
@@ -90,10 +101,11 @@ class StochasticCycle extends Component {
 
   /// Length of one turn of the cycle, in the caller's time unit.
   ///
-  /// Nothing here knows the sampling interval, so nothing here can refuse a
-  /// period below the Nyquist limit. A period shorter than twice the typical
-  /// gap between readings is not a cycle the data can see, whatever the fit
-  /// reports.
+  /// A period shorter than twice the typical gap between readings is not a
+  /// cycle the data can see, whatever the likelihood reports. The component
+  /// alone cannot refuse one, because it does not know the sampling interval;
+  /// [fit] does, and raises the bottom of [periodBounds] to it through
+  /// [parameterSpecsAt].
   final double period;
 
   /// How much of the oscillation survives one time unit, in `(0, 1)`.
@@ -144,15 +156,55 @@ class StochasticCycle extends Component {
   List<ParameterSpec> get parameterSpecs => [
         const VarianceParameter(),
         ShapeParameter(
+          label: 'damping',
+          // A logit, so a width in it is not a width in decades.
+          isLogarithmic: false,
           lower: _logit(dampingBounds.lower),
           upper: _logit(dampingBounds.upper),
         ),
         ShapeParameter(
+          label: 'period',
           lower: math.log(periodBounds.lower),
           upper: math.log(periodBounds.upper),
           scanPoints: periodScanPoints,
+          // The fine scan is about multimodality, not about scale; without
+          // this the simplex would step thirty times less far along the period
+          // axis than along the variance ones.
+          searchStep: 0.5,
         ),
       ];
+
+  /// Raises the period bracket to the Nyquist limit of the actual sampling.
+  ///
+  /// The class documentation notes that nothing here knows the sampling
+  /// interval, so nothing here can refuse a period below Nyquist. [fit] does
+  /// know, and passes it in: a cycle of period shorter than twice the gap
+  /// between readings is aliased onto a longer one and is not a rhythm the
+  /// data can see, whatever the likelihood reports.
+  @override
+  List<ParameterSpec> parameterSpecsAt({required double resolution}) {
+    if (!(resolution > 0)) return parameterSpecs;
+    final floor = math.max(periodBounds.lower, 2 * resolution);
+    final upper = periodBounds.upper;
+    if (!(floor < upper)) {
+      throw ArgumentError('a StochasticCycle period is bracketed at '
+          '[${periodBounds.lower}, $upper], but the readings are $resolution '
+          'apart, so nothing shorter than ${2 * resolution} is above the '
+          'Nyquist limit. Widen periodBounds or drop the component.');
+    }
+    final specs = parameterSpecs;
+    return [
+      specs[0],
+      specs[1],
+      ShapeParameter(
+        label: 'period',
+        lower: math.log(floor),
+        upper: math.log(upper),
+        scanPoints: periodScanPoints,
+        searchStep: 0.5,
+      ),
+    ];
+  }
 
   @override
   void transition(double dt, MatrixBlock out) {

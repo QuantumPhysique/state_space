@@ -74,6 +74,32 @@ abstract class Component {
   List<ParameterSpec> get parameterSpecs =>
       List.filled(parameterCount, const VarianceParameter());
 
+  /// The same, narrowed by what the sampling of the data can actually resolve.
+  ///
+  /// [resolution] is the median gap between consecutive distinct observation
+  /// times, or zero when the series is too short for that to mean anything.
+  /// The default ignores it, which is right for every parameter whose meaning
+  /// does not involve the time axis.
+  ///
+  /// It exists because a *shape* parameter measured in time units has a limit
+  /// below which it stops being a different model. A Matérn with `nu = 1/2`
+  /// and a length scale far below the sampling interval is white noise, so it
+  /// competes with the measurement error rather than with the trend, and the
+  /// likelihood is happy to let it win: on daily readings with a true noise
+  /// standard deviation of 0.3, a Matérn allowed down to a length scale of
+  /// 0.01 days takes the noise for itself and the fit reports a measurement
+  /// standard deviation of 0.002. The reported noise level, the credible band
+  /// and the trend curve are all then wrong together, and only
+  /// [FitResult.atBracketEdge] says anything is amiss.
+  ///
+  /// This is the same kind of refusal as `TrigonometricSeasonal` rejecting a
+  /// harmonic at or past the Nyquist frequency, moved to where the limit
+  /// depends on the data rather than on the component alone. A caller's own
+  /// bracket is still respected — the floor can only raise the lower end, and
+  /// never past what the caller allowed.
+  List<ParameterSpec> parameterSpecsAt({required double resolution}) =>
+      parameterSpecs;
+
   /// Root-mean-square deviation of this component's contribution from its own
   /// average, over a window of [span] time units of its own driving noise.
   ///
@@ -99,7 +125,14 @@ abstract class Component {
   ///
   /// The diffuse starting point is excluded. Where the component began is for
   /// the data to say; the penalty is about how much it moves afterwards.
-  double wanderOver(double span);
+  ///
+  /// It defaults to zero, which is what a component that does not move should
+  /// return and is also the right answer for one that has not worked out its
+  /// own path spread: no penalty will then shrink it. Deriving that integral
+  /// is comfortably the hardest thing in this interface, and requiring it of
+  /// somebody who only wants to add a kernel — and who may never use a
+  /// penalty, since none is on by default — was the wrong trade.
+  double wanderOver(double span) => 0;
 
   /// Why this component's flat directions might not be identifiable on a
   /// series running from [from] to [to], or null if nothing about it is
@@ -116,6 +149,25 @@ abstract class Component {
   /// contributes a column of zeros, and that is the most common way for this
   /// to be reached at all.
   String? identifiabilityHint(double from, double to) => null;
+
+  /// Whether this component's states never move: `A(dt) = I` and `Q(dt) = 0`
+  /// for every gap, and every state diffuse.
+  ///
+  /// A regression coefficient is the case, and it is worth the engine knowing
+  /// because such a state has *no dynamics to smooth*. Under exact diffuse
+  /// initialisation its covariance conditional on the flat directions is
+  /// identically zero at every step, so the backward pass's gain has zero rows
+  /// and zero columns there: its smoothed moments equal its filtered ones, and
+  /// it contributes nothing to anyone else's. Everything such a state is worth
+  /// is carried in `dx/dd` by the forward pass and folded back in at the end.
+  ///
+  /// Declaring it lets the smoother work on the states that actually move,
+  /// which for a trend plus twenty holiday indicators is two rather than
+  /// twenty-two — and the backward pass is cubic in that number.
+  ///
+  /// A component that returns true and then moves would be silently
+  /// mis-smoothed, so the default is false and the claim is opt-in.
+  bool get isStatic => false;
 
   /// Index within this component's block of a state holding the instantaneous
   /// rate of change of the component's contribution, or null if it has none.

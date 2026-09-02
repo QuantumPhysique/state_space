@@ -82,12 +82,39 @@ class StructuralModel {
   /// Total number of states across all components.
   int get stateDim => components.fold(0, (n, c) => n + c.stateDim);
 
+  /// How many flat directions the model integrates out, which is zero under
+  /// [ApproximateDiffuse] and the number of diffuse states under
+  /// [ExactDiffuse].
+  ///
+  /// Worth knowing because it is what decides whether two models'
+  /// [SmoothingResult.logMarginalLikelihood] values are on the same scale. Two
+  /// models with the same diffuse dimension have integrated the same thing
+  /// away and can be compared; two with different dimensions cannot. See
+  /// [logLikelihood].
+  int get diffuseDimension {
+    if (initialization is! ExactDiffuse) return 0;
+    var count = 0;
+    for (final component in components) {
+      for (final flag in component.diffuseStates) {
+        if (flag) count++;
+      }
+    }
+    return count;
+  }
+
   /// Total number of free parameters across all components.
   int get parameterCount => components.fold(0, (n, c) => n + c.parameterCount);
 
   /// What each entry of [parameters] is, concatenated in the same order.
   List<ParameterSpec> get parameterSpecs =>
       [for (final component in components) ...component.parameterSpecs];
+
+  /// The same, narrowed by what a series sampled every [resolution] time units
+  /// can resolve. See [Component.parameterSpecsAt].
+  List<ParameterSpec> parameterSpecsAt({required double resolution}) => [
+        for (final component in components)
+          ...component.parameterSpecsAt(resolution: resolution)
+      ];
 
   /// The concatenated unconstrained parameter vectors of every component.
   Float64List get parameters {
@@ -132,6 +159,17 @@ class StructuralModel {
   ///
   /// One forward pass, no smoothing, nothing retained: `O(N)` time and `O(1)`
   /// memory beyond the input.
+  ///
+  /// Under [ExactDiffuse] this is the *restricted* likelihood: the flat
+  /// directions have been integrated out against an improper prior. That makes
+  /// it the right thing to maximise, and it makes it comparable only with
+  /// models of the same [diffuseDimension]. Across different diffuse
+  /// dimensions it is not on a common scale — and not merely by an unknown
+  /// constant, but by one the caller controls without meaning to: writing a
+  /// regression column in grams rather than kilograms shifts this number by
+  /// `log 1000`, and so does changing the unit of [Observation.time]. Use the
+  /// fitted noise level, an out-of-sample error, or [diagnose] to choose
+  /// between models whose diffuse structure differs.
   double logLikelihood(List<Observation> observations) =>
       _filter(Timeline.merge(observations, null), keepHistory: false)
           .logLikelihood;
@@ -177,9 +215,9 @@ class StructuralModel {
   SmoothingResult smooth(List<Observation> observations, {Float64List? grid}) {
     final timeline = Timeline.merge(observations, grid);
     final filtered = _filter(timeline, keepHistory: true);
-    RtsSmoother(components)
+    RtsSmoother(components, initialization: initialization)
       ..smoothInPlace(timeline, filtered)
-      ..combineDiffuse(filtered);
+      ..combineDiffuse(filtered, steps: _stepsWorthFolding(timeline));
     return _report(timeline, filtered);
   }
 
@@ -191,6 +229,14 @@ class StructuralModel {
   /// start before the last observation; for output *within* the data, ask
   /// [smooth] for a grid instead, which conditions on the whole series rather
   /// than only on the past.
+  ///
+  /// A horizon whose first entry *is* the last observation time reports the
+  /// filtered state there — the estimate conditioned on everything up to and
+  /// including that reading, and nothing after it. That is the quantity an
+  /// application wants when it shows a figure that must not move once shown,
+  /// and it is the only way this package offers to reach it. Nothing special
+  /// happens to produce it: the gap is zero, so the prediction is the previous
+  /// posterior.
   ForecastResult forecast(List<Observation> observations, Float64List horizon) {
     if (observations.isEmpty) {
       throw ArgumentError('nothing to forecast from: no observations');
@@ -229,6 +275,23 @@ class StructuralModel {
     );
   }
 
+  /// The steps [_report] and [_coefficients] will read: the output grid, plus
+  /// the last step, where the regression coefficients are taken from.
+  ///
+  /// Folding the flat directions into a step costs `O(stateDim^2 * d)`, so on
+  /// a model with many regression columns it is worth doing only where the
+  /// answer is wanted.
+  static Int32List _stepsWorthFolding(Timeline timeline) {
+    final outputs = timeline.outputIndices;
+    final last = timeline.length - 1;
+    if (last < 0) return outputs;
+    if (outputs.isNotEmpty && outputs.last == last) return outputs;
+    final wanted = Int32List(outputs.length + 1);
+    wanted.setAll(0, outputs);
+    wanted[outputs.length] = last;
+    return wanted;
+  }
+
   FilterResult _filter(Timeline timeline, {required bool keepHistory}) =>
       forwardPass(
         components,
@@ -245,8 +308,8 @@ class StructuralModel {
     final n = stateDim;
     final indices = timeline.outputIndices;
     final count = indices.length;
-    final mean = filtered.filteredMean!;
-    final covariance = filtered.filteredCovariance!;
+    final mean = filtered.stateMean!;
+    final covariance = filtered.stateCovariance!;
 
     final offsets = <int>[];
     var next = 0;
@@ -350,8 +413,8 @@ class StructuralModel {
     final n = stateDim;
     final last = timeline.length - 1;
     if (last < 0) return const [];
-    final mean = filtered.filteredMean!;
-    final covariance = filtered.filteredCovariance!;
+    final mean = filtered.stateMean!;
+    final covariance = filtered.stateCovariance!;
 
     for (var b = 0; b < components.length; b++) {
       final component = components[b];
