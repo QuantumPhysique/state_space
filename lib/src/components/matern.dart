@@ -282,14 +282,28 @@ class Matern extends Component {
   /// function of `u = rate * dt` times `variance * rate^(i + j)`, so there is
   /// no matrix work to do and nothing to allocate.
   ///
-  /// Over a very short gap the leading terms cancel — `Q` is `O(dt^3)` for
-  /// `nu = 3/2` while the terms it is built from are `O(1)` — and the result
-  /// loses relative precision. It is left as it is, because the *absolute*
-  /// error is a few units in the last place of `variance`, which is exactly the
-  /// rounding the covariance propagation around it already carries.
+  /// Over a very short gap the two terms very nearly cancel — `Q(0,0)` is
+  /// `O(dt^3)` for `nu = 3/2` and `O(dt^5)` for `nu = 5/2`, while the terms it
+  /// is built from are `O(1)` — so below [_seriesBelow] the integral form is
+  /// summed directly instead. That is not a refinement: computed the other way
+  /// `Q(0,0)` has no correct digits at all once `rate * dt` falls under about
+  /// `6e-6` for `nu = 3/2` or `6e-4` for `nu = 5/2`, and it comes out
+  /// *negative* not much further down, which costs `Q` its positive
+  /// semi-definiteness. The absolute error is only a few units in the last
+  /// place of `variance`, which is why this went unnoticed; the sign is the
+  /// part that matters.
+  ///
+  /// Which gaps are small enough to reach depends on the caller's time unit
+  /// and not on anything the component can see — `rate * dt` is `1.7e-5` for a
+  /// length scale of `1e5` seconds sampled every second, which is an ordinary
+  /// thing to ask for.
   @override
   void processNoise(double dt, MatrixBlock out) {
     final u = rate * dt;
+    if (u < _seriesBelow) {
+      _seriesNoise(u, out);
+      return;
+    }
     final decay = math.exp(-2 * u);
     final r = rate;
     switch (order) {
@@ -331,6 +345,65 @@ class Matern extends Component {
         out.set(2, 0, out.at(0, 2));
         out.set(2, 1, out.at(1, 2));
         out.set(2, 2, variance * r2 * r2 * g22);
+    }
+  }
+
+  /// `Q(dt)` from the integral it is defined by, summed as a power series.
+  ///
+  /// `Q = integral_0^dt A(s) q e e' A(s)' ds`, and in the scaled coordinate
+  /// `x = rate * s` every entry is a fixed polynomial combination of the
+  /// moments `integral_0^u x^m exp(-2x) dx`. Summing those directly has no
+  /// cancellation in it, so the leading behaviour survives however small the
+  /// gap. The polynomials are the last column of the scaled transition, which
+  /// is where the driving noise enters the companion form:
+  ///
+  /// ```text
+  /// nu = 1/2   1
+  /// nu = 3/2   x,        1 - x
+  /// nu = 5/2   x^2 / 2,  x - x^2 / 2,  1 - 2x + x^2 / 2
+  /// ```
+  ///
+  /// and `q` is the spectral intensity `2 variance sqrt(pi) rate^(2p-1)
+  /// Gamma(p) / Gamma(p - 1/2)`, which comes to `2 variance rate`,
+  /// `4 variance rate^3` and `16 variance rate^5 / 3` for the three orders.
+  void _seriesNoise(double u, MatrixBlock out) {
+    final v = variance;
+    final r = rate;
+    switch (order) {
+      case MaternOrder.oneHalf:
+        out.set(0, 0, 2 * v * _moment(0, u));
+      case MaternOrder.threeHalves:
+        final m0 = _moment(0, u), m1 = _moment(1, u), m2 = _moment(2, u);
+        final scale = 4 * v;
+        final offDiagonal = scale * r * (m1 - m2);
+        out.set(0, 0, scale * m2);
+        out.set(0, 1, offDiagonal);
+        out.set(1, 0, offDiagonal);
+        out.set(1, 1, scale * r * r * (m0 - 2 * m1 + m2));
+      case MaternOrder.fiveHalves:
+        final m0 = _moment(0, u),
+            m1 = _moment(1, u),
+            m2 = _moment(2, u),
+            m3 = _moment(3, u),
+            m4 = _moment(4, u);
+        final scale = 4 * v / 3;
+        final r2 = r * r;
+        final q00 = scale * m4;
+        final q01 = 2 * scale * r * (m3 - m4 / 2);
+        final q02 = 2 * scale * r2 * (m2 - 2 * m3 + m4 / 2);
+        final q11 = 4 * scale * r2 * (m2 - m3 + m4 / 4);
+        final q12 = 4 * scale * r2 * r * (m1 - 2.5 * m2 + 1.5 * m3 - m4 / 4);
+        final q22 =
+            4 * scale * r2 * r2 * (m0 - 4 * m1 + 5 * m2 - 2 * m3 + m4 / 4);
+        out.set(0, 0, q00);
+        out.set(0, 1, q01);
+        out.set(0, 2, q02);
+        out.set(1, 0, q01);
+        out.set(1, 1, q11);
+        out.set(1, 2, q12);
+        out.set(2, 0, q02);
+        out.set(2, 1, q12);
+        out.set(2, 2, q22);
     }
   }
 
@@ -398,4 +471,28 @@ class Matern extends Component {
   @override
   String toString() => 'Matern(order: ${order.name}, variance: $variance, '
       'lengthScale: $lengthScale)';
+}
+
+/// Where the closed form stops being the better of the two.
+///
+/// Both are accurate on either side of this for some way, so the exact value
+/// is not delicate; it was chosen as the middle of the band where the two agree
+/// to the last few bits for all three orders.
+const double _seriesBelow = 0.1;
+
+/// `integral_0^u x^m exp(-2x) dx`, as its power series
+/// `sum_n (-2)^n u^(m+n+1) / (n! (m + n + 1))`.
+///
+/// Only ever called for `u` below [_seriesBelow], where successive terms fall
+/// off like `(2u)^n / n!` and a handful suffice.
+double _moment(int m, double u) {
+  var coefficient = math.pow(u, m + 1).toDouble();
+  var sum = coefficient / (m + 1);
+  for (var n = 1; n <= 24; n++) {
+    coefficient *= -2 * u / n;
+    final term = coefficient / (m + n + 1);
+    sum += term;
+    if (term.abs() <= sum.abs() * 1e-18) break;
+  }
+  return sum;
 }
