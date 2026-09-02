@@ -92,16 +92,16 @@ void main() {
       times[k] = timeline.times[t];
       var at = 0;
       for (final c in components) {
-        c.observationAt(timeline.times[t],
-            Float64List.sublistView(h, at, at + c.stateDim));
+        c.observationAt(
+            timeline.times[t], Float64List.sublistView(h, at, at + c.stateDim));
         at += c.stateDim;
       }
       var signal = 0.0, spread = 0.0;
       for (var i = 0; i < n; i++) {
         signal += h[i] * result.filteredMean![t * n + i];
         for (var j = 0; j < n; j++) {
-          spread += h[i] * result.filteredCovariance![t * n * n + i * n + j] *
-              h[j];
+          spread +=
+              h[i] * result.filteredCovariance![t * n * n + i * n + j] * h[j];
         }
       }
       level[k] = signal;

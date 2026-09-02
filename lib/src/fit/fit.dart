@@ -247,11 +247,16 @@ FitResult _search(
     // The restart is the standard insurance against a simplex that has
     // collapsed along one direction and stopped making progress. A second run
     // that finds nothing new is decent evidence the first one finished.
+    // The scan's resolution is a reasonable default displacement, but it is
+    // the wrong one wherever the resolution was chosen for some other reason.
+    // See ShapeParameter.searchStep.
     final wide = Float64List(k);
     final narrow = Float64List(k);
     for (var i = 0; i < k; i++) {
-      wide[i] = 2 * step[i];
-      narrow[i] = step[i] / 4;
+      final spec = specs[i];
+      final chosen = spec is ShapeParameter ? spec.searchStep : null;
+      wide[i] = chosen ?? 2 * step[i];
+      narrow[i] = (chosen ?? step[i]) / 4;
     }
     var simplex =
         maximiseSimplex(objective, current, steps: wide, tolerance: tolerance);
@@ -262,11 +267,18 @@ FitResult _search(
     converged = simplex.converged;
   }
 
+  // Measured in each parameter's own unconstrained coordinate. Dividing by
+  // ln 10 turns that into decades for a log coordinate and into nothing at all
+  // for a logit, so the decade view reports NaN there rather than a number that
+  // reads like an answer -- the same convention varianceRatios already uses for
+  // a parameter that is not a variance.
   final widths = Float64List(k);
+  final decades = Float64List(k);
   for (var axis = 0; axis < k; axis++) {
-    widths[axis] = _halfNatWidth(
-            objective, optimum, axis, peak, lower[axis], upper[axis]) /
-        _ln10;
+    widths[axis] =
+        _halfNatWidth(objective, optimum, axis, peak, lower[axis], upper[axis]);
+    decades[axis] =
+        specs[axis].isLogarithmic ? widths[axis] / _ln10 : double.nan;
   }
 
   final atOptimum = profile.evaluate(optimum);
@@ -311,7 +323,8 @@ FitResult _search(
     varianceRatios: ratios,
     evaluations: profile.evaluations,
     converged: converged,
-    plateauDecadesByParameter: widths,
+    plateauDecadesByParameter: decades,
+    plateauWidthByParameter: widths,
     parameterStatus: status,
     parameterSpecs: specs,
     diffuseDimension: initial.diffuseDimension,

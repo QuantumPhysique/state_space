@@ -203,6 +203,7 @@ class Matern extends Component {
   List<ParameterSpec> get parameterSpecs => [
         const VarianceParameter(),
         ShapeParameter(
+          label: 'length scale',
           lower: math.log(lengthScaleBounds.lower),
           upper: math.log(lengthScaleBounds.upper),
         ),
@@ -234,7 +235,10 @@ class Matern extends Component {
     }
     return [
       const VarianceParameter(),
-      ShapeParameter(lower: math.log(floor), upper: math.log(upper)),
+      ShapeParameter(
+          label: 'length scale',
+          lower: math.log(floor),
+          upper: math.log(upper)),
     ];
   }
 
