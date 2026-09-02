@@ -395,7 +395,11 @@ deliberate.
   gain, and is what the code computes — the textbook `P = (I - KH) P-` is the
   same expression algebraically and worse numerically.
 * The smoother solves `P- G' = A P` by Cholesky rather than forming an inverse,
-  and jitters the diagonal before giving up.
+  and jitters the diagonal before giving up. It solves it over the states that
+  can move: a coefficient with `A = I` and `Q = 0` under a flat prior has zero
+  covariance conditional on the flat directions, so its smoother gain has zero
+  rows *and* zero columns, and the cubic part of the backward pass has no
+  business including it. `Component.isStatic` is how a component says so.
 * Non-stationary states get **exact diffuse initialisation** by default, done
   by augmentation rather than by a second set of recursions. The state is
   written `x(0) = a + B d` with `d` unknown and flat; everything downstream is
@@ -418,9 +422,17 @@ deliberate.
 * `FitResult.plateauDecadesByParameter` reports how far each parameter can move
   on its own before the fit loses half a nat. If the likelihood cannot tell a
   stiff curve from a flexible one, the result says so rather than returning a
-  confident number. Each width is conditional on the other parameters, so when
-  two components trade off against each other the joint region is wider than
-  any of these slices.
+  confident number. It is `NaN` for a parameter that is not searched on a log
+  scale — a damping factor is a logit, and a width in logits over `ln 10` is
+  not decades of anything; `plateauWidthByParameter` has the raw number.
+* Each width is conditional on the other parameters, which matters more than it
+  sounds. When two components trade off, the joint region is wider than any of
+  these slices. Worse, when another parameter has finished on a bound the slice
+  is taken *at* that bound: a `StochasticCycle` on a series with no cycle pins
+  its damping at the top of the bracket, where the component is a rigid
+  sinusoid, and then reports the period as determined to a thousandth of a
+  decade. `FitResult.warnings` says so in words, and is empty when there is
+  nothing to say.
 * Standardised residuals are the **recursive** ones. Under a flat prior the
   innovation is an affine function of the unknown starting point rather than a
   number, and substituting the final estimate would condition every residual on

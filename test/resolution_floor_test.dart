@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 
-
 import 'package:state_space/state_space.dart';
 import 'package:test/test.dart';
 

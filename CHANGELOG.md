@@ -1,3 +1,130 @@
+## Unreleased
+
+A review pass. Nothing here is a new component; it is what a close reading of
+the existing ones turned up, and most of it is the package having claimed more
+than it could deliver.
+
+### Corrections
+
+* **`logMarginalLikelihood` is not comparable across models of different
+  diffuse dimension**, and three places said it was. It is a *restricted*
+  likelihood: the flat directions are integrated out against an improper prior
+  of unit density, so the result carries their units. Writing a regression
+  column in grams rather than kilograms shifts it by exactly `log 1000` while
+  the fit, the posterior and the coefficient are unchanged; measuring time in
+  half-days rather than days shifts it by exactly `log 2` per diffuse direction
+  carrying a time dimension. Either is enough to reverse a comparison between a
+  trend and a trend plus a weekly component. `tool/calibration/README.md` had
+  this right and the API docs contradicted it. **New:**
+  `StructuralModel.diffuseDimension`, `FitResult.diffuseDimension` and
+  `FitResult.isComparableWith`, and `comparability_test.dart` pins both shifts.
+* **A Matérn could impersonate measurement noise, and the likelihood preferred
+  it.** With `nu = 1/2` and a length scale below the sampling interval the
+  component *is* white noise, so it competes with the measurement error rather
+  than with the trend. On 730 daily readings with a true noise standard
+  deviation of 0.3, adding a Matérn over the default bracket returned a fitted
+  noise of 0.002, a predictive band covering 100 % of the data, and a *higher*
+  likelihood than the correct model. `fit` now floors a time-valued shape
+  parameter at what the sampling can resolve — one gap for a Matérn length
+  scale, two for a `StochasticCycle` period, which is the Nyquist limit the
+  cycle's own documentation described and could not enforce. A caller's own
+  lower bound is respected when it is higher; the upper bound is untouched.
+  **New:** `Component.parameterSpecsAt` and `samplingResolution`.
+* **Matérn process noise lost every correct digit over a short gap.**
+  `Q = P_inf - A P_inf A'` is a difference of two quantities of order
+  `variance` whose answer is `O(dt^3)` or `O(dt^5)`. Below `rate * dt` of about
+  `6e-6` for `nu = 3/2` it had no correct digits and eventually came out
+  negative, costing `Q` its positive semi-definiteness. Below `rate * dt` of
+  0.1 the defining integral is now summed as a series instead. Which gaps reach
+  that depends on the caller's time unit and on nothing the component can see.
+* **A logit width was reported as decades.** `plateauDecadesByParameter`
+  divided every half-nat width by `ln 10`, which is decades for a log variance
+  and nothing at all for a damping factor. Non-logarithmic parameters now
+  report `NaN`, as `varianceRatios` already did for a parameter that is not a
+  variance. **New:** `FitResult.plateauWidthByParameter` and
+  `ParameterSpec.isLogarithmic`.
+* **A width measured beside a pinned parameter looks sharper than it is.** A
+  `StochasticCycle` fitted to white noise drives its damping to the top of the
+  bracket, where the component is a rigid sinusoid whose likelihood in
+  frequency is as narrow as a periodogram spike, and then reports the period as
+  pinned to between 0.001 and 0.025 decades over five seeds. The class
+  documentation recommended exactly that number as "the honest check". **New:**
+  `FitResult.warnings`, which says in sentences what is on a bound, what is
+  flat, and whose width was measured beside a bound. It is empty for a
+  well-determined fit.
+* `FastPath2x2` did not zero its transition and noise blocks while the generic
+  engine does, so a two-state component that left an entry unwritten — which
+  `Component` explicitly permits — would work on one path and be silently wrong
+  on the other.
+* `profileMeasurementVariance` and `profileLogLikelihood` arrived at `NaN` by
+  arithmetic accident when nothing was left to estimate from; they say so now.
+  `InnovationDiagnostics.mean` and `.variance` no longer divide by zero.
+  `ComplexityPenalty` validates in release builds, as every component does.
+* Two documented accuracy claims were wrong and are now measurements:
+  `stationaryWander`'s Simpson error is governed by the kernel's scale and not
+  the window's, and the term `TrigonometricSeasonal.wanderOver` drops is up to
+  5.5 % over one period rather than "about three".
+
+### Faster
+
+* **The backward pass skips states that never move.** Under a flat prior a
+  regression coefficient's covariance conditional on the flat directions is
+  identically zero, so its smoother gain has zero rows *and* columns: it
+  smooths to its filtered value and contributes nothing to anyone else's. The
+  recursion is cubic in the state dimension, so this is the difference between
+  two states and twenty-two. Smoothing 20 000 points:
+
+  | model | before | after |
+  |---|---|---|
+  | trend (2 states) | 4.5 ms | 4.4 ms |
+  | trend + weekly (6) | 44.4 ms | 38.5 ms |
+  | trend + 1 indicator (3) | 13.5 ms | 7.2 ms |
+  | trend + 20 indicators (22) | 1 480 ms | 663 ms |
+
+  Models with nothing static are not slowed down. **New:**
+  `Component.isStatic`.
+* The smoother's Cholesky failed on *every* backward step for any model
+  carrying a static state, so the jitter recovery ran every time and the
+  promise that a singular covariance "fails loudly" was worthless. The jitter
+  that last worked is tried first.
+* `combineDiffuse` costs `O(n^2 d)` per step and only the reported steps are
+  ever read, so it folds the flat directions into those and no others.
+* **`fit` can start from where it finished.** `SearchStart.previousParameters`
+  takes the model's own parameters and skips the coordinate scan, for refitting
+  as data arrives. On 730 readings with a trend, a weekly seasonal and a
+  Matérn, adding one observation: 317 passes and 157 ms cold, 117 and 56 ms
+  warm, same likelihood to the last digit. The default is unchanged and remains
+  the scan.
+
+### Also
+
+* `Component.wanderOver` now defaults to zero. It is the hardest thing in the
+  interface to derive and exists only for a penalty that is off by default.
+* `FilterResult.filteredMean`, `.filteredCovariance` and `.filteredSensitivity`
+  are `stateMean`, `stateCovariance` and `stateSensitivity`. They stopped being
+  filtered moments the moment the smoother overwrote them in place, which it
+  does deliberately.
+* `ShapeParameter` gains `label`, `isLogarithmic` and `searchStep`. The last
+  decouples the simplex's initial displacement from the coordinate scan's
+  resolution, which were the same number for reasons that had nothing to do
+  with each other.
+* `StructuralModel.forecast` documents that a horizon beginning at the last
+  observation time reports the filtered state there, which is the only way this
+  package offers to reach it.
+
+### Breaking
+
+* `ComplexityPenalty` is no longer `const`.
+* `plateauDecadesByParameter` is `NaN` for a parameter searched as a logit.
+  Read `plateauWidthByParameter` instead, or check
+  `ParameterSpec.isLogarithmic`.
+* `FitResult`'s constructor takes `diffuseDimension` and
+  `plateauWidthByParameter`. It is built by `fit`; there is no reason to
+  construct one outside a test.
+* A `Matern` or `StochasticCycle` whose bracket sits entirely below what the
+  sampling can resolve is now refused by `fit` rather than fitted to a number
+  that means nothing.
+
 ## 0.5.0
 
 The first stationary components, the noise floor issue #1 asked for, and a

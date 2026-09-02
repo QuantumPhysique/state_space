@@ -29,11 +29,10 @@ void main() {
   test('a fitted model warm-started on its own data does not move', () {
     final data = diary(500);
     final cold = fit(template(), data);
-    final again =
-        fit(cold.model, data, start: SearchStart.previousParameters);
+    final again = fit(cold.model, data, start: SearchStart.previousParameters);
 
-    expect(again.logMarginalLikelihood,
-        closeTo(cold.logMarginalLikelihood, 1e-6));
+    expect(
+        again.logMarginalLikelihood, closeTo(cold.logMarginalLikelihood, 1e-6));
     for (var i = 0; i < cold.varianceRatios.length; i++) {
       expect(again.varianceRatios[i],
           closeTo(cold.varianceRatios[i], 1e-6 * cold.varianceRatios[i]));
@@ -48,8 +47,7 @@ void main() {
     final longer = [...data, Observation(500, 81.4)];
 
     final coldAgain = fit(template(), longer);
-    final warm =
-        fit(cold.model, longer, start: SearchStart.previousParameters);
+    final warm = fit(cold.model, longer, start: SearchStart.previousParameters);
 
     expect(warm.logMarginalLikelihood,
         closeTo(coldAgain.logMarginalLikelihood, 1e-4));
@@ -65,10 +63,9 @@ void main() {
     final cold = fit(template(), data);
     expect(cold.measurementVariance, isNot(closeTo(1, 0.2)),
         reason: 'otherwise the conversion is untested');
-    final warm =
-        fit(cold.model, data, start: SearchStart.previousParameters);
-    expect(warm.logMarginalLikelihood,
-        closeTo(cold.logMarginalLikelihood, 1e-6));
+    final warm = fit(cold.model, data, start: SearchStart.previousParameters);
+    expect(
+        warm.logMarginalLikelihood, closeTo(cold.logMarginalLikelihood, 1e-6));
   });
 
   test('a parameter outside the bracket is clamped rather than refused', () {
@@ -77,16 +74,15 @@ void main() {
       const LocalLinearTrend(processVariance: 1e30),
       TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-40),
     ]);
-    final warm =
-        fit(wild, data, start: SearchStart.previousParameters);
+    final warm = fit(wild, data, start: SearchStart.previousParameters);
     expect(warm.logMarginalLikelihood.isFinite, isTrue);
   });
 
   test('a one-parameter model warm-starts too', () {
     final data = diary(300);
-    final cold = fit(StructuralModel.localLinearTrend(processVariance: 1), data);
-    final warm =
-        fit(cold.model, data, start: SearchStart.previousParameters);
+    final cold =
+        fit(StructuralModel.localLinearTrend(processVariance: 1), data);
+    final warm = fit(cold.model, data, start: SearchStart.previousParameters);
     expect(warm.varianceRatio,
         closeTo(cold.varianceRatio, 1e-6 * cold.varianceRatio));
     expect(warm.evaluations, lessThan(cold.evaluations));
