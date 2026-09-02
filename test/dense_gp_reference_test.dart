@@ -277,7 +277,7 @@ void main() {
 
       for (var i = 0; i < 2; i++) {
         for (var j = 0; j < 2; j++) {
-          expect(forward.filteredCovariance![i * 2 + j],
+          expect(forward.stateCovariance![i * 2 + j],
               closeTo(dense.spread[i][j], 1e-12),
               reason: 'P^s[0][$i][$j]');
         }

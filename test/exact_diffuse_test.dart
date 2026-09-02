@@ -93,13 +93,13 @@ void main() {
     expect(augmented.diffuseDim, 2);
     expect(anchored.diffuseDim, 0);
 
-    final sensitivity = augmented.filteredSensitivity!;
+    final sensitivity = augmented.stateSensitivity!;
     for (var t = 0; t < augmented.stepCount; t++) {
       for (var i = 0; i < 2; i++) {
-        final reconstructed = augmented.filteredMean![t * 2 + i] +
+        final reconstructed = augmented.stateMean![t * 2 + i] +
             sensitivity[(t * 2 + i) * 2] * level +
             sensitivity[(t * 2 + i) * 2 + 1] * rate;
-        expect(reconstructed, closeTo(anchored.filteredMean![t * 2 + i], 1e-10),
+        expect(reconstructed, closeTo(anchored.stateMean![t * 2 + i], 1e-10),
             reason: 'state $i at step $t');
       }
     }
@@ -114,9 +114,9 @@ void main() {
     final anchored =
         runFilter([AnchoredTrend(trend, 100, 5)], data, const ExactDiffuse());
 
-    for (var i = 0; i < augmented.filteredCovariance!.length; i++) {
-      expect(augmented.filteredCovariance![i],
-          closeTo(anchored.filteredCovariance![i], 1e-15));
+    for (var i = 0; i < augmented.stateCovariance!.length; i++) {
+      expect(augmented.stateCovariance![i],
+          closeTo(anchored.stateCovariance![i], 1e-15));
     }
   });
 
@@ -129,7 +129,7 @@ void main() {
     final data = series();
     final exact = runFilter([trend], data, const ExactDiffuse());
     final estimate = exact.diffuseMean!;
-    final sensitivity = exact.filteredSensitivity!;
+    final sensitivity = exact.stateSensitivity!;
     final last = exact.stepCount - 1;
 
     double worstErrorAt(double variance) {
@@ -137,11 +137,11 @@ void main() {
           runFilter([trend], data, ApproximateDiffuse(variance: variance));
       var worst = 0.0;
       for (var i = 0; i < 2; i++) {
-        final combined = exact.filteredMean![last * 2 + i] +
+        final combined = exact.stateMean![last * 2 + i] +
             sensitivity[(last * 2 + i) * 2] * estimate[0] +
             sensitivity[(last * 2 + i) * 2 + 1] * estimate[1];
         worst = math.max(
-            worst, (combined - approximate.filteredMean![last * 2 + i]).abs());
+            worst, (combined - approximate.stateMean![last * 2 + i]).abs());
       }
       return worst;
     }
@@ -166,10 +166,7 @@ void main() {
       RtsSmoother([trend])
         ..smoothInPlace(timeline, forward)
         ..combineDiffuse(forward);
-      return (
-        mean: forward.filteredMean!,
-        covariance: forward.filteredCovariance!
-      );
+      return (mean: forward.stateMean!, covariance: forward.stateCovariance!);
     }
 
     test('the exact posterior is the limit of a widening approximate prior',

@@ -89,14 +89,14 @@ void main() {
 
         for (var t = 0; t < timeline.length; t++) {
           for (var i = 0; i < 2; i++) {
-            expectClose(fast.filteredMean![t * 2 + i],
-                generic.filteredMean![t * 2 + i], 1e-12, 'x[$t][$i]');
+            expectClose(fast.stateMean![t * 2 + i],
+                generic.stateMean![t * 2 + i], 1e-12, 'x[$t][$i]');
             expectClose(fast.predictedMean![t * 2 + i],
                 generic.predictedMean![t * 2 + i], 1e-12, 'x-[$t][$i]');
           }
           for (var e = 0; e < 4; e++) {
-            expectClose(fast.filteredCovariance![t * 4 + e],
-                generic.filteredCovariance![t * 4 + e], 1e-12, 'P[$t][$e]');
+            expectClose(fast.stateCovariance![t * 4 + e],
+                generic.stateCovariance![t * 4 + e], 1e-12, 'P[$t][$e]');
             expectClose(fast.predictedCovariance![t * 4 + e],
                 generic.predictedCovariance![t * 4 + e], 1e-12, 'P-[$t][$e]');
           }
@@ -113,8 +113,8 @@ void main() {
           }
           for (var t = 0; t < timeline.length; t++) {
             for (var e = 0; e < 4; e++) {
-              expectClose(fast.filteredSensitivity![t * 4 + e],
-                  generic.filteredSensitivity![t * 4 + e], 1e-12, 'Xb[$t][$e]');
+              expectClose(fast.stateSensitivity![t * 4 + e],
+                  generic.stateSensitivity![t * 4 + e], 1e-12, 'Xb[$t][$e]');
             }
           }
         }
@@ -128,7 +128,7 @@ void main() {
           RtsSmoother([component])
             ..smoothInPlace(timeline, result)
             ..combineDiffuse(result);
-          return result.filteredMean!;
+          return result.stateMean!;
         }
 
         final fast = smoothedWith(FastPath2x2(component,

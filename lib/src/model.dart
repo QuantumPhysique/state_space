@@ -229,6 +229,14 @@ class StructuralModel {
   /// start before the last observation; for output *within* the data, ask
   /// [smooth] for a grid instead, which conditions on the whole series rather
   /// than only on the past.
+  ///
+  /// A horizon whose first entry *is* the last observation time reports the
+  /// filtered state there — the estimate conditioned on everything up to and
+  /// including that reading, and nothing after it. That is the quantity an
+  /// application wants when it shows a figure that must not move once shown,
+  /// and it is the only way this package offers to reach it. Nothing special
+  /// happens to produce it: the gap is zero, so the prediction is the previous
+  /// posterior.
   ForecastResult forecast(List<Observation> observations, Float64List horizon) {
     if (observations.isEmpty) {
       throw ArgumentError('nothing to forecast from: no observations');
@@ -300,8 +308,8 @@ class StructuralModel {
     final n = stateDim;
     final indices = timeline.outputIndices;
     final count = indices.length;
-    final mean = filtered.filteredMean!;
-    final covariance = filtered.filteredCovariance!;
+    final mean = filtered.stateMean!;
+    final covariance = filtered.stateCovariance!;
 
     final offsets = <int>[];
     var next = 0;
@@ -405,8 +413,8 @@ class StructuralModel {
     final n = stateDim;
     final last = timeline.length - 1;
     if (last < 0) return const [];
-    final mean = filtered.filteredMean!;
-    final covariance = filtered.filteredCovariance!;
+    final mean = filtered.stateMean!;
+    final covariance = filtered.stateCovariance!;
 
     for (var b = 0; b < components.length; b++) {
       final component = components[b];

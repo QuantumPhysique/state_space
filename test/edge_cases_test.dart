@@ -196,14 +196,15 @@ void main() {
 /// Degenerate shapes that used to reach arithmetic rather than a guard.
 void _degenerateReporting() {
   group('nothing left to estimate from', () {
-    test('a model with as many flat directions as observations profiles to '
+    test(
+        'a model with as many flat directions as observations profiles to '
         'NaN rather than to a number', () {
       // Two readings, a two-state trend: both are spent locating the state, so
       // there is no residual degree of freedom and no noise level to concentrate
       // out. This used to be 0/0 arriving as NaN by accident, and could as
       // easily have arrived as a finite number.
-      final timeline = Timeline.merge(
-          [Observation(0, 80.0), Observation(1, 80.4)], null);
+      final timeline =
+          Timeline.merge([Observation(0, 80.0), Observation(1, 80.4)], null);
       final pass = forwardPass(
         [const LocalLinearTrend(processVariance: 1e-3)],
         timeline,
@@ -226,8 +227,8 @@ void _degenerateReporting() {
 
     test('a single residual reports no spread rather than a spread of zero',
         () {
-      final diagnostics = StructuralModel.localLinearTrend(processVariance: 1e-3)
-          .diagnose([
+      final diagnostics =
+          StructuralModel.localLinearTrend(processVariance: 1e-3).diagnose([
         Observation(0, 80.0),
         Observation(1, 80.4),
         Observation(2, 80.1),
@@ -238,8 +239,8 @@ void _degenerateReporting() {
     });
 
     test('no residuals at all is a sentence and not a crash', () {
-      final diagnostics =
-          InnovationDiagnostics(times: Float64List(0), residuals: Float64List(0));
+      final diagnostics = InnovationDiagnostics(
+          times: Float64List(0), residuals: Float64List(0));
       expect(diagnostics.count, 0);
       expect(diagnostics.mean.isNaN, isTrue);
       expect(diagnostics.variance.isNaN, isTrue);
@@ -251,8 +252,8 @@ void _degenerateReporting() {
     test('a non-positive scale is refused', () {
       expect(() => ComplexityPenalty(scale: 0), throwsArgumentError);
       expect(() => ComplexityPenalty(scale: -1), throwsArgumentError);
-      expect(() => ComplexityPenalty(scale: double.infinity),
-          throwsArgumentError);
+      expect(
+          () => ComplexityPenalty(scale: double.infinity), throwsArgumentError);
     });
 
     test('a tail probability outside (0, 1) is refused', () {

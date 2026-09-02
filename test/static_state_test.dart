@@ -98,10 +98,10 @@ void main() {
       }
       var signal = 0.0, spread = 0.0;
       for (var i = 0; i < n; i++) {
-        signal += h[i] * result.filteredMean![t * n + i];
+        signal += h[i] * result.stateMean![t * n + i];
         for (var j = 0; j < n; j++) {
           spread +=
-              h[i] * result.filteredCovariance![t * n * n + i * n + j] * h[j];
+              h[i] * result.stateCovariance![t * n * n + i * n + j] * h[j];
         }
       }
       level[k] = signal;

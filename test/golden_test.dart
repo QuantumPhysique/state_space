@@ -143,13 +143,13 @@ void main() {
           for (var i = 0; i < 2; i++) {
             expectClose(forward.predictedMean![t * 2 + i],
                 fixture.predictedState[t * 2 + i], 1e-10, 'predicted[$t][$i]');
-            expectClose(forward.filteredMean![t * 2 + i],
+            expectClose(forward.stateMean![t * 2 + i],
                 fixture.filteredState[t * 2 + i], 1e-10, 'filtered[$t][$i]');
           }
           for (var e = 0; e < 4; e++) {
             expectClose(forward.predictedCovariance![t * 4 + e],
                 fixture.predictedStateCov[t * 4 + e], 1e-9, 'P-[$t][$e]');
-            expectClose(forward.filteredCovariance![t * 4 + e],
+            expectClose(forward.stateCovariance![t * 4 + e],
                 fixture.filteredStateCov[t * 4 + e], 1e-9, 'P[$t][$e]');
           }
         }
@@ -184,7 +184,7 @@ void main() {
         RtsSmoother(fixture.model.components).smoothInPlace(timeline, forward);
         for (var t = 0; t < fixture.steps; t++) {
           for (var i = 0; i < 2; i++) {
-            expectClose(forward.filteredMean![t * 2 + i],
+            expectClose(forward.stateMean![t * 2 + i],
                 fixture.smoothedState[t * 2 + i], 1e-9, 'smoothed[$t][$i]');
           }
         }
@@ -194,7 +194,7 @@ void main() {
         RtsSmoother(fixture.model.components).smoothInPlace(timeline, forward);
         for (var t = diffuseStates; t < fixture.steps; t++) {
           for (var e = 0; e < 4; e++) {
-            expectClose(forward.filteredCovariance![t * 4 + e],
+            expectClose(forward.stateCovariance![t * 4 + e],
                 fixture.smoothedStateCov[t * 4 + e], 1e-11, 'P^s[$t][$e]');
           }
         }
@@ -219,7 +219,7 @@ void main() {
         RtsSmoother(fixture.model.components).smoothInPlace(timeline, forward);
         for (var t = 0; t < diffuseStates; t++) {
           for (var e = 0; e < 4; e++) {
-            expectClose(forward.filteredCovariance![t * 4 + e],
+            expectClose(forward.stateCovariance![t * 4 + e],
                 fixture.smoothedStateCov[t * 4 + e], 1e-3, 'P^s[$t][$e]');
           }
         }
@@ -275,12 +275,12 @@ void main() {
         for (var t = 0; t < fixture.steps; t++) {
           for (var i = 0; i < 2; i++) {
             if (t == 0 && i == 1 && !trustFirstStepSlope) continue;
-            expectClose(smoothed.filteredMean![t * 2 + i],
+            expectClose(smoothed.stateMean![t * 2 + i],
                 fixture.smoothedState[t * 2 + i], 1e-10, 'smoothed[$t][$i]');
           }
           for (var e = 0; e < 4; e++) {
             if (t == 0 && e != 0 && !trustFirstStepSlope) continue;
-            expectClose(smoothed.filteredCovariance![t * 4 + e],
+            expectClose(smoothed.stateCovariance![t * 4 + e],
                 fixture.smoothedStateCov[t * 4 + e], 1e-10, 'P^s[$t][$e]');
           }
         }

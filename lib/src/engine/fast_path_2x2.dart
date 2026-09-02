@@ -125,11 +125,11 @@ class FastPath2x2 {
         keepResiduals ? ResidualPieces(timeline.observationCount, dim) : null;
     final loading = Float64List(dim);
 
-    final filteredMean = keepHistory ? Float64List(steps * 2) : null;
+    final stateMean = keepHistory ? Float64List(steps * 2) : null;
     final filteredCov = keepHistory ? Float64List(steps * 4) : null;
     final predictedMean = keepHistory ? Float64List(steps * 2) : null;
     final predictedCov = keepHistory ? Float64List(steps * 4) : null;
-    final filteredSensitivity =
+    final stateSensitivity =
         keepHistory && _exact ? Float64List(steps * 4) : null;
     final predictedSensitivity =
         keepHistory && _exact ? Float64List(steps * 4) : null;
@@ -279,17 +279,17 @@ class FastPath2x2 {
       }
 
       if (keepHistory) {
-        filteredMean![t * 2] = x0;
-        filteredMean[t * 2 + 1] = x1;
+        stateMean![t * 2] = x0;
+        stateMean[t * 2 + 1] = x1;
         filteredCov![t * 4] = p00;
         filteredCov[t * 4 + 1] = p01;
         filteredCov[t * 4 + 2] = p01;
         filteredCov[t * 4 + 3] = p11;
         if (_exact) {
-          filteredSensitivity![t * 4] = b00;
-          filteredSensitivity[t * 4 + 1] = b01;
-          filteredSensitivity[t * 4 + 2] = b10;
-          filteredSensitivity[t * 4 + 3] = b11;
+          stateSensitivity![t * 4] = b00;
+          stateSensitivity[t * 4 + 1] = b01;
+          stateSensitivity[t * 4 + 2] = b10;
+          stateSensitivity[t * 4 + 3] = b11;
         }
       }
     }
@@ -344,11 +344,11 @@ class FastPath2x2 {
       diffuseLogDeterminant: diffuseLogDeterminant,
       diffuseMean: diffuseMean,
       diffuseCovariance: diffuseCovariance,
-      filteredMean: filteredMean,
-      filteredCovariance: filteredCov,
+      stateMean: stateMean,
+      stateCovariance: filteredCov,
       predictedMean: predictedMean,
       predictedCovariance: predictedCov,
-      filteredSensitivity: filteredSensitivity,
+      stateSensitivity: stateSensitivity,
       predictedSensitivity: predictedSensitivity,
       residualTimes: residuals?.times,
       standardisedResiduals: residuals?.values,

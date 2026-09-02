@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:state_space/src/fit/fit.dart' show samplingResolution;
+
 import 'package:state_space/state_space.dart';
 import 'package:test/test.dart';
 

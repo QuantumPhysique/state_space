@@ -23,8 +23,10 @@ import 'timeline.dart';
 /// forming the inverse: same cost, better conditioning, and it fails loudly
 /// instead of quietly when the predicted covariance is singular.
 ///
-/// The results overwrite [FilterResult.filteredMean] and
-/// [FilterResult.filteredCovariance] in place. Each smoothed step is read
+/// The results overwrite [FilterResult.stateMean] and
+/// [FilterResult.stateCovariance] in place — which is why those are not called
+/// `filtered`: the same arrays hold the filtered moments before this runs and
+/// the smoothed ones after. Each smoothed step is read
 /// exactly once, by the step before it, so nothing is lost — and a decade of
 /// daily data at sixteen states is a few megabytes, which is worth not
 /// doubling.
@@ -153,8 +155,8 @@ class RtsSmoother {
   /// Smooths [filtered] in place. The filter must have been run with
   /// `keepHistory: true` over the same [timeline].
   void smoothInPlace(Timeline timeline, FilterResult filtered) {
-    final mean = filtered.filteredMean;
-    final cov = filtered.filteredCovariance;
+    final mean = filtered.stateMean;
+    final cov = filtered.stateCovariance;
     final predMean = filtered.predictedMean;
     final predCov = filtered.predictedCovariance;
     if (mean == null || cov == null || predMean == null || predCov == null) {
@@ -170,7 +172,7 @@ class RtsSmoother {
     final active = _active;
     final m = active.length;
     final diffuseDim = filtered.diffuseDim;
-    final sensitivity = filtered.filteredSensitivity;
+    final sensitivity = filtered.stateSensitivity;
     final predictedSensitivity = filtered.predictedSensitivity;
     if (diffuseDim > 0 &&
         (sensitivity == null || predictedSensitivity == null)) {
@@ -310,9 +312,9 @@ class RtsSmoother {
     if (d == 0 || estimate == null || spread == null) return;
 
     final n = stateDim;
-    final mean = filtered.filteredMean!;
-    final cov = filtered.filteredCovariance!;
-    final sensitivity = filtered.filteredSensitivity!;
+    final mean = filtered.stateMean!;
+    final cov = filtered.stateCovariance!;
+    final sensitivity = filtered.stateSensitivity!;
     final scaled = Float64List(n * d);
 
     final count = steps?.length ?? filtered.stepCount;

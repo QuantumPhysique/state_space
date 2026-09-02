@@ -30,11 +30,11 @@ class FilterResult {
     this.diffuseLogDeterminant = 0,
     this.diffuseMean,
     this.diffuseCovariance,
-    this.filteredMean,
-    this.filteredCovariance,
+    this.stateMean,
+    this.stateCovariance,
     this.predictedMean,
     this.predictedCovariance,
-    this.filteredSensitivity,
+    this.stateSensitivity,
     this.predictedSensitivity,
     this.residualTimes,
     this.standardisedResiduals,
@@ -88,23 +88,39 @@ class FilterResult {
   /// Its covariance, `M^-1`, laid out row-major.
   final Float64List? diffuseCovariance;
 
-  final Float64List? filteredMean;
-  final Float64List? filteredCovariance;
+  /// The state moments, step-major, populated only when the pass was asked to
+  /// keep a history.
+  ///
+  /// Filtered when the forward pass returns them: `E[x_t | y_1..t]`. The
+  /// backward pass overwrites them in place with the smoothed moments, and
+  /// `RtsSmoother.combineDiffuse` then folds the flat directions in — so what
+  /// these hold depends on how far along the pipeline the caller is, which is
+  /// why they are not named for any one stage. The memory argument for
+  /// overwriting is in `RtsSmoother`.
+  final Float64List? stateMean;
+
+  /// Its covariance, `stateDim x stateDim` per step, row-major.
+  final Float64List? stateCovariance;
+
+  /// The one-step-ahead moments, which stay predicted throughout.
   final Float64List? predictedMean;
   final Float64List? predictedCovariance;
 
-  /// Sensitivity of the filtered state to the flat directions, step-major and
+  /// Sensitivity of the state to the flat directions, step-major and
   /// `stateDim x diffuseDim` per step. Null under an approximate prior.
+  ///
+  /// Smoothed alongside [stateMean], and consumed by
+  /// `RtsSmoother.combineDiffuse`.
   ///
   /// Note what combining this with [diffuseMean] does and does not give. The
   /// estimate of the flat directions uses every observation, so
-  /// `filteredMean + filteredSensitivity * diffuseMean` is conditioned on all
+  /// `stateMean + stateSensitivity * diffuseMean` is conditioned on all
   /// the data in those directions and on the data so far in the others. That
   /// is the right combination after the backward pass, and at the last step,
   /// and a mixture of two conditionings anywhere else. A genuine filtered
   /// state under a flat prior needs the estimate rebuilt from the data up to
   /// that step, which nothing in this package currently asks for.
-  final Float64List? filteredSensitivity;
+  final Float64List? stateSensitivity;
 
   /// The same, before each step's update.
   final Float64List? predictedSensitivity;
@@ -311,11 +327,11 @@ class KalmanFilter {
     final pieces =
         keepResiduals ? ResidualPieces(timeline.observationCount, d) : null;
 
-    final filteredMean = keepHistory ? Float64List(steps * n) : null;
+    final stateMean = keepHistory ? Float64List(steps * n) : null;
     final filteredCov = keepHistory ? Float64List(steps * n * n) : null;
     final predictedMean = keepHistory ? Float64List(steps * n) : null;
     final predictedCov = keepHistory ? Float64List(steps * n * n) : null;
-    final filteredSensitivity =
+    final stateSensitivity =
         keepHistory && d > 0 ? Float64List(steps * n * d) : null;
     final predictedSensitivity =
         keepHistory && d > 0 ? Float64List(steps * n * d) : null;
@@ -361,9 +377,9 @@ class KalmanFilter {
       }
 
       if (keepHistory) {
-        filteredMean!.setRange(t * n, (t + 1) * n, _x);
+        stateMean!.setRange(t * n, (t + 1) * n, _x);
         filteredCov!.setRange(t * n * n, (t + 1) * n * n, _p);
-        filteredSensitivity?.setRange(t * n * d, (t + 1) * n * d, _xb);
+        stateSensitivity?.setRange(t * n * d, (t + 1) * n * d, _xb);
       }
     }
 
@@ -405,11 +421,11 @@ class KalmanFilter {
       diffuseLogDeterminant: diffuseLogDeterminant,
       diffuseMean: diffuseMean,
       diffuseCovariance: diffuseCovariance,
-      filteredMean: filteredMean,
-      filteredCovariance: filteredCov,
+      stateMean: stateMean,
+      stateCovariance: filteredCov,
       predictedMean: predictedMean,
       predictedCovariance: predictedCov,
-      filteredSensitivity: filteredSensitivity,
+      stateSensitivity: stateSensitivity,
       predictedSensitivity: predictedSensitivity,
       residualTimes: residuals?.times,
       standardisedResiduals: residuals?.values,
@@ -710,6 +726,10 @@ class KalmanFilter {
     }
     final v = value - predicted;
 
+    // Dense over both indices, unlike the reporting code, which skips zero
+    // entries of H. This runs once per observation and is `O(n^2)` either way;
+    // a branch inside it would cost more on the models where H is dense than
+    // it saves on the ones where it is not.
     for (var i = 0; i < n; i++) {
       var sum = 0.0;
       for (var j = 0; j < n; j++) {
