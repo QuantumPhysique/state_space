@@ -125,7 +125,14 @@ abstract class Component {
   ///
   /// The diffuse starting point is excluded. Where the component began is for
   /// the data to say; the penalty is about how much it moves afterwards.
-  double wanderOver(double span);
+  ///
+  /// It defaults to zero, which is what a component that does not move should
+  /// return and is also the right answer for one that has not worked out its
+  /// own path spread: no penalty will then shrink it. Deriving that integral
+  /// is comfortably the hardest thing in this interface, and requiring it of
+  /// somebody who only wants to add a kernel — and who may never use a
+  /// penalty, since none is on by default — was the wrong trade.
+  double wanderOver(double span) => 0;
 
   /// Why this component's flat directions might not be identifiable on a
   /// series running from [from] to [to], or null if nothing about it is

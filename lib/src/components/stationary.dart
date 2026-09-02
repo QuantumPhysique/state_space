@@ -14,9 +14,17 @@ import 'dart:math' as math;
 /// cosine of a cycle the remaining integral has a closed form, but three
 /// different closed forms, each with a removable singularity where the damping
 /// or the frequency goes to zero. Simpson's rule on a smooth integrand over a
-/// finite interval avoids all of that and is accurate to about `(T/n)^4`,
-/// which at [_intervals] intervals is far below anything the penalty this
-/// feeds could notice.
+/// finite interval avoids all of that.
+///
+/// Its error is `O(h^4 k'''')` with `h = T / n`, so what has to be small is
+/// `h` against the *kernel's* own scale and not against `T` — a point the
+/// comment here previously got wrong. A length scale of 0.1 integrated over a
+/// window of 365 puts fourteen grid points inside the whole decay and the
+/// error reaches 1e-3; at a length scale of 1 over the same window it is
+/// 5e-5, and everywhere the kernel is resolved it is at the last bit. The
+/// penalty this feeds compares components against the observed spread of the
+/// data, so a part in a thousand on a component that has already forgotten
+/// itself many times over within the window is not something it could act on.
 double stationaryWander(double Function(double lag) covariance, double span) {
   if (!(span > 0)) return 0;
   final h = span / _intervals;

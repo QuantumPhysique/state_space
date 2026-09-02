@@ -103,10 +103,18 @@ final class NoPenalty extends Penalty {
 /// estimate, and it can shrink a component all the way out of the model,
 /// which is what shrinkage towards a simpler model has to mean.
 final class ComplexityPenalty extends Penalty {
-  const ComplexityPenalty({this.scale = 1, this.tailProbability = 0.01})
-      : assert(scale > 0, 'scale must be positive'),
-        assert(tailProbability > 0 && tailProbability < 1,
-            'tailProbability must lie strictly between 0 and 1');
+  /// Validates rather than asserts, for the reason the components give: a rate
+  /// built from a bad scale produces a plausible-looking fit rather than an
+  /// obvious failure, and that is not a thing to ship to release builds.
+  ComplexityPenalty({this.scale = 1, this.tailProbability = 0.01}) {
+    if (!(scale > 0) || !scale.isFinite) {
+      throw ArgumentError.value(scale, 'scale', 'must be finite and positive');
+    }
+    if (!(tailProbability > 0) || !(tailProbability < 1)) {
+      throw ArgumentError.value(tailProbability, 'tailProbability',
+          'must lie strictly between 0 and 1');
+    }
+  }
 
   /// How much of the series' own standard deviation a single component may
   /// account for before it is considered surprising. One means all of it.

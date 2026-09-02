@@ -118,23 +118,41 @@ class FilterResult {
   /// quite the obvious thing.
   final Float64List? standardisedResiduals;
 
-  /// Maximum-likelihood measurement variance given the *ratios* of all the
-  /// other variances to it.
+  /// Whether anything is left to estimate a noise level from.
+  ///
+  /// False when every observation went on locating the flat directions —
+  /// exactly `d` readings under a flat prior, or none at all — in which case
+  /// both quantities below are undefined rather than merely imprecise.
+  bool get hasResidualDegreesOfFreedom => usedObservations > 0;
+
+  /// Restricted maximum-likelihood measurement variance given the *ratios* of
+  /// all the other variances to it, or [double.nan] when
+  /// [hasResidualDegreesOfFreedom] is false.
   ///
   /// Scaling every covariance in the model by a constant leaves the Kalman
   /// gains and every innovation `v_t` untouched and scales every `S_t` by that
   /// constant. So the measurement variance can be concentrated out of the
   /// likelihood analytically instead of being searched over — one dimension
   /// less for every fit, no matter how many components there are.
-  double get profileMeasurementVariance =>
-      measurementVariance * sumWeightedSquares / usedObservations;
+  ///
+  /// Restricted rather than plain maximum likelihood: the divisor is
+  /// [usedObservations], which under a flat prior is `N - d` rather than `N`.
+  /// That is the right partner for a likelihood that has integrated `d`
+  /// directions away, and it is a factor of `N / (N - d)` away from the plain
+  /// estimate — twenty-five per cent on thirty readings with six flat
+  /// directions.
+  double get profileMeasurementVariance => hasResidualDegreesOfFreedom
+      ? measurementVariance * sumWeightedSquares / usedObservations
+      : double.nan;
 
   /// The likelihood at [profileMeasurementVariance], as a function of the
-  /// variance ratios alone.
+  /// variance ratios alone, or [double.nan] when there is nothing left to
+  /// profile over.
   ///
   /// Independent of the [measurementVariance] the pass happened to use: the
   /// scale cancels between `sum log S_t` and the fitted variance.
   double get profileLogLikelihood {
+    if (!hasResidualDegreesOfFreedom) return double.nan;
     final n = usedObservations;
     return -0.5 *
         (n * (_log2pi + 1) +

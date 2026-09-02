@@ -231,7 +231,7 @@ void main() {
         seed: 1,
       );
       final penalised =
-          fit(_start(), simulation.data, penalty: const ComplexityPenalty());
+          fit(_start(), simulation.data, penalty: ComplexityPenalty());
       final plain = fit(_start(), simulation.data);
 
       expect(penalised.varianceRatios[1], lessThan(1e-7));
@@ -254,9 +254,9 @@ void main() {
         seed: 5,
       );
       final tight = fit(_start(), simulation.data,
-          penalty: const ComplexityPenalty(scale: 0.25));
-      final loose = fit(_start(), simulation.data,
-          penalty: const ComplexityPenalty(scale: 4));
+          penalty: ComplexityPenalty(scale: 0.25));
+      final loose =
+          fit(_start(), simulation.data, penalty: ComplexityPenalty(scale: 4));
 
       expect(tight.logPenalty, lessThan(loose.logPenalty));
       for (var i = 0; i < 2; i++) {

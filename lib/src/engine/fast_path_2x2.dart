@@ -97,6 +97,13 @@ class FastPath2x2 {
 
   void _buildStep(double dt) {
     if (dt == _cachedGap) return;
+    // Zeroed first, as the generic engine zeroes its buffers. `Component` says
+    // the block "may contain stale values", so a component that leaves an
+    // entry unwritten is within its rights; without this it would work on the
+    // generic path and be silently wrong here, which is the one way this
+    // specialisation could become load-bearing.
+    _transition.fill(0);
+    _noise.fill(0);
     component.transition(dt, _transition);
     component.processNoise(dt, _noise);
     _a00 = _transition.at(0, 0);

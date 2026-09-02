@@ -158,10 +158,14 @@ class TrigonometricSeasonal extends Component {
   ///
   /// The exact figure subtracts a further
   /// `2 sigma^2 sum_j (T - sin(lambda_j T) / lambda_j) / (lambda_j^2 T^2)`,
-  /// which the oscillation drives down like `1 / (lambda_j^2 T)`. Over a
-  /// window of a single period that term is about three per cent of the
-  /// total, and it falls away from there; a component observed over less than
-  /// one period is refused anyway by the time anything reads this.
+  /// which the oscillation drives down like `1 / (lambda_j^2 T)`. Measured
+  /// against a dense double integral, that term is 5.5 per cent of the total
+  /// over exactly one period at one harmonic, 2.4 per cent at three, and 3.3
+  /// per cent for an annual pattern at two; by two periods it is under 1.3 per
+  /// cent and by five under 0.2. It is dropped because the penalty this feeds
+  /// compares components against each other on a scale the modeller sets by
+  /// eye, and because a component observed over less than one period is
+  /// refused anyway by the time anything reads this.
   @override
   double wanderOver(double span) =>
       math.sqrt(processVariance * span * harmonics / 2);

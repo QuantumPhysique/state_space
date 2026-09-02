@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:state_space/src/engine/fast_path_2x2.dart';
+import 'package:state_space/src/engine/timeline.dart';
 import 'package:state_space/state_space.dart';
 import 'package:test/test.dart';
 
@@ -19,6 +21,8 @@ StructuralModel _wideTrend() => StructuralModel.localLinearTrend(
     );
 
 void main() {
+  _degenerateReporting();
+
   group('degenerate inputs', () {
     test('no observations gives an empty result rather than an error', () {
       final result = _trend().smooth(const []);
@@ -186,5 +190,74 @@ void main() {
       expect(result.level[i].isFinite, isTrue);
       expect(result.levelVariance[i], greaterThan(0));
     }
+  });
+}
+
+/// Degenerate shapes that used to reach arithmetic rather than a guard.
+void _degenerateReporting() {
+  group('nothing left to estimate from', () {
+    test('a model with as many flat directions as observations profiles to '
+        'NaN rather than to a number', () {
+      // Two readings, a two-state trend: both are spent locating the state, so
+      // there is no residual degree of freedom and no noise level to concentrate
+      // out. This used to be 0/0 arriving as NaN by accident, and could as
+      // easily have arrived as a finite number.
+      final timeline = Timeline.merge(
+          [Observation(0, 80.0), Observation(1, 80.4)], null);
+      final pass = forwardPass(
+        [const LocalLinearTrend(processVariance: 1e-3)],
+        timeline,
+        measurementVariance: 1,
+        initialization: const ExactDiffuse(),
+      );
+      expect(pass.usedObservations, 0);
+      expect(pass.hasResidualDegreesOfFreedom, isFalse);
+      expect(pass.profileMeasurementVariance.isNaN, isTrue);
+      expect(pass.profileLogLikelihood.isNaN, isTrue);
+    });
+
+    test('and fit refuses it with an explanation', () {
+      expect(
+          () => fit(StructuralModel.localLinearTrend(processVariance: 1),
+              [Observation(0, 80.0), Observation(1, 80.4)]),
+          throwsA(isA<ArgumentError>().having((e) => e.toString(), 'message',
+              contains('too few observations'))));
+    });
+
+    test('a single residual reports no spread rather than a spread of zero',
+        () {
+      final diagnostics = StructuralModel.localLinearTrend(processVariance: 1e-3)
+          .diagnose([
+        Observation(0, 80.0),
+        Observation(1, 80.4),
+        Observation(2, 80.1),
+      ]);
+      expect(diagnostics.count, 1);
+      expect(diagnostics.variance.isNaN, isTrue);
+      expect(diagnostics.toString(), contains('n/a'));
+    });
+
+    test('no residuals at all is a sentence and not a crash', () {
+      final diagnostics =
+          InnovationDiagnostics(times: Float64List(0), residuals: Float64List(0));
+      expect(diagnostics.count, 0);
+      expect(diagnostics.mean.isNaN, isTrue);
+      expect(diagnostics.variance.isNaN, isTrue);
+      expect(diagnostics.toString(), 'InnovationDiagnostics(no residuals)');
+    });
+  });
+
+  group('ComplexityPenalty validates in release builds too', () {
+    test('a non-positive scale is refused', () {
+      expect(() => ComplexityPenalty(scale: 0), throwsArgumentError);
+      expect(() => ComplexityPenalty(scale: -1), throwsArgumentError);
+      expect(() => ComplexityPenalty(scale: double.infinity),
+          throwsArgumentError);
+    });
+
+    test('a tail probability outside (0, 1) is refused', () {
+      expect(() => ComplexityPenalty(tailProbability: 0), throwsArgumentError);
+      expect(() => ComplexityPenalty(tailProbability: 1), throwsArgumentError);
+    });
   });
 }
