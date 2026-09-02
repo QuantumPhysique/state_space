@@ -109,6 +109,13 @@ class StructuralModel {
   List<ParameterSpec> get parameterSpecs =>
       [for (final component in components) ...component.parameterSpecs];
 
+  /// The same, narrowed by what a series sampled every [resolution] time units
+  /// can resolve. See [Component.parameterSpecsAt].
+  List<ParameterSpec> parameterSpecsAt({required double resolution}) => [
+        for (final component in components)
+          ...component.parameterSpecsAt(resolution: resolution)
+      ];
+
   /// The concatenated unconstrained parameter vectors of every component.
   Float64List get parameters {
     final theta = Float64List(parameterCount);

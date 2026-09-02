@@ -159,6 +159,11 @@ class Matern extends Component {
   /// The default spans six decades, which for daily data is a quarter of an
   /// hour to twenty-seven years. Time measured in seconds needs a different
   /// one, exactly as the variance bracket does.
+  ///
+  /// The bottom of it is only a request. [fit] raises it to the median gap
+  /// between readings, because below that a Matérn is measurement noise under
+  /// another name and the likelihood will take it — see [parameterSpecsAt].
+  /// The top is honoured as given.
   final ({double lower, double upper}) lengthScaleBounds;
 
   /// The inverse length scale `sqrt(2 nu) / lengthScale`, which is where every
@@ -202,6 +207,36 @@ class Matern extends Component {
           upper: math.log(lengthScaleBounds.upper),
         ),
       ];
+
+  /// Raises the length-scale bracket to the sampling interval.
+  ///
+  /// Below one gap between readings a Matérn is indistinguishable from white
+  /// noise, and — this is the part worth stating — the likelihood *prefers*
+  /// that corner, because taking the measurement error for itself explains the
+  /// data slightly better than leaving it alone. See
+  /// [Component.parameterSpecsAt] for the measurement.
+  ///
+  /// One gap rather than two: a Matérn of length scale equal to the sampling
+  /// interval still has a correlation of `exp(-sqrt(2 nu))` between
+  /// neighbouring readings, which is a real thing the data can see, unlike a
+  /// cycle at the Nyquist period.
+  @override
+  List<ParameterSpec> parameterSpecsAt({required double resolution}) {
+    if (!(resolution > 0)) return parameterSpecs;
+    final floor = math.max(lengthScaleBounds.lower, resolution);
+    final upper = lengthScaleBounds.upper;
+    if (!(floor < upper)) {
+      throw ArgumentError('a Matern length scale is bracketed at '
+          '[${lengthScaleBounds.lower}, $upper], but the readings are '
+          '$resolution apart, and a length scale below one sampling interval '
+          'is measurement noise rather than a separate component. Widen '
+          'lengthScaleBounds or drop the component.');
+    }
+    return [
+      const VarianceParameter(),
+      ShapeParameter(lower: math.log(floor), upper: math.log(upper)),
+    ];
+  }
 
   // The state is (f, f', f'') truncated to the order's dimension, and the
   // transition is the matrix exponential of the companion form of

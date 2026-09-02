@@ -90,10 +90,11 @@ class StochasticCycle extends Component {
 
   /// Length of one turn of the cycle, in the caller's time unit.
   ///
-  /// Nothing here knows the sampling interval, so nothing here can refuse a
-  /// period below the Nyquist limit. A period shorter than twice the typical
-  /// gap between readings is not a cycle the data can see, whatever the fit
-  /// reports.
+  /// A period shorter than twice the typical gap between readings is not a
+  /// cycle the data can see, whatever the likelihood reports. The component
+  /// alone cannot refuse one, because it does not know the sampling interval;
+  /// [fit] does, and raises the bottom of [periodBounds] to it through
+  /// [parameterSpecsAt].
   final double period;
 
   /// How much of the oscillation survives one time unit, in `(0, 1)`.
@@ -153,6 +154,36 @@ class StochasticCycle extends Component {
           scanPoints: periodScanPoints,
         ),
       ];
+
+  /// Raises the period bracket to the Nyquist limit of the actual sampling.
+  ///
+  /// The class documentation notes that nothing here knows the sampling
+  /// interval, so nothing here can refuse a period below Nyquist. [fit] does
+  /// know, and passes it in: a cycle of period shorter than twice the gap
+  /// between readings is aliased onto a longer one and is not a rhythm the
+  /// data can see, whatever the likelihood reports.
+  @override
+  List<ParameterSpec> parameterSpecsAt({required double resolution}) {
+    if (!(resolution > 0)) return parameterSpecs;
+    final floor = math.max(periodBounds.lower, 2 * resolution);
+    final upper = periodBounds.upper;
+    if (!(floor < upper)) {
+      throw ArgumentError('a StochasticCycle period is bracketed at '
+          '[${periodBounds.lower}, $upper], but the readings are $resolution '
+          'apart, so nothing shorter than ${2 * resolution} is above the '
+          'Nyquist limit. Widen periodBounds or drop the component.');
+    }
+    final specs = parameterSpecs;
+    return [
+      specs[0],
+      specs[1],
+      ShapeParameter(
+        lower: math.log(floor),
+        upper: math.log(upper),
+        scanPoints: periodScanPoints,
+      ),
+    ];
+  }
 
   @override
   void transition(double dt, MatrixBlock out) {

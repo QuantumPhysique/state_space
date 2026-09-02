@@ -134,13 +134,34 @@ The order also decides how rough the curve may be, which is the modelling
 choice worth making deliberately: the cubic spline assumes a trend with a
 continuous derivative, and `ν = 1/2` assumes nothing of the sort.
 
+Both of these are *deviations* rather than levels, and both have a shape
+parameter measured in time. That parameter has a floor, and `fit` supplies it
+from the data rather than from the component: a Matérn whose length scale is
+shorter than the gap between readings is measurement noise spelled differently,
+and the likelihood mildly prefers it that way. Left free, a `ν = 1/2` Matérn on
+daily readings with a true noise level of 0.3 will report the noise as 0.002,
+draw a band that covers every point, and hand back a trend that is interpolating
+the noise. The bottom of `lengthScaleBounds` is therefore raised to the median
+sampling interval, and a cycle's `periodBounds` to twice it, which is the same
+refusal `TrigonometricSeasonal` already makes about harmonics past Nyquist —
+moved to where the limit depends on the data. The top of either bracket is
+honoured as given.
+
 `StochasticCycle` is the *approximate* rhythm — a cosine that fades and finds
 its way back, rather than a pattern that repeats forever. Its period is
 estimated rather than given, which makes it the one component here whose
 likelihood is multimodal: a cycle at half the period explains every second peak
 and sits on its own maximum. `fit` scans that axis far more finely than the
-others before anything local runs, and `plateauDecadesByParameter` on the
-period is the number that says whether to believe the answer.
+others before anything local runs.
+
+The number to check first is `atBracketEdge`, and specifically the damping. A
+cycle fitted to a series with no cycle in it pushes the damping to the top of
+its bracket, where the component is a rigid sinusoid and can chase noise. Then
+— and this is the trap — the width reported for the *period* becomes tiny,
+because a rigid sinusoid's likelihood in frequency is as sharp as a periodogram
+spike. On white noise the period width comes back at a thousandth of a decade
+while the answer is meaningless. The width is conditional on the damping, so it
+is worth reading only once the damping is interior.
 
 ## One object, three descriptions
 

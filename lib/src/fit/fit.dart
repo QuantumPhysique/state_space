@@ -42,6 +42,13 @@ const double _halfNat = 0.5;
 /// component that owns them instead, because a range that suits a variance
 /// ratio suits nothing else; see [ParameterSpec].
 ///
+/// A shape parameter measured in time units also gets a floor from the data:
+/// the bottom of its bracket is raised to what the sampling can resolve, since
+/// a Matérn shorter than the gap between readings and a cycle faster than
+/// Nyquist are both just another way of writing measurement noise — and the
+/// likelihood prefers them to the truth. See [Component.parameterSpecsAt] and
+/// [samplingResolution].
+///
 /// [penalty] defaults to none, including for several components. That was not
 /// the plan — the expectation was that a penalty would be needed to stabilise
 /// the trend/seasonal split on short histories — but the measurement says
@@ -136,8 +143,10 @@ FitResult _search(
 
   // Each parameter gets its own bracket and its own scan resolution: the
   // caller's bracket for a variance ratio, and the owning component's for
-  // anything else.
-  final specs = initial.parameterSpecs;
+  // anything else — narrowed, for a shape parameter measured in time units, by
+  // what the sampling can actually resolve. See [Component.parameterSpecsAt].
+  final specs =
+      initial.parameterSpecsAt(resolution: samplingResolution(observations));
   final lower = Float64List(k);
   final upper = Float64List(k);
   final points = List<int>.filled(k, scanPoints);
@@ -308,6 +317,29 @@ FitResult _search(
     diffuseDimension: initial.diffuseDimension,
     measurementVariancePinned: fixedMeasurementVariance != null,
   );
+}
+
+/// The median gap between consecutive distinct observation times, or zero when
+/// there are not enough of them for that to mean anything.
+///
+/// This is what a shape parameter measured in time units has to clear to be a
+/// different model rather than a second spelling of measurement noise; see
+/// [Component.parameterSpecsAt]. The median rather than the mean, because a
+/// diary with a fortnight's holiday in it should still count as daily.
+double samplingResolution(List<Observation> observations) {
+  if (observations.length < 2) return 0;
+  final gaps = <double>[];
+  for (var i = 1; i < observations.length; i++) {
+    final gap = observations[i].time - observations[i - 1].time;
+    // Two readings at one instant say nothing about the sampling rate.
+    if (gap > 0) gaps.add(gap);
+  }
+  if (gaps.isEmpty) return 0;
+  gaps.sort();
+  final middle = gaps.length ~/ 2;
+  return gaps.length.isOdd
+      ? gaps[middle]
+      : (gaps[middle - 1] + gaps[middle]) / 2;
 }
 
 /// How far parameter [axis] can move on its own before the objective falls
