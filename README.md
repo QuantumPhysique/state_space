@@ -163,6 +163,134 @@ spike. On white noise the period width comes back at a thousandth of a decade
 while the answer is meaningless. The width is conditional on the damping, so it
 is worth reading only once the damping is interior.
 
+## Choosing a model
+
+Six components is enough to have to think. The short answer is: start with the
+smallest model that could be true, add one component at a time, and let the
+residuals rather than the likelihood tell you whether it earned its place.
+
+### Start here
+
+| what you have | what to use |
+|---|---|
+| noisy readings of something that drifts | `LocalLinearTrend` — the default, and a smoothing spline |
+| a level with no persistent direction | `LocalLevel` |
+| a pattern on a calendar you know: a week, a year | `TrigonometricSeasonal(period: 7 or 365.25, harmonics: 2)` |
+| named, dated events: a holiday, a course of medication | `RegressionComponent` with `IndicatorRegressor`s |
+| a covariate that changes at known instants | `RegressionComponent` with a `StepRegressor` |
+| correlated wobble the trend should not be chasing | `Matern.oneHalf(...)` alongside the trend |
+| a rhythm that is approximate, or whose period you do not know | `StochasticCycle` |
+
+`LocalLinearTrend` against `LocalLevel` is a claim about whether the thing has a
+direction that persists. A trend carries a slope and will extrapolate it; a level
+will not. For body weight, a diary, a temperature series — anything where "still
+going down" is a meaningful sentence — the trend is the one.
+
+Two or three harmonics resolve a weekly shape. The fourth is resolving detail
+finer than seven daily readings support, and `harmonics` must in any case stay
+under half the period, which the constructor enforces.
+
+### Add one component at a time, and let the residuals ask
+
+```dart
+model.diagnose(data).ljungBox(lags: 14, fittedParameters: model.parameterCount);
+```
+
+A pattern the model has not accounted for shows up as autocorrelation long
+before it shows up as a visibly bad fit. Look at `autocorrelation(k)` around a
+period's worth of *readings* — the lag counts observations, not days — and add
+the component that explains the spike rather than the one you had in mind.
+
+### How to tell whether it earned its place — and how not to
+
+**Do not compare `logMarginalLikelihood` across models with different diffuse
+structure.** Under exact diffuse initialisation it is a restricted likelihood,
+so it carries the units of the flat directions: writing a regression column in
+grams rather than kilograms shifts it by `log 1000`, and measuring time in
+half-days rather than days shifts it by `log 2` — the fit, the posterior and the
+coefficient all unchanged. Either is enough to reverse a verdict.
+`FitResult.isComparableWith` is the check, and `diffuseDimension` is what has to
+match:
+
+| component | flat directions |
+|---|---|
+| `LocalLevel` | 1 |
+| `LocalLinearTrend` | 2 |
+| `TrigonometricSeasonal` | 2 per harmonic |
+| `RegressionComponent` | 1 per column |
+| `Matern`, `StochasticCycle` | 0 |
+
+So a trend can be compared with a trend plus a Matérn, and cannot be compared
+with a trend plus a weekly seasonal. Three things can:
+
+1. **The fitted noise level.** A model missing a real component has to explain
+   that component as noise, and reports a scale far noisier than it is. This is
+   the most useful single number, and it is comparable across everything.
+2. **The Ljung–Box p-value**, which asks the question directly.
+3. **Out-of-sample error.** Fit on a prefix, `forecast` the rest, score it.
+   Slower, and the only one that is not a within-sample argument.
+
+Both of the first two answer cleanly on two years of daily readings built from a
+trend, a weekly sinusoid and noise of standard deviation 0.3:
+
+| model | fitted noise sd | Ljung–Box p (14 lags) |
+|---|---|---|
+| trend only | 0.472 | 3e-49 |
+| trend + weekly | **0.302** | **0.31** |
+
+The likelihoods of those two models differ by six flat directions against two
+and cannot be subtracted. The noise level recovers the truth to three decimal
+places, and the portmanteau test goes from certain rejection to unremarkable.
+
+### Read the warnings
+
+```dart
+for (final warning in fitted.warnings) print(warning);
+```
+
+Empty when there is nothing to say. It reports a parameter that finished on a
+bound, a parameter the data barely constrains, and — the one that is easy to
+miss — a width that was measured while another parameter of the same component
+sat on a bound, which can make a number look sharp for a reason that has nothing
+to do with the data.
+
+### What competes with what
+
+Components that can draw the same shape will trade off against each other, and
+the fit will not always tell you which it chose.
+
+* **A trend and a seasonal, over less than one period.** A rigid sinusoid over
+  half a cycle is very nearly a constant plus a slope, so an annual component on
+  180 days will draw a swing out of a series that has none. It does say so, in
+  the place worth looking: that component's own posterior standard deviation
+  comes back *larger than the amplitude it drew*. Check `componentVariance`
+  alongside `componentMean` — the numerical note further down carries the
+  figures. Shrinking the variance to zero does not remove the component, it only
+  stops the pattern evolving.
+* **A trend and a Matérn.** Both are slow. Leaving both free is measurably worse
+  than adding neither: the trend's variance ends up undetermined over five
+  decades. If you add a Matérn deviation, consider fixing the trend's smoothing
+  rather than fitting it.
+* **A Matérn and the measurement noise.** A length scale below the sampling
+  interval *is* white noise. `fit` floors it at the median gap between readings
+  for that reason; without the floor the likelihood prefers the corner where the
+  Matérn takes the noise and the reported precision becomes fiction.
+* **A cycle and a free level.** A random walk whose variance is free can draw
+  any wiggle, so a `StochasticCycle` next to an unconstrained `LocalLevel` often
+  loses, and the period it returns is then a number rather than a finding. It
+  fails in two directions and `warnings` names both: on a series with a real
+  cycle the level's variance runs to the top of its bracket and interpolates the
+  data, while on a series with none the level shrinks away and the cycle's own
+  variance and period come back flat over eight and two decades respectively.
+  Either way the reading is the same — nothing here is determined.
+
+### When to stop
+
+When adding a component does not reduce the fitted noise level, when the
+Ljung–Box p-value is unremarkable, and when `warnings` is empty. A model whose
+components each have something to do is worth more than one that fits slightly
+better and cannot say which part did the work.
+
 ## One object, three descriptions
 
 The whole value of the package is that these are the same thing, and it
