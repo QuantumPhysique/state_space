@@ -54,6 +54,8 @@ import '../engine/matrix_block.dart';
 /// with a trend for it. The two are still confounded over a stretch of data
 /// shorter than a period, which is a statement about the data rather than
 /// about the model.
+///
+/// {@category Components}
 class TrigonometricSeasonal extends Component {
   /// A pattern repeating every [period] time units, resolved by [harmonics]
   /// sinusoids.

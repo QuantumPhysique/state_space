@@ -209,6 +209,8 @@ final class StepRegressor extends Regressor {
 ///
 /// The coefficients do not wander, so [wanderOver] is zero and no penalty on
 /// the variances ever touches them.
+///
+/// {@category Components}
 class RegressionComponent extends Component {
   RegressionComponent(List<Regressor> regressors)
       : regressors = List.unmodifiable(regressors) {

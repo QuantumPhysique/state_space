@@ -3,6 +3,8 @@
 /// [time] is a plain double in whatever unit the caller finds natural — days
 /// since an epoch, seconds, fractional years. The package never converts it,
 /// and the process variances of the components are expressed per that unit.
+///
+/// {@category Getting started}
 class Observation implements Comparable<Observation> {
   /// A reading of [value] taken at [time].
   const Observation(this.time, this.value, {this.relativeVariance = 1.0});

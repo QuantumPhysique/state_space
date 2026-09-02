@@ -18,6 +18,9 @@ import 'parameter_spec.dart';
 /// Implementations are immutable. [withParameters] returns a new instance,
 /// which is what lets the fitting code evaluate a likelihood surface without
 /// mutating the caller's model.
+///
+/// {@category Components}
+/// {@category How it works}
 abstract class Component {
   const Component();
 

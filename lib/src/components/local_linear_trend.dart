@@ -31,6 +31,8 @@ import '../engine/matrix_block.dart';
 /// `k(t, t') = sigma^2 (m^3/3 + m^2 |t - t'| / 2)` with `m = min(t, t')`, so
 /// the posterior mean is a natural cubic smoothing spline with smoothing
 /// parameter `lambda = measurementVariance / processVariance` (Wahba 1978).
+///
+/// {@category Components}
 class LocalLinearTrend extends Component {
   const LocalLinearTrend({required this.processVariance})
       : assert(processVariance > 0, 'processVariance must be positive');

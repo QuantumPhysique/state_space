@@ -53,6 +53,8 @@ class Coefficient {
 ///
 /// Every array has the same length and the same ordering: the observation
 /// times, or the output grid if one was given.
+///
+/// {@category Getting started}
 class SmoothingResult {
   /// Built by [StructuralModel.smooth]; there is no reason to construct one
   /// by hand outside a test.
@@ -162,6 +164,8 @@ class SmoothingResult {
 /// That is a statement about the model, not a defect of it — a trend whose
 /// slope is free to wander really does become unknowable, and a band that
 /// stayed narrow would be lying.
+///
+/// {@category Getting started}
 class ForecastResult {
   /// Built by [StructuralModel.forecast].
   ForecastResult({
@@ -230,6 +234,8 @@ enum ParameterStatus {
 
 /// What [StructuralModel] fitting returned, together with enough diagnostics
 /// to tell a well-determined answer from a shrug.
+///
+/// {@category Choosing a model}
 class FitResult {
   /// Built by [fit].
   FitResult({

@@ -5,6 +5,8 @@
 /// distribution. The standard answers are to approximate the flat prior with a
 /// very wide proper one, or to handle the flat directions exactly and
 /// separately. This type is the choice between them.
+///
+/// {@category How it works}
 sealed class Initialization {
   const Initialization();
 }

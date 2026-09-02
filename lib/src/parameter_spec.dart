@@ -19,6 +19,8 @@
 /// variance is a reasonable place to look for a variance ratio and an absurd
 /// place to look for a period. A component knows what range its own shape
 /// parameters live in and says so here.
+///
+/// {@category Components}
 sealed class ParameterSpec {
   const ParameterSpec();
 

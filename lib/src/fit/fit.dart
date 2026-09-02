@@ -119,6 +119,8 @@ const double _halfNat = 0.5;
 /// scale equivariance the concentrating step depends on, so the other variances
 /// have to be re-estimated against it — which is exactly what the second fit
 /// does.
+///
+/// {@category Choosing a model}
 FitResult fit(
   StructuralModel initial,
   List<Observation> observations, {

@@ -1,0 +1,15 @@
+dartdoc:
+  categories:
+    "Getting started":
+      markdown: doc/getting-started.md
+    "Choosing a model":
+      markdown: doc/choosing-a-model.md
+    "Components":
+      markdown: doc/components.md
+    "How it works":
+      markdown: doc/how-it-works.md
+  categoryOrder:
+    - "Getting started"
+    - "Choosing a model"
+    - "Components"
+    - "How it works"
