@@ -13,6 +13,8 @@ import '../engine/matrix_block.dart';
 ///
 /// Useful on its own for series with no persistent direction, and as the
 /// simplest thing that can go wrong when something in the engine breaks.
+///
+/// {@category Components}
 class LocalLevel extends Component {
   const LocalLevel({required this.processVariance})
       : assert(processVariance > 0, 'processVariance must be positive');

@@ -26,6 +26,8 @@ typedef LjungBoxResult = ({
 /// independent under the model rather than approximately so, and there are
 /// `N - d` of them for `d` flat directions, exactly as many as the likelihood
 /// charges for.
+///
+/// {@category Choosing a model}
 class InnovationDiagnostics {
   /// Built by `StructuralModel.diagnose`.
   InnovationDiagnostics({

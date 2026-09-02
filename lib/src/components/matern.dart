@@ -66,6 +66,8 @@ enum MaternOrder {
 /// Two parameters, and only one of them is a variance: see [parameterSpecs].
 /// [lengthScale] is in the caller's time unit, so the bracket it is searched
 /// over depends on that unit and can be set with [lengthScaleBounds].
+///
+/// {@category Components}
 class Matern extends Component {
   /// Validates rather than asserts, for the same reason
   /// `TrigonometricSeasonal` does: a length scale far outside its bracket

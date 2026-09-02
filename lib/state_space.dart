@@ -36,6 +36,19 @@
 /// Missing data needs no filling, irregular sampling needs no resampling, and
 /// two readings at the same instant need no averaging: all three fall out of
 /// the recursion.
+///
+/// ## Documentation
+///
+/// * [Getting started](https://github.com/QuantumPhysique/state_space/blob/main/doc/getting-started.md)
+///   — grids, slopes, forecasts, unequal readings, noise floors, isolates
+/// * [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md)
+///   — which components, and how to tell whether one earned its place
+/// * [Components](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md)
+///   — what each one is, and which kernels are reachable
+/// * [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md)
+///   — the Gaussian process, the SDE, the filter, and the numerical choices
+/// * [Validation](https://github.com/QuantumPhysique/state_space/blob/main/doc/validation.md)
+///   — what is checked, against what, and how closely
 library;
 
 export 'src/component.dart';

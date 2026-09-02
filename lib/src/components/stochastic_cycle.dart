@@ -55,6 +55,8 @@ import 'stationary.dart';
 ///
 /// `FitResult.warnings` says both things in words: that the damping finished on
 /// a bound, and that the period's width was measured there.
+///
+/// {@category Components}
 class StochasticCycle extends Component {
   /// Validates rather than asserts, for the same reason
   /// `TrigonometricSeasonal` does: every failure mode here produces a

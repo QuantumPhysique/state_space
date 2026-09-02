@@ -23,6 +23,9 @@ import 'result.dart';
 ///
 /// The model is immutable and cheap to copy, so exploring a likelihood surface
 /// means building models rather than mutating one.
+///
+/// {@category Getting started}
+/// {@category Choosing a model}
 class StructuralModel {
   StructuralModel(
     List<Component> components, {
