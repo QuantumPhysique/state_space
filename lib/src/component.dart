@@ -143,6 +143,25 @@ abstract class Component {
   /// to be reached at all.
   String? identifiabilityHint(double from, double to) => null;
 
+  /// Whether this component's states never move: `A(dt) = I` and `Q(dt) = 0`
+  /// for every gap, and every state diffuse.
+  ///
+  /// A regression coefficient is the case, and it is worth the engine knowing
+  /// because such a state has *no dynamics to smooth*. Under exact diffuse
+  /// initialisation its covariance conditional on the flat directions is
+  /// identically zero at every step, so the backward pass's gain has zero rows
+  /// and zero columns there: its smoothed moments equal its filtered ones, and
+  /// it contributes nothing to anyone else's. Everything such a state is worth
+  /// is carried in `dx/dd` by the forward pass and folded back in at the end.
+  ///
+  /// Declaring it lets the smoother work on the states that actually move,
+  /// which for a trend plus twenty holiday indicators is two rather than
+  /// twenty-two — and the backward pass is cubic in that number.
+  ///
+  /// A component that returns true and then moves would be silently
+  /// mis-smoothed, so the default is false and the claim is opt-in.
+  bool get isStatic => false;
+
   /// Index within this component's block of a state holding the instantaneous
   /// rate of change of the component's contribution, or null if it has none.
   ///

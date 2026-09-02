@@ -243,6 +243,11 @@ class RegressionComponent extends Component {
   @override
   double wanderOver(double span) => 0;
 
+  /// `A = I`, `Q = 0`, every state diffuse: a coefficient is a number, not a
+  /// process. See [Component.isStatic] for what the engine does with that.
+  @override
+  bool get isStatic => true;
+
   @override
   List<bool> get diffuseStates => List.filled(stateDim, true);
 

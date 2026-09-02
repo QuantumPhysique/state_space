@@ -215,9 +215,9 @@ class StructuralModel {
   SmoothingResult smooth(List<Observation> observations, {Float64List? grid}) {
     final timeline = Timeline.merge(observations, grid);
     final filtered = _filter(timeline, keepHistory: true);
-    RtsSmoother(components)
+    RtsSmoother(components, initialization: initialization)
       ..smoothInPlace(timeline, filtered)
-      ..combineDiffuse(filtered);
+      ..combineDiffuse(filtered, steps: _stepsWorthFolding(timeline));
     return _report(timeline, filtered);
   }
 
@@ -265,6 +265,23 @@ class StructuralModel {
       variance: projected.variance,
       measurementVariance: measurementVariance,
     );
+  }
+
+  /// The steps [_report] and [_coefficients] will read: the output grid, plus
+  /// the last step, where the regression coefficients are taken from.
+  ///
+  /// Folding the flat directions into a step costs `O(stateDim^2 * d)`, so on
+  /// a model with many regression columns it is worth doing only where the
+  /// answer is wanted.
+  static Int32List _stepsWorthFolding(Timeline timeline) {
+    final outputs = timeline.outputIndices;
+    final last = timeline.length - 1;
+    if (last < 0) return outputs;
+    if (outputs.isNotEmpty && outputs.last == last) return outputs;
+    final wanted = Int32List(outputs.length + 1);
+    wanted.setAll(0, outputs);
+    wanted[outputs.length] = last;
+    return wanted;
   }
 
   FilterResult _filter(Timeline timeline, {required bool keepHistory}) =>

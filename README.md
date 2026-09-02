@@ -434,7 +434,12 @@ deliberate.
   prior, so `parameterCount` for a regression component is zero. A trend plus
   twenty holiday indicators is still a one-dimensional fit, and the twenty
   coefficients arrive with posterior standard errors from the same recursion
-  that produced the trend.
+  that produced the trend. They are also skipped by the backward pass, which
+  is where the saving shows up a second time: a state that never moves has a
+  smoother gain of exactly zero, so the `O(n^3)` recursion runs over the two
+  states that do rather than over all twenty-two. Smoothing twenty thousand
+  points with that model went from 1 480 ms to 663 ms, and a single indicator
+  from 13.5 ms to 7.2 ms.
 * `FitResult.parameterStatus` says whether each variance was estimated, shrunk
   out at the bottom of the bracket, or pushed past the top of it. A variance of
   zero is the edge of the parameter space rather than an interior point, so the
