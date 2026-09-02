@@ -224,11 +224,25 @@ disturbed them.
 **The diffuse likelihood equals the restricted likelihood.** Exact diffuse
 initialisation leaves a `log|M|` term behind when the flat prior is integrated
 out. Get its sign or scale wrong and every likelihood shifts by a constant that
-nothing else would notice — fits still converge, to the same place, and only
-comparisons across models of different diffuse dimension are silently wrong.
-Densely, the same quantity is REML, so the test computes
+nothing else would notice — fits still converge, to the same place, but the
+number reported is not the restricted likelihood it claims to be. Densely, the
+same quantity is REML, so the test computes
 `-2 log L = (N-d) log 2pi + log|C| + log|B' C^-1 B| + y' P y` and checks both
 the total and `log|M|` on its own.
+
+Being REML is also the limit of what the number is good for, and this was
+overclaimed here until it was measured. A restricted likelihood is comparable
+across models that integrate out the *same* flat directions and no further. The
+integral is against an improper prior of unit density, so `d` carries units and
+so does the answer: writing a regression column in grams rather than kilograms
+shifts `logMarginalLikelihood` by exactly `log 1000` while the fit, the
+posterior and the coefficient are unchanged, and measuring time in half-days
+rather than days shifts it by exactly `log 2` per diffuse direction that carries
+a time dimension. Both are pinned in `comparability_test.dart`.
+`FitResult.diffuseDimension` and `FitResult.isComparableWith` are there so the
+check can be made rather than assumed; to choose between a model with a weekly
+component and one without, use the fitted noise level, an out-of-sample error,
+or `diagnose`.
 
 **Cross-language golden fixtures, for both initialisations.**
 `tool/generate_fixtures.py` builds the same model in statsmodels as an

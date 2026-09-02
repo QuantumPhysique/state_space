@@ -68,8 +68,17 @@ class FilterResult {
   ///
   /// This is the term that makes the diffuse likelihood a *marginal*
   /// likelihood: integrating a flat prior out of a Gaussian leaves behind the
-  /// determinant of its precision, and dropping it would make likelihoods
-  /// incomparable across models with different diffuse dimensions.
+  /// determinant of its precision. Densely it is `log|B' C^-1 B|`, and with it
+  /// the result is exactly the restricted likelihood.
+  ///
+  /// It does **not** make likelihoods comparable across models with different
+  /// diffuse dimensions, and the opposite claim stood here until it was
+  /// measured. The integral is against an improper flat prior of unit density,
+  /// so `d` carries units and the answer carries them too: scaling one column
+  /// of `B` by `c` scales `|M|` by `c^2` and shifts the log likelihood by
+  /// exactly `-log c`, without changing the model, the data or the posterior.
+  /// Rescaling a regression column or changing the time unit both do this. See
+  /// [diffuseDim] and `FitResult.isComparableWith`.
   final double diffuseLogDeterminant;
 
   /// Generalised-least-squares estimate of the flat directions, length

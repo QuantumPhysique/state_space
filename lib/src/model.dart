@@ -82,6 +82,26 @@ class StructuralModel {
   /// Total number of states across all components.
   int get stateDim => components.fold(0, (n, c) => n + c.stateDim);
 
+  /// How many flat directions the model integrates out, which is zero under
+  /// [ApproximateDiffuse] and the number of diffuse states under
+  /// [ExactDiffuse].
+  ///
+  /// Worth knowing because it is what decides whether two models'
+  /// [SmoothingResult.logMarginalLikelihood] values are on the same scale. Two
+  /// models with the same diffuse dimension have integrated the same thing
+  /// away and can be compared; two with different dimensions cannot. See
+  /// [logLikelihood].
+  int get diffuseDimension {
+    if (initialization is! ExactDiffuse) return 0;
+    var count = 0;
+    for (final component in components) {
+      for (final flag in component.diffuseStates) {
+        if (flag) count++;
+      }
+    }
+    return count;
+  }
+
   /// Total number of free parameters across all components.
   int get parameterCount => components.fold(0, (n, c) => n + c.parameterCount);
 
@@ -132,6 +152,17 @@ class StructuralModel {
   ///
   /// One forward pass, no smoothing, nothing retained: `O(N)` time and `O(1)`
   /// memory beyond the input.
+  ///
+  /// Under [ExactDiffuse] this is the *restricted* likelihood: the flat
+  /// directions have been integrated out against an improper prior. That makes
+  /// it the right thing to maximise, and it makes it comparable only with
+  /// models of the same [diffuseDimension]. Across different diffuse
+  /// dimensions it is not on a common scale — and not merely by an unknown
+  /// constant, but by one the caller controls without meaning to: writing a
+  /// regression column in grams rather than kilograms shifts this number by
+  /// `log 1000`, and so does changing the unit of [Observation.time]. Use the
+  /// fitted noise level, an out-of-sample error, or [diagnose] to choose
+  /// between models whose diffuse structure differs.
   double logLikelihood(List<Observation> observations) =>
       _filter(Timeline.merge(observations, null), keepHistory: false)
           .logLikelihood;

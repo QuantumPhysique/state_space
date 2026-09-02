@@ -93,6 +93,10 @@ class SmoothingResult {
   /// `log p(y | theta)` from the forward pass, with the diffuse burn-in
   /// excluded. The same number the textbook `O(N^3)` Gaussian process
   /// likelihood would give.
+  ///
+  /// Under exact diffuse initialisation it is the *restricted* likelihood, so
+  /// it is comparable only across models that integrate out the same number of
+  /// flat directions. See [FitResult.isComparableWith].
   final double logMarginalLikelihood;
 
   /// The model's measurement variance, needed for [predictiveInterval].
@@ -239,6 +243,7 @@ class FitResult {
     required this.plateauDecadesByParameter,
     required List<ParameterStatus> parameterStatus,
     required List<ParameterSpec> parameterSpecs,
+    required this.diffuseDimension,
     this.measurementVariancePinned = false,
   })  : parameterStatus = List.unmodifiable(parameterStatus),
         parameterSpecs = List.unmodifiable(parameterSpecs);
@@ -249,9 +254,28 @@ class FitResult {
 
   /// The maximised profile log-likelihood, *without* the penalty.
   ///
-  /// This is the number to compare across models. The penalised objective is
-  /// the right thing to maximise and the wrong thing to compare: two models
-  /// penalised differently are not on the same scale.
+  /// The penalised objective is the right thing to maximise and the wrong
+  /// thing to compare: two models penalised differently are not on the same
+  /// scale. This is the unpenalised number, which removes that objection.
+  ///
+  /// **It is still comparable only across models of equal [diffuseDimension],**
+  /// and [isComparableWith] is the check. Under exact diffuse initialisation
+  /// this is a restricted likelihood: the flat directions have been integrated
+  /// out against an improper prior of unit density, so the result carries the
+  /// units of those directions. Two consequences, both measurable:
+  ///
+  /// * Writing a regression column in grams rather than kilograms shifts this
+  ///   number by exactly `log 1000`, while the fit, the posterior and the
+  ///   coefficient are unchanged.
+  /// * Measuring [Observation.time] in half-days rather than days shifts it by
+  ///   exactly `log 2` per diffuse direction that carries a time dimension.
+  ///
+  /// So a comparison between a trend and a trend-plus-seasonal, or between a
+  /// model with a holiday indicator and one without, is decided by an
+  /// arbitrary choice of units rather than by the data. To choose between
+  /// models whose diffuse structure differs, use the fitted
+  /// [measurementVariance], an out-of-sample error, or
+  /// `StructuralModel.diagnose`.
   final double logMarginalLikelihood;
 
   /// What the penalty contributed at the optimum, so that the objective that
@@ -299,6 +323,27 @@ class FitResult {
 
   /// What each parameter is, in the same order again.
   final List<ParameterSpec> parameterSpecs;
+
+  /// How many flat directions this fit integrated out.
+  ///
+  /// Zero under [ApproximateDiffuse]. Under [ExactDiffuse] it is the number of
+  /// diffuse states, which is two for a trend, one per harmonic pair for a
+  /// seasonal, one per regression column, and none for a stationary component.
+  /// It is what [logMarginalLikelihood] has to match before two fits can be
+  /// compared.
+  final int diffuseDimension;
+
+  /// Whether [logMarginalLikelihood] means the same thing for this fit and
+  /// [other], so that the two numbers may be subtracted.
+  ///
+  /// True when both integrated out the same number of flat directions. False
+  /// otherwise, and then the difference between the two likelihoods is not a
+  /// statement about the data — see [logMarginalLikelihood] for why.
+  ///
+  /// It does not check that the fits are of the same observations, which no
+  /// [FitResult] retains; that is the caller's to know.
+  bool isComparableWith(FitResult other) =>
+      diffuseDimension == other.diffuseDimension;
 
   /// Whether the measurement variance was asserted rather than estimated.
   ///

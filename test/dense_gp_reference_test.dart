@@ -114,9 +114,11 @@ double _kernel(double s, double t,
 ///
 /// with `C = K + R` and `P = C^-1 - C^-1 B (B' C^-1 B)^-1 B' C^-1`. The middle
 /// determinant is the term the augmented filter accumulates as `log|M|`, and
-/// it is the whole reason the diffuse likelihood is comparable across models:
-/// getting it wrong shifts every likelihood by a constant that nothing else
-/// in the package would notice.
+/// it is what makes the diffuse likelihood the restricted likelihood rather
+/// than something a constant away from it: getting it wrong shifts every
+/// likelihood by an amount nothing else in the package would notice. What it
+/// does *not* do is make likelihoods comparable across different `B`; see
+/// `comparability_test.dart`.
 ({
   double logLikelihood,
   double logDeterminant,

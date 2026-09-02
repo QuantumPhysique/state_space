@@ -305,6 +305,7 @@ FitResult _search(
     plateauDecadesByParameter: widths,
     parameterStatus: status,
     parameterSpecs: specs,
+    diffuseDimension: initial.diffuseDimension,
     measurementVariancePinned: fixedMeasurementVariance != null,
   );
 }
