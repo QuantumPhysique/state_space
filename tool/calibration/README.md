@@ -38,13 +38,12 @@ into numbers, and the numbers are printed.
 what trale computes today, and then the same trend with a weekly seasonal, with
 a Matérn deviation for hydration, and with both.
 
-Read the log likelihoods only down a run of equal `diff`. Models with different
-numbers of flat directions have integrated different things away and their
-restricted likelihoods are not on the same scale — the trend-only and
-trend-plus-hydration models have two flat directions each and can be compared;
-neither can be compared with the ones carrying a weekly component, which have
+Read the log likelihoods only down a run of equal `diff`: the trend-only and
+trend-plus-hydration models have two flat directions each and can be compared,
+and neither can be compared with the ones carrying a weekly component, which have
 six. The fitted noise level and the Ljung–Box p-value are comparable across all
-four, and are the honest way to choose.
+four, and are the honest way to choose. [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#how-to-tell-whether-it-earned-its-place--and-how-not-to)
+explains why.
 
 **The stability table** refits at 14, 21, 30, 45, 60, 90, 120 and 186 days, and
 asks the question a user would: does the curve keep its character as the diary

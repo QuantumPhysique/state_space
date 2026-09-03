@@ -63,9 +63,8 @@ d(mu) = nu dt,   d(nu) = sigma dB
 
 The implied kernel is the cubic spline kernel, so **the posterior mean is a
 natural cubic smoothing spline** — as a Bayesian posterior, with honest
-uncertainty, in linear time (Wahba 1978). The smoothing parameter is
-`lambda = measurementVariance / processVariance`, and `fit` estimates it by
-maximum marginal likelihood rather than by cross-validation.
+uncertainty, in linear time (Wahba 1978). [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md#as-a-kalman-filter-and-rts-smoother)
+has the kernel and the smoothing parameter.
 
 Choosing this over `LocalLevel` is a claim that "still going down" is a
 meaningful sentence about your data. It carries a slope and will extrapolate it.
@@ -184,12 +183,10 @@ a number.
 
 **Check `atBracketEdge` first, and specifically the damping.** A cycle fitted to
 a series with no cycle pushes the damping to the top of its bracket, where the
-component is a rigid sinusoid and can chase noise — and then the width reported
-for the *period* becomes tiny, because a rigid sinusoid's likelihood in frequency
-is as sharp as a periodogram spike. On white noise the period width comes back at
-a thousandth of a decade while the answer is meaningless. The width is
-conditional on the damping, so it is worth reading only once the damping is
-interior. See [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#read-the-warnings).
+component chases noise and the width reported for the *period* becomes tiny and
+meaningless. The width is conditional on the damping, so it is worth reading only
+once the damping is interior — see
+[Read the warnings](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#read-the-warnings), which works the case through.
 
 ## Both stationary components have a floor you did not set
 

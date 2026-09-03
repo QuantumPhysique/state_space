@@ -60,13 +60,10 @@ Densely the same quantity is REML, so the test computes
 and checks both the total and `log|M|` on its own.
 
 **Being REML is also the limit of what the number is good for.**
-`comparability_test.dart` pins both directions
-in which it fails to be a general model-comparison statistic: writing a regression
-column in grams rather than kilograms shifts it by exactly `log 1000`, and
-measuring time in half-days rather than days shifts it by exactly `log 2` per
-diffuse direction carrying a time dimension — with the fit, the posterior and the
-coefficient unchanged in both cases. The same test checks that a *proper* prior
-has no such freedom and does not move. See
+`comparability_test.dart` pins the two changes of unit that shift it while
+leaving the fit, the posterior and the coefficient alone, and checks that a
+*proper* prior has no such freedom and does not move. What that means for
+comparing models is in
 [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#how-to-tell-whether-it-earned-its-place--and-how-not-to).
 
 ## Cross-language golden fixtures, for both initialisations
