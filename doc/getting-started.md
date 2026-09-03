@@ -17,6 +17,9 @@ dependencies:
 
 No runtime dependencies, no platform channels, no native code.
 
+Grids and horizons are `Float64List`s, so anything that builds one also needs
+`import 'dart:typed_data';` — the library does not re-export it.
+
 ## The shortest thing that works
 
 ```dart

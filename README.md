@@ -25,7 +25,8 @@ trend.level;                  // the smoothed curve
 trend.slope;                  // its rate of change, for free
 trend.credibleInterval(12);   // and how sure it is, at output point 12
 
-fitted.model.forecast(data, nextThirtyDays);   // and where it is heading
+final nextMonth = Float64List.fromList([for (var d = 21; d <= 50; d++) d + 0.0]);
+fitted.model.forecast(data, nextMonth);        // and where it is heading
 ```
 
 Components add up, and the posterior comes apart the same way. Events that are
@@ -42,16 +43,20 @@ final model = StructuralModel([
   ]),
 ]);   // still a two-dimensional fit: the coefficient is a state
 
-final posterior = fit(model, diary).model.smooth(diary);
+final fitted = fit(model, diary);
+final posterior = fitted.model.smooth(diary);
 posterior.componentMean(0);      // the trend
 posterior.componentMean(1);      // the weekly pattern, separately
 posterior.coefficients.first;    // what that fortnight was worth, +/- its error
 
-model.diagnose(diary).ljungBox(lags: 14);   // and whether to believe any of it
+fitted.model                     // and whether to believe any of it
+    .diagnose(diary)
+    .ljungBox(lags: 14, fittedParameters: model.parameterCount);
 ```
 
-`example/events_example.dart` runs that end to end against a simulated year and
-prints the effects beside the truth they were generated from.
+`example/events_example.dart` fits a trend and two such indicators to a
+simulated year and prints the recovered effects beside the truth they were
+generated from.
 
 Nothing is interpolated, nothing is resampled, and no gap is filled. Missing data
 is a step with no update, an irregular gap is a different `dt`, and a repeated

@@ -44,7 +44,9 @@ daily. On thinner data, look wherever a period's worth of readings falls.
 
 Pass `fittedParameters` when the variances were estimated on the same data. Each
 estimated parameter costs a degree of freedom, and ignoring that makes the test
-optimistic.
+optimistic. `parameterCount` is the right number to pass: it counts the searched
+variances and not the measurement variance, which is concentrated out — the same
+convention Box and Jenkins use, where the residual scale is not charged for.
 
 ## How to tell whether it earned its place — and how not to
 
