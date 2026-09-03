@@ -25,8 +25,8 @@ trend.level;                  // the smoothed curve
 trend.slope;                  // its rate of change, for free
 trend.credibleInterval(12);   // and how sure it is, at output point 12
 
-final nextMonth = Float64List.fromList([for (var d = 21; d <= 50; d++) d + 0.0]);
-fitted.model.forecast(data, nextMonth);        // and where it is heading
+final ahead = Float64List.fromList([for (var d = 21; d <= 50; d++) d + 0.0]);
+fitted.model.forecast(data, ahead);            // and where it is heading
 ```
 
 Components add up, and the posterior comes apart the same way. Events that are

@@ -1,8 +1,8 @@
 # Choosing a model
 
-Six components is enough to have to think about it. The short answer: start with
-the smallest model that could be true, add one component at a time, and let the
-residuals rather than the likelihood tell you whether it earned its place.
+Start with the smallest model that could be true, add one component at a time,
+and let the residuals rather than the likelihood tell you whether it earned its
+place.
 
 ## Start here
 
@@ -64,9 +64,8 @@ in `comparability_test.dart`:
   diffuse direction that carries a time dimension — for the same stochastic
   process on the same data.
 
-Either is enough to reverse a verdict. This is not a defect of the
-implementation; it is what a restricted likelihood is, and the same warning
-applies to REML anywhere else you meet it.
+Either is enough to reverse a verdict. That is what a restricted likelihood is,
+and the same warning applies to REML anywhere else you meet it.
 
 `FitResult.isComparableWith` is the check, and `diffuseDimension` is what has to
 match:

@@ -86,7 +86,7 @@ falls as `1/kappa` until rounding takes over around `1e7`.
 to a rank-two symmetric update costing `O(n²)` rather than `O(n³)`, and it is
 symmetric and positive semi-definite by construction for *any* gain — including
 one degraded by rounding. The textbook `P = (I − KH)P⁻` is algebraically the same
-expression and numerically worse; there is no reason to prefer it.
+expression and numerically worse.
 
 **`A` and `Q` are block diagonal** and the code exploits it, so a prediction costs
 `2n · Σnᵢ²` rather than `2n³`. The covariance itself is dense — the gain is a
@@ -94,9 +94,9 @@ rank-one update spanning every state — but the transition is not.
 
 **A two-state single-component model has a scalar fast path**, with the loops
 unrolled and the state in local doubles. It is about four times faster than the
-generic engine on a forward pass and it is never load-bearing: the generic engine
-came first, is what the reference tests validate, and remains the definition of
-the answer. `fast_path_equivalence_test.dart` holds the two together to 1e-12.
+generic engine on a forward pass and it is never load-bearing: the generic
+engine is what the reference tests validate and remains the definition of the
+answer. `fast_path_equivalence_test.dart` holds the two together to 1e-12.
 
 ## The smoother
 
@@ -167,13 +167,8 @@ charges for.
 
 ## The penalty that is off by default
 
-A penalised-complexity penalty on the variances is available and is **off**, which
-was not the plan. It was expected to stabilise the trend/seasonal split on short
-histories. Measured against the simulated paths it generates, over twelve
-replications, it makes no difference to the decomposition at any sample size —
-seasonal RMSE 0.0867 against 0.0870 at N = 60, 0.0759 against 0.0759 at N = 500 —
-and is clearly worse at recovering the variances themselves.
-
-What it does reliably is drive a component's drift parameter to the floor when
-there is no drift to find. The numbers are in `ComplexityPenalty`'s documentation,
-including the ones that argue against it.
+`ComplexityPenalty` puts a penalised-complexity prior on the variances and is
+off. It makes no measurable difference to the trend/seasonal decomposition at any
+sample size and is worse at recovering the variances themselves; what it does
+reliably is drive a component's drift parameter to the floor when there is no
+drift to find. The measurements are in its own documentation.

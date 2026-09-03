@@ -6,8 +6,8 @@ The test suite pins this package to dense Gaussian process references to nine
 or ten digits. That says it computes the right thing. It says nothing about
 whether the right thing is any use on a real weight diary — whether the fitted
 smoothing is stable enough to show someone, whether a model needs a weekly
-component, whether the noise level it reports is believable. This directory is
-where those questions get answered with numbers instead of opinions.
+component, whether the noise level it reports is believable. This directory
+answers those with numbers.
 
 ## Running it
 
@@ -84,7 +84,5 @@ can — most of all whether a weekly pattern is there at all, which on this data
 is the single thing that decides whether the fitted smoothing is stable.
 
 They are written from scratch rather than ported from trale's screenshot
-generator, which does the same job. trale is AGPLv3+ with many contributors and
-its demo generator is one person's work; this package is MIT and this repository
-is public, so code copied across would end up redistributed under the wrong
-licence. The phenomena are nobody's property. An implementation of them is.
+generator, which does the same job, because the two projects are under different
+licences.

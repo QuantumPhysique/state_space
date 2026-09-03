@@ -59,8 +59,8 @@ Densely the same quantity is REML, so the test computes
 
 and checks both the total and `log|M|` on its own.
 
-**Being REML is also the limit of what the number is good for**, and this was
-overclaimed until it was measured. `comparability_test.dart` pins both directions
+**Being REML is also the limit of what the number is good for.**
+`comparability_test.dart` pins both directions
 in which it fails to be a general model-comparison statistic: writing a regression
 column in grams rather than kilograms shifts it by exactly `log 1000`, and
 measuring time in half-days rather than days shifts it by exactly `log 2` per
@@ -81,7 +81,7 @@ first few steps and nothing else is testable rather than asserted.
 Under the exact prior everything agrees to 1e-10 at every step including the
 first. Under the wide one the first two steps agree to about four digits, because
 there the smoothed covariance is the difference of two quantities of order 1e5
-giving an answer of order 1e-3 — asserted as a floor rather than papered over.
+giving an answer of order 1e-3, which is asserted as a floor.
 
 Two things worth knowing about the reference:
 
@@ -192,27 +192,11 @@ The last two are cheaper than their state count suggests because a regression
 coefficient never moves and is skipped by the backward pass — see
 [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md#the-smoother).
 
-## On the linear algebra dependency
+## Why the linear algebra is hand-rolled
 
-`benchmark/dependency_comparison.dart` measures one covariance prediction,
-`P⁻ = A P A' + Q`, hand-rolled against `matrices`:
-
-| size | hand-rolled | `matrices` |
-|---|---|---|
-| 2x2 | 28 ns | 87 ns |
-| 6x6 | 457 ns | 294 ns |
-| 18x18 | 10.8 us | 3.5 us |
-
-The hand-rolled loop wins at 2×2 by a factor of three, because per-operation
-overhead dominates when there are eight multiplications to do. It **loses** from
-6×6 upward, because `matrices` multiplies with `Float64x2` SIMD and four
-accumulators. That is the opposite of what was expected, and the benchmark is in
-the repository because a documented evaluation is worth more than either adopting
-the dependency or quietly avoiding it.
-
-The engine still does not take it, for two reasons that benchmark cannot show:
-`A` and `Q` are block diagonal, which `matrices` has no way to express and would
-multiply the zeros of; and there is no in-place or out-parameter path, so a pass
-would allocate a result object per operation — roughly seventy thousand
-short-lived objects for a decade of daily data. The decision is "not yet", and the
-thing to re-measure is a whole pass rather than one product.
+`A` and `Q` are block diagonal, which a general matrix type has no way to express
+and would multiply the zeros of, and the Dart candidate offers no in-place or
+out-parameter path — a pass would allocate a result object per operation, some
+seventy thousand short-lived ones for a decade of daily data. On raw dense
+products it is the faster of the two from 6×6 upward;
+`benchmark/dependency_comparison.dart` has those numbers.

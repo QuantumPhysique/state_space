@@ -124,9 +124,8 @@ RegressionComponent([
 
 `IndicatorRegressor` is one while something is happening and zero otherwise;
 `StepRegressor` holds a value between known instants. A regressor is data rather
-than a closure — not because a closure cannot cross an isolate boundary, but
-because what it *captures* might not, and the failure would surface in the
-caller's code over something the type system never showed them.
+than a closure, so that it survives an isolate boundary whatever it was built
+from.
 
 Each coefficient is one state with `A = I` and `Q = 0` under a flat prior, so
 **`parameterCount` is zero**: the exact diffuse machinery already integrates out
@@ -218,5 +217,5 @@ not. Everything else has a default.
 
 `MatrixBlock` is the one matrix type in the API and appears only here: it is a
 view onto the engine's buffer, so your component fills its own block in place
-without knowing where that block sits. Implementing a component is the one place
-the engine's internals are visible, and that is deliberate.
+without knowing where that block sits. It is the one place the engine's internals are
+visible.
