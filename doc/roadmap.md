@@ -50,4 +50,4 @@ oversight: it has no exact finite-state form. See
   state-space models
 * Särkkä & Solin (2019), *Applied Stochastic Differential Equations*, CUP
 * Simpson et al. (2017), *Statist. Sci.* 32(1): 1–28 — penalised complexity
-  priors, which `ComplexityPenalty` implements and then argues against
+  priors, which `ComplexityPenalty` implements

@@ -30,7 +30,7 @@
 /// );
 /// final posterior = result.model.smooth(data);
 /// print(posterior.level);              // the trend
-/// print(posterior.credibleInterval(0)) // and how sure it is
+/// print(posterior.credibleInterval(0));  // and how sure it is
 /// ```
 ///
 /// Missing data needs no filling, irregular sampling needs no resampling, and

@@ -6,8 +6,8 @@ The test suite pins this package to dense Gaussian process references to nine
 or ten digits. That says it computes the right thing. It says nothing about
 whether the right thing is any use on a real weight diary — whether the fitted
 smoothing is stable enough to show someone, whether a model needs a weekly
-component, whether the noise level it reports is believable. This directory is
-where those questions get answered with numbers instead of opinions.
+component, whether the noise level it reports is believable. This directory
+answers those with numbers.
 
 ## Running it
 
@@ -38,13 +38,12 @@ into numbers, and the numbers are printed.
 what trale computes today, and then the same trend with a weekly seasonal, with
 a Matérn deviation for hydration, and with both.
 
-Read the log likelihoods only down a run of equal `diff`. Models with different
-numbers of flat directions have integrated different things away and their
-restricted likelihoods are not on the same scale — the trend-only and
-trend-plus-hydration models have two flat directions each and can be compared;
-neither can be compared with the ones carrying a weekly component, which have
+Read the log likelihoods only down a run of equal `diff`: the trend-only and
+trend-plus-hydration models have two flat directions each and can be compared,
+and neither can be compared with the ones carrying a weekly component, which have
 six. The fitted noise level and the Ljung–Box p-value are comparable across all
-four, and are the honest way to choose.
+four, and are the honest way to choose. [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#how-to-tell-whether-it-earned-its-place--and-how-not-to)
+explains why.
 
 **The stability table** refits at 14, 21, 30, 45, 60, 90, 120 and 186 days, and
 asks the question a user would: does the curve keep its character as the diary
@@ -84,7 +83,5 @@ can — most of all whether a weekly pattern is there at all, which on this data
 is the single thing that decides whether the fitted smoothing is stable.
 
 They are written from scratch rather than ported from trale's screenshot
-generator, which does the same job. trale is AGPLv3+ with many contributors and
-its demo generator is one person's work; this package is MIT and this repository
-is public, so code copied across would end up redistributed under the wrong
-licence. The phenomena are nobody's property. An implementation of them is.
+generator, which does the same job, because the two projects are under different
+licences.

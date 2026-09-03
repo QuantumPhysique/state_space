@@ -1,8 +1,8 @@
 # Choosing a model
 
-Six components is enough to have to think about it. The short answer: start with
-the smallest model that could be true, add one component at a time, and let the
-residuals rather than the likelihood tell you whether it earned its place.
+Start with the smallest model that could be true, add one component at a time,
+and let the residuals rather than the likelihood tell you whether it earned its
+place.
 
 ## Start here
 
@@ -44,7 +44,9 @@ daily. On thinner data, look wherever a period's worth of readings falls.
 
 Pass `fittedParameters` when the variances were estimated on the same data. Each
 estimated parameter costs a degree of freedom, and ignoring that makes the test
-optimistic.
+optimistic. `parameterCount` is the right number to pass: it counts the searched
+variances and not the measurement variance, which is concentrated out — the same
+convention Box and Jenkins use, where the residual scale is not charged for.
 
 ## How to tell whether it earned its place — and how not to
 
@@ -62,9 +64,8 @@ in `comparability_test.dart`:
   diffuse direction that carries a time dimension — for the same stochastic
   process on the same data.
 
-Either is enough to reverse a verdict. This is not a defect of the
-implementation; it is what a restricted likelihood is, and the same warning
-applies to REML anywhere else you meet it.
+Either is enough to reverse a verdict. That is what a restricted likelihood is,
+and the same warning applies to REML anywhere else you meet it.
 
 `FitResult.isComparableWith` is the check, and `diffuseDimension` is what has to
 match:
