@@ -27,9 +27,9 @@ Summary _worker((StructuralModel, List<Observation>) job) {
   final fitted = fit(model, data);
   final posterior = fitted.model.smooth(data);
   return (
-    level: posterior.level,
-    levelVariance: posterior.levelVariance,
-    slope: posterior.slope!,
+    level: posterior.mean,
+    levelVariance: posterior.variance,
+    slope: posterior.trendSlope!,
     coefficientEstimates: [for (final c in posterior.coefficients) c.estimate],
     coefficientNames: [for (final c in posterior.coefficients) c.name],
     logMarginalLikelihood: posterior.logMarginalLikelihood,
@@ -42,29 +42,33 @@ List<Observation> _data() {
   return [
     for (var day = 0; day < 200; day++)
       Observation(
-          day.toDouble(),
-          80 -
-              0.01 * day +
-              0.3 * math.cos(2 * math.pi * day / 7) +
-              (day >= 120 && day < 134 ? 0.8 : 0.0) +
-              0.2 * (random.nextDouble() - 0.5),
-          relativeVariance: day.isEven ? 0.5 : 1.5)
+        day.toDouble(),
+        80 -
+            0.01 * day +
+            0.3 * math.cos(2 * math.pi * day / 7) +
+            (day >= 120 && day < 134 ? 0.8 : 0.0) +
+            0.2 * (random.nextDouble() - 0.5),
+        relativeVariance: day.isEven ? 0.5 : 1.5,
+      ),
   ];
 }
 
 /// Every component type the package has, in one model, so that adding a
 /// closure or a non-transferable field to any of them fails here.
 StructuralModel _model() => StructuralModel([
-      const LocalLinearTrend(processVariance: 1e-4),
-      TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-4),
-      RegressionComponent([
-        IndicatorRegressor('holiday', [(from: 120, to: 134)]),
-        StepRegressor('dose', Float64List.fromList([0, 90]),
-            Float64List.fromList([0, 1])),
-      ]),
-      Matern.oneHalf(variance: 1e-2, lengthScale: 4),
-      StochasticCycle(period: 28, damping: 0.95, stationaryVariance: 1e-2),
-    ]);
+  LocalLinearTrend(processVariance: 1e-4),
+  TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-4),
+  RegressionComponent([
+    IndicatorRegressor('holiday', [(from: 120, to: 134)]),
+    StepRegressor(
+      'dose',
+      Float64List.fromList([0, 90]),
+      Float64List.fromList([0, 1]),
+    ),
+  ]),
+  Matern.oneHalf(variance: 1e-2, lengthScale: 4),
+  StochasticCycle(period: 28, damping: 0.95, stationaryVariance: 1e-2),
+]);
 
 void main() {
   group('crossing an isolate boundary', () {
@@ -83,23 +87,34 @@ void main() {
     // test guards the promise rather than any particular rule about how to
     // write a component; it fails when something in the model or in a result
     // stops being plain data, whatever the route by which that happened.
-    test('a model goes over, a posterior comes back, and both are right',
-        () async {
-      final data = _data();
-      final here = _worker((_model(), data));
-      final there = await Isolate.run(() => _worker((_model(), data)));
+    test(
+      'a model and its posterior round-trip through Isolate.run unchanged',
+      () async {
+        final data = _data();
+        final here = _worker((_model(), data));
+        final there = await Isolate.run(() => _worker((_model(), data)));
 
-      expect(there.level.length, here.level.length);
-      for (var i = 0; i < here.level.length; i++) {
-        expect(there.level[i], here.level[i], reason: 'level at $i');
-        expect(there.levelVariance[i], here.levelVariance[i]);
-        expect(there.slope[i], here.slope[i]);
-      }
-      expect(there.coefficientNames, here.coefficientNames);
-      expect(there.coefficientEstimates, here.coefficientEstimates);
-      expect(there.logMarginalLikelihood, here.logMarginalLikelihood);
-      expect(there.varianceRatios, here.varianceRatios);
-    });
+        expect(there.level.length, here.level.length);
+        for (var i = 0; i < here.level.length; i++) {
+          expect(there.level[i], here.level[i], reason: 'level at $i');
+          expect(there.levelVariance[i], here.levelVariance[i]);
+          expect(there.slope[i], here.slope[i]);
+        }
+        expect(there.coefficientNames, here.coefficientNames);
+        expect(there.coefficientEstimates, here.coefficientEstimates);
+        expect(there.logMarginalLikelihood, here.logMarginalLikelihood);
+        // Shape parameters have no variance ratio and report NaN, which is
+        // compared as NaN rather than left to the matcher's notion of equality.
+        expect(there.varianceRatios.length, here.varianceRatios.length);
+        for (var i = 0; i < here.varianceRatios.length; i++) {
+          if (here.varianceRatios[i].isNaN) {
+            expect(there.varianceRatios[i].isNaN, isTrue);
+          } else {
+            expect(there.varianceRatios[i], here.varianceRatios[i]);
+          }
+        }
+      },
+    );
 
     test('the model itself survives the trip, not just its output', () async {
       // Sending the model as data rather than rebuilding it inside the worker.
@@ -114,8 +129,10 @@ void main() {
       expect(returned.$1.components.length, model.components.length);
       expect(returned.$1.toString(), model.toString());
       // And it still works over there, which is the point of sending it.
-      expect(returned.$1.logLikelihood(data),
-          closeTo(model.logLikelihood(data), 1e-12));
+      expect(
+        returned.$1.logLikelihood(data),
+        closeTo(model.logLikelihood(data), 1e-12),
+      );
     });
 
     test('a result is plain numbers, so it can come back on its own', () async {
@@ -126,27 +143,32 @@ void main() {
       final posterior = _model().smooth(data);
       final returned = await Isolate.run(() => posterior);
 
-      expect(returned.level, posterior.level);
+      expect(returned.mean, posterior.mean);
       expect(returned.times, posterior.times);
       expect(returned.componentMean(2), posterior.componentMean(2));
-      expect(returned.coefficients.map((c) => c.name),
-          posterior.coefficients.map((c) => c.name));
+      expect(
+        returned.coefficients.map((c) => c.name),
+        posterior.coefficients.map((c) => c.name),
+      );
       expect(returned.credibleInterval(10), posterior.credibleInterval(10));
     });
 
     test('and so is a forecast and a set of diagnostics', () async {
       final data = _data();
       final model = _model();
-      final horizon =
-          Float64List.fromList([for (var d = 200; d < 230; d += 5) d + 0.0]);
+      final horizon = Float64List.fromList([
+        for (var d = 200; d < 230; d += 5) d + 0.0,
+      ]);
 
       final forecast = await Isolate.run(() => model.forecast(data, horizon));
       expect(forecast.mean, model.forecast(data, horizon).mean);
 
       final diagnostics = await Isolate.run(() => model.diagnose(data));
       expect(diagnostics.residuals, model.diagnose(data).residuals);
-      expect(diagnostics.ljungBox(lags: 10).statistic,
-          model.diagnose(data).ljungBox(lags: 10).statistic);
+      expect(
+        diagnostics.ljungBox(lags: 10).statistic,
+        model.diagnose(data).ljungBox(lags: 10).statistic,
+      );
     });
   });
 }

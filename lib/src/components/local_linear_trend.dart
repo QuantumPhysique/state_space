@@ -21,11 +21,9 @@ import '../engine/matrix_block.dart';
 ///          [0,  1]]                       [dt^2/2, dt    ]]
 /// ```
 ///
-/// The off-diagonal term in `Q` is the part a discrete local linear trend
-/// throws away: over a gap, uncertainty about the slope integrates into
-/// uncertainty about the level, and the two end up correlated. Keeping it is
-/// what makes the model exact for irregular gaps rather than approximately
-/// right for unit steps.
+/// The off-diagonal term in `Q` carries the correlation that a gap builds up
+/// between the level and the slope; it is what makes the discretisation exact
+/// for irregular gaps.
 ///
 /// The implied Gaussian process prior is the cubic spline kernel
 /// `k(t, t') = sigma^2 (m^3/3 + m^2 |t - t'| / 2)` with `m = min(t, t')`, so
@@ -33,9 +31,21 @@ import '../engine/matrix_block.dart';
 /// parameter `lambda = measurementVariance / processVariance` (Wahba 1978).
 ///
 /// {@category Components}
-class LocalLinearTrend extends Component {
-  const LocalLinearTrend({required this.processVariance})
-      : assert(processVariance > 0, 'processVariance must be positive');
+final class LocalLinearTrend extends Component {
+  /// A trend whose slope is driven by white noise of intensity
+  /// [processVariance], which must be finite and positive.
+  LocalLinearTrend({required this.processVariance}) {
+    if (!(processVariance > 0) || !processVariance.isFinite) {
+      throw ArgumentError.value(
+        processVariance,
+        'processVariance',
+        'must be finite and positive',
+      );
+    }
+  }
+
+  @override
+  String get name => 'LocalLinearTrend';
 
   /// Intensity of the white noise driving the slope, in squared signal units
   /// per cubed time unit. Larger values buy a more responsive trend.
@@ -98,6 +108,13 @@ class LocalLinearTrend extends Component {
 
   @override
   int? get rateStateIndex => 1;
+
+  @override
+  bool operator ==(Object other) =>
+      other is LocalLinearTrend && other.processVariance == processVariance;
+
+  @override
+  int get hashCode => Object.hash(LocalLinearTrend, processVariance);
 
   @override
   String toString() => 'LocalLinearTrend(processVariance: $processVariance)';

@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:typed_data';
 
 import 'component.dart';
@@ -8,7 +9,9 @@ import 'diagnostics.dart';
 import 'engine/fast_path_2x2.dart';
 import 'engine/kalman.dart';
 import 'engine/rts.dart';
+import 'engine/scale.dart';
 import 'engine/timeline.dart';
+import 'exceptions.dart';
 import 'initialization.dart';
 import 'observation.dart';
 import 'parameter_spec.dart';
@@ -26,7 +29,15 @@ import 'result.dart';
 ///
 /// {@category Getting started}
 /// {@category Choosing a model}
-class StructuralModel {
+final class StructuralModel {
+  /// A model whose signal is the sum of [components], in state order, observed
+  /// with noise of variance [measurementVariance] per unit
+  /// [Observation.relativeVariance].
+  ///
+  /// [components] must not be empty. Each component's [Component.parameters]
+  /// must have [Component.parameterCount] entries and its
+  /// [Component.diffuseStates] [Component.stateDim] entries; both are checked
+  /// here, once, rather than failing inside the recursion.
   StructuralModel(
     List<Component> components, {
     this.measurementVariance = 1.0,
@@ -34,11 +45,36 @@ class StructuralModel {
   }) : components = List.unmodifiable(components) {
     if (components.isEmpty) {
       throw ArgumentError.value(
-          components, 'components', 'a model needs at least one component');
+        components,
+        'components',
+        'a model needs at least one component',
+      );
     }
     if (!(measurementVariance > 0) || !measurementVariance.isFinite) {
-      throw ArgumentError.value(measurementVariance, 'measurementVariance',
-          'must be finite and positive');
+      throw ArgumentError.value(
+        measurementVariance,
+        'measurementVariance',
+        'must be finite and positive',
+      );
+    }
+    for (var i = 0; i < components.length; i++) {
+      final c = components[i];
+      if (c.parameters.length != c.parameterCount) {
+        throw ArgumentError.value(
+          c,
+          'components[$i]',
+          'parameters has ${c.parameters.length} entries but parameterCount '
+              'is ${c.parameterCount}',
+        );
+      }
+      if (c.diffuseStates.length != c.stateDim) {
+        throw ArgumentError.value(
+          c,
+          'components[$i]',
+          'diffuseStates has ${c.diffuseStates.length} entries but stateDim '
+              'is ${c.stateDim}',
+        );
+      }
     }
   }
 
@@ -48,24 +84,22 @@ class StructuralModel {
     required double processVariance,
     double measurementVariance = 1.0,
     Initialization initialization = const ExactDiffuse(),
-  }) =>
-      StructuralModel(
-        [LocalLinearTrend(processVariance: processVariance)],
-        measurementVariance: measurementVariance,
-        initialization: initialization,
-      );
+  }) => StructuralModel(
+    [LocalLinearTrend(processVariance: processVariance)],
+    measurementVariance: measurementVariance,
+    initialization: initialization,
+  );
 
   /// A single [LocalLevel]: a level with no persistent direction.
   factory StructuralModel.localLevel({
     required double processVariance,
     double measurementVariance = 1.0,
     Initialization initialization = const ExactDiffuse(),
-  }) =>
-      StructuralModel(
-        [LocalLevel(processVariance: processVariance)],
-        measurementVariance: measurementVariance,
-        initialization: initialization,
-      );
+  }) => StructuralModel(
+    [LocalLevel(processVariance: processVariance)],
+    measurementVariance: measurementVariance,
+    initialization: initialization,
+  );
 
   /// The additive blocks of the model, in state order.
   final List<Component> components;
@@ -76,10 +110,10 @@ class StructuralModel {
 
   /// How the prior on the first step's state is specified.
   ///
-  /// Exact by default. [ApproximateDiffuse] remains available, and is the
-  /// thing to reach for when the data cannot determine the flat directions
-  /// and a very large number is more useful than an exception — a single
-  /// observation under a two-state trend, for instance.
+  /// Exact by default, in which case [smooth], [forecast], [logLikelihood]
+  /// and [diagnose] throw [UnderdeterminedModelException] when the data cannot
+  /// determine the flat directions. [ApproximateDiffuse] returns a very wide
+  /// posterior instead; see its documentation for when that is sound.
   final Initialization initialization;
 
   /// Total number of states across all components.
@@ -109,15 +143,16 @@ class StructuralModel {
   int get parameterCount => components.fold(0, (n, c) => n + c.parameterCount);
 
   /// What each entry of [parameters] is, concatenated in the same order.
-  List<ParameterSpec> get parameterSpecs =>
-      [for (final component in components) ...component.parameterSpecs];
+  List<ParameterSpec> get parameterSpecs => [
+    for (final component in components) ...component.parameterSpecs,
+  ];
 
   /// The same, narrowed by what a series sampled every [resolution] time units
   /// can resolve. See [Component.parameterSpecsAt].
   List<ParameterSpec> parameterSpecsAt({required double resolution}) => [
-        for (final component in components)
-          ...component.parameterSpecsAt(resolution: resolution)
-      ];
+    for (final component in components)
+      ...component.parameterSpecsAt(resolution: resolution),
+  ];
 
   /// The concatenated unconstrained parameter vectors of every component.
   Float64List get parameters {
@@ -133,14 +168,20 @@ class StructuralModel {
   /// A copy with [theta] distributed over the components in order.
   StructuralModel withParameters(Float64List theta) {
     if (theta.length != parameterCount) {
-      throw ArgumentError.value(theta, 'theta',
-          'expected $parameterCount parameters, got ${theta.length}');
+      throw ArgumentError.value(
+        theta,
+        'theta',
+        'expected $parameterCount parameters, got ${theta.length}',
+      );
     }
     final rebuilt = <Component>[];
     var at = 0;
     for (final component in components) {
-      final slice =
-          Float64List.sublistView(theta, at, at + component.parameterCount);
+      final slice = Float64List.sublistView(
+        theta,
+        at,
+        at + component.parameterCount,
+      );
       rebuilt.add(component.withParameters(slice));
       at += component.parameterCount;
     }
@@ -153,10 +194,65 @@ class StructuralModel {
 
   /// A copy with a different [measurementVariance].
   StructuralModel withMeasurementVariance(double variance) => StructuralModel(
-        components,
-        measurementVariance: variance,
-        initialization: initialization,
+    components,
+    measurementVariance: variance,
+    initialization: initialization,
+  );
+
+  /// A copy whose ratios of every variance to the measurement variance are
+  /// this model's, and whose scale is estimated from [observations].
+  ///
+  /// This is the model to use when the smoothing is chosen rather than
+  /// estimated, for instance from a user setting: the stiffness of the curve
+  /// is fixed by the ratios, and the noise level is the restricted maximum
+  /// likelihood estimate given them, in closed form from one forward pass.
+  /// [fit] with the same model and a bracket of zero width would return the
+  /// same number, after a search.
+  ///
+  /// [minimumMeasurementVariance], if given, is a floor on the estimate. On a
+  /// short series the estimate comes from a handful of residuals and can be
+  /// far too small; a floor at a realistic spread keeps the band honest.
+  ///
+  /// Only the variances are rescaled; a shape parameter such as a length
+  /// scale or a period is kept as it is.
+  ///
+  /// Throws [UnderdeterminedModelException] when nothing is left to estimate
+  /// a scale from: fewer observations than [diffuseDimension] plus one.
+  StructuralModel withEstimatedScale(
+    List<Observation> observations, {
+    double? minimumMeasurementVariance,
+  }) {
+    final floor = minimumMeasurementVariance;
+    if (floor != null && (!(floor > 0) || !floor.isFinite)) {
+      throw ArgumentError.value(
+        floor,
+        'minimumMeasurementVariance',
+        'must be finite and positive',
       );
+    }
+    final pass = _filter(
+      Timeline.merge(observations, null),
+      keepHistory: false,
+    );
+    if (!pass.hasResidualDegreesOfFreedom) {
+      throw UnderdeterminedModelException(
+        '${observations.length} '
+        'observations leave nothing to estimate a noise level from once the '
+        'model\'s flat directions are located',
+      );
+    }
+    var variance = pass.profileMeasurementVariance;
+    final tiny = scaleFloor(observations);
+    if (!(variance > tiny)) variance = tiny;
+    if (floor != null && variance < floor) variance = floor;
+    final shift = math.log(variance / measurementVariance);
+    final theta = parameters;
+    final specs = parameterSpecs;
+    for (var i = 0; i < theta.length; i++) {
+      if (specs[i] is VarianceParameter) theta[i] += shift;
+    }
+    return withParameters(theta).withMeasurementVariance(variance);
+  }
 
   /// Log marginal likelihood of [observations] under this model.
   ///
@@ -173,18 +269,24 @@ class StructuralModel {
   /// `log 1000`, and so does changing the unit of [Observation.time]. Use the
   /// fitted noise level, an out-of-sample error, or [diagnose] to choose
   /// between models whose diffuse structure differs.
-  double logLikelihood(List<Observation> observations) =>
-      _filter(Timeline.merge(observations, null), keepHistory: false)
-          .logLikelihood;
+  ///
+  /// Throws [UnderdeterminedModelException] when the data cannot determine the
+  /// model's flat directions (see [initialization]), [ArgumentError] for
+  /// unsorted or non-finite input.
+  double logLikelihood(List<Observation> observations) => _filter(
+    Timeline.merge(observations, null),
+    keepHistory: false,
+  ).logLikelihood;
 
   /// What the one-step-ahead prediction errors say about this model on
   /// [observations].
   ///
-  /// One forward pass, and it is a separate one: [smooth] does not compute
-  /// residuals, because reconstructing them costs about as much again as the
-  /// backward pass and most callers plotting a trend never look at them. Ask
-  /// for them when you want to know whether the model deserves to be
-  /// believed, which is usually once per model rather than once per redraw.
+  /// One forward pass, separate from [smooth], which does not compute
+  /// residuals.
+  ///
+  /// Throws [UnderdeterminedModelException] when the data cannot determine the
+  /// model's flat directions (see [initialization]), [ArgumentError] for
+  /// unsorted or non-finite input.
   InnovationDiagnostics diagnose(List<Observation> observations) {
     final result = forwardPass(
       components,
@@ -202,20 +304,19 @@ class StructuralModel {
   /// Posterior of the states given [observations], reported at the observation
   /// times or, if [grid] is given, at the grid times.
   ///
-  /// Grid points are simply time steps with no observation attached, so asking
-  /// for output between measurements costs one more step in the same
-  /// recursion — there is no interpolation anywhere, and no gap filling.
+  /// Grid points are time steps with no observation attached, so output
+  /// between measurements costs one more step in the same recursion; there is
+  /// no interpolation and no gap filling.
   ///
   /// [grid] must be sorted ascending. Where a grid time coincides exactly with
   /// an observation time, the reported state is the one that includes that
-  /// observation.
+  /// observation. A grid may extend past the data at either end, and the
+  /// posterior variance widens accordingly.
   ///
-  /// A grid may extend past the data at either end, and the posterior variance
-  /// widens accordingly. Note that the prior is stated at the first step,
-  /// whichever it turns out to be, so a grid point before the first
-  /// observation moves where the diffuse prior sits — immaterial in the
-  /// diffuse limit, and worth knowing when comparing runs digit by digit.
-  SmoothingResult smooth(List<Observation> observations, {Float64List? grid}) {
+  /// Throws [UnderdeterminedModelException] when the data cannot determine the
+  /// model's flat directions (see [initialization]), [ArgumentError] for
+  /// unsorted or non-finite input.
+  SmoothingResult smooth(List<Observation> observations, {List<double>? grid}) {
     final timeline = Timeline.merge(observations, grid);
     final filtered = _filter(timeline, keepHistory: true);
     RtsSmoother(components, initialization: initialization)
@@ -234,13 +335,17 @@ class StructuralModel {
   /// than only on the past.
   ///
   /// A horizon whose first entry *is* the last observation time reports the
-  /// filtered state there — the estimate conditioned on everything up to and
-  /// including that reading, and nothing after it. That is the quantity an
-  /// application wants when it shows a figure that must not move once shown,
-  /// and it is the only way this package offers to reach it. Nothing special
-  /// happens to produce it: the gap is zero, so the prediction is the previous
-  /// posterior.
-  ForecastResult forecast(List<Observation> observations, Float64List horizon) {
+  /// filtered state there: the estimate conditioned on everything up to and
+  /// including that reading. That is the figure to show when it must not move
+  /// once shown.
+  ///
+  /// Throws [UnderdeterminedModelException] when the data cannot determine the
+  /// model's flat directions (see [initialization]), [ArgumentError] for
+  /// unsorted or non-finite input.
+  ForecastResult forecast(
+    List<Observation> observations,
+    List<double> horizon,
+  ) {
     if (observations.isEmpty) {
       throw ArgumentError('nothing to forecast from: no observations');
     }
@@ -250,14 +355,18 @@ class StructuralModel {
         throw ArgumentError.value(horizon[i], 'horizon[$i]', 'not finite');
       }
       if (i > 0 && horizon[i] < horizon[i - 1]) {
-        throw ArgumentError('horizon must be sorted ascending, but horizon[$i] '
-            '(${horizon[i]}) precedes horizon[${i - 1}] (${horizon[i - 1]})');
+        throw ArgumentError(
+          'horizon must be sorted ascending, but horizon[$i] '
+          '(${horizon[i]}) precedes horizon[${i - 1}] (${horizon[i - 1]})',
+        );
       }
       if (horizon[i] < last) {
-        throw ArgumentError('horizon[$i] (${horizon[i]}) is before the last '
-            'observation at $last. Use smooth(observations, grid: ...) for '
-            'times inside the data; it conditions on everything, not just on '
-            'what came before.');
+        throw ArgumentError(
+          'horizon[$i] (${horizon[i]}) is before the last '
+          'observation at $last. Use smooth(observations, grid: ...) for '
+          'times inside the data; it conditions on everything, not just on '
+          'what came before.',
+        );
       }
     }
 
@@ -268,10 +377,11 @@ class StructuralModel {
       initialization: initialization,
     );
     final result = filter.run(timeline);
-    final projected = filter.project(last, horizon, result);
+    final times = Float64List.fromList(horizon);
+    final projected = filter.project(last, times, result);
 
-    return ForecastResult(
-      times: Float64List.fromList(horizon),
+    return newForecastResult(
+      times: times,
       mean: projected.mean,
       variance: projected.variance,
       measurementVariance: measurementVariance,
@@ -305,8 +415,8 @@ class StructuralModel {
       );
 
   /// Collapses the smoothed states down to the quantities callers actually
-  /// plot: the signal, its variance, each component's share, and a slope if
-  /// the model has one.
+  /// plot: the signal, its variance, each component's share, and each
+  /// component's rate where it has one.
   SmoothingResult _report(Timeline timeline, FilterResult filtered) {
     final n = stateDim;
     final indices = timeline.outputIndices;
@@ -325,81 +435,95 @@ class StructuralModel {
     final slices = [
       for (var b = 0; b < components.length; b++)
         Float64List.sublistView(
-            h, offsets[b], offsets[b] + components[b].stateDim)
+          h,
+          offsets[b],
+          offsets[b] + components[b].stateDim,
+        ),
     ];
 
     final times = Float64List(count);
-    final level = Float64List(count);
-    final levelVariance = Float64List(count);
+    final signal = Float64List(count);
+    final signalVariance = Float64List(count);
     final componentMeans = [
-      for (var b = 0; b < components.length; b++) Float64List(count)
+      for (var b = 0; b < components.length; b++) Float64List(count),
     ];
     final componentVariances = [
-      for (var b = 0; b < components.length; b++) Float64List(count)
+      for (var b = 0; b < components.length; b++) Float64List(count),
     ];
-
-    final rate = _rateStateIndex(offsets);
-    final slope = rate == null ? null : Float64List(count);
-    final slopeVariance = rate == null ? null : Float64List(count);
+    final rates = [
+      for (final component in components) component.rateStateIndex,
+    ];
+    final slopes = [
+      for (final rate in rates) rate == null ? null : Float64List(count),
+    ];
+    final slopeVariances = [
+      for (final rate in rates) rate == null ? null : Float64List(count),
+    ];
 
     for (var k = 0; k < count; k++) {
       final t = indices[k];
+      final row = t * n;
+      final block = t * n * n;
       times[k] = timeline.times[t];
       for (var b = 0; b < components.length; b++) {
         components[b].observationAt(times[k], slices[b]);
       }
 
-      var signal = 0.0;
+      var total = 0.0;
       for (var i = 0; i < n; i++) {
-        signal += h[i] * mean[t * n + i];
+        total += h[i] * mean[row + i];
       }
-      level[k] = signal;
+      signal[k] = total;
 
-      var variance = 0.0;
+      var spread = 0.0;
       for (var i = 0; i < n; i++) {
         if (h[i] == 0) continue;
-        var row = 0.0;
+        var sum = 0.0;
         for (var j = 0; j < n; j++) {
-          row += covariance[t * n * n + i * n + j] * h[j];
+          sum += covariance[block + i * n + j] * h[j];
         }
-        variance += h[i] * row;
+        spread += h[i] * sum;
       }
-      levelVariance[k] = variance;
+      signalVariance[k] = spread;
 
       for (var b = 0; b < components.length; b++) {
         final start = offsets[b];
         final dim = components[b].stateDim;
         var contribution = 0.0;
-        var spread = 0.0;
+        var own = 0.0;
         for (var i = 0; i < dim; i++) {
-          contribution += h[start + i] * mean[t * n + start + i];
+          contribution += h[start + i] * mean[row + start + i];
           for (var j = 0; j < dim; j++) {
-            spread += h[start + i] *
-                covariance[t * n * n + (start + i) * n + start + j] *
+            own +=
+                h[start + i] *
+                covariance[block + (start + i) * n + start + j] *
                 h[start + j];
           }
         }
         componentMeans[b][k] = contribution;
-        componentVariances[b][k] = spread;
-      }
+        componentVariances[b][k] = own;
 
-      if (rate != null) {
-        slope![k] = mean[t * n + rate];
-        slopeVariance![k] = covariance[t * n * n + rate * n + rate];
+        final rate = rates[b];
+        if (rate != null) {
+          final at = start + rate;
+          slopes[b]![k] = mean[row + at];
+          slopeVariances[b]![k] = covariance[block + at * n + at];
+        }
       }
     }
 
-    return SmoothingResult(
+    return newSmoothingResult(
       coefficients: _coefficients(timeline, filtered, offsets),
       times: times,
-      level: level,
-      levelVariance: levelVariance,
-      slope: slope,
-      slopeVariance: slopeVariance,
+      mean: signal,
+      variance: signalVariance,
+      trendIndex: _trendIndex(),
       logMarginalLikelihood: filtered.logLikelihood,
       measurementVariance: measurementVariance,
       componentMeans: componentMeans,
       componentVariances: componentVariances,
+      componentSlopes: slopes,
+      componentSlopeVariances: slopeVariances,
     );
   }
 
@@ -411,7 +535,10 @@ class StructuralModel {
   /// has the same full-data posterior at every step, which is the whole reason
   /// a single number is the right thing to report.
   List<Coefficient> _coefficients(
-      Timeline timeline, FilterResult filtered, List<int> offsets) {
+    Timeline timeline,
+    FilterResult filtered,
+    List<int> offsets,
+  ) {
     final found = <Coefficient>[];
     final n = stateDim;
     final last = timeline.length - 1;
@@ -424,31 +551,55 @@ class StructuralModel {
       if (component is! RegressionComponent) continue;
       for (var i = 0; i < component.regressors.length; i++) {
         final at = offsets[b] + i;
-        found.add(Coefficient(
-          name: component.regressors[i].name,
-          estimate: mean[last * n + at],
-          variance: covariance[last * n * n + at * n + at],
-        ));
+        found.add(
+          newCoefficient(
+            name: component.regressors[i].name,
+            estimate: mean[last * n + at],
+            variance: covariance[last * n * n + at * n + at],
+          ),
+        );
       }
     }
     return found;
   }
 
-  /// The single global state index holding a rate of change, if the model has
-  /// exactly one. With two trends there is no unambiguous slope to report, so
-  /// callers are sent to [SmoothingResult.componentMean] instead.
-  int? _rateStateIndex(List<int> offsets) {
-    int? found;
+  /// The component [SmoothingResult.trendSlope] reads: the first
+  /// non-stationary component with a rate state, or failing that the first
+  /// with one at all.
+  int? _trendIndex() {
+    int? stationary;
     for (var b = 0; b < components.length; b++) {
-      final local = components[b].rateStateIndex;
-      if (local == null) continue;
-      if (found != null) return null;
-      found = offsets[b] + local;
+      final component = components[b];
+      if (component.rateStateIndex == null) continue;
+      if (component.diffuseStates.contains(true)) return b;
+      stationary ??= b;
     }
-    return found;
+    return stationary;
   }
 
   @override
-  String toString() => 'StructuralModel($components, measurementVariance: '
+  bool operator ==(Object other) {
+    if (other is! StructuralModel ||
+        other.measurementVariance != measurementVariance ||
+        other.initialization != initialization ||
+        other.components.length != components.length) {
+      return false;
+    }
+    for (var i = 0; i < components.length; i++) {
+      if (other.components[i] != components[i]) return false;
+    }
+    return true;
+  }
+
+  @override
+  int get hashCode => Object.hash(
+    measurementVariance,
+    initialization,
+    Object.hashAll(components),
+  );
+
+  @override
+  String toString() =>
+      'StructuralModel($components, measurementVariance: '
       '$measurementVariance)';
 }

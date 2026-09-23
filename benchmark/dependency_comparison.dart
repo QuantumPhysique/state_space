@@ -3,37 +3,26 @@
 //   dart compile exe benchmark/dependency_comparison.dart -o /tmp/deps && /tmp/deps
 //
 // The operation timed is one covariance prediction, P- = A P A' + Q, which a
-// smoothing pass performs once per time step. Sizes 2, 6 and 18 cover this
-// release (a trend), a plausible 0.3 model (trend plus weekly seasonal) and
-// the ceiling the roadmap contemplates.
+// smoothing pass performs once per time step, at 2, 6 and 18 states: a trend,
+// a trend plus a weekly seasonal, and a large composite model.
 //
-// What the measurement actually says, on an M-series Mac:
+// On an M-series Mac:
 //
 //   hand-rolled  2x2      28 ns      matrices  2x2      87 ns
 //   hand-rolled  6x6     457 ns      matrices  6x6     294 ns
 //   hand-rolled 18x18  10758 ns      matrices 18x18   3541 ns
 //
-// The roadmap predicted the hand-rolled loop would win everywhere at these
-// sizes. It wins at 2x2, by a factor of three, because per-operation overhead
-// -- shape validation, bounds checks, a freshly allocated result object --
-// dominates when there are only eight multiplications to do. It loses from
-// 6x6 upward, because `matrices` multiplies with Float64x2 SIMD and four
-// accumulators, which a scalar Dart loop cannot match.
-//
-// The engine still does not take the dependency, for two reasons the numbers
-// above do not capture:
+// The hand-rolled loop wins at 2x2, where per-operation overhead dominates,
+// and loses from 6x6 upward, where `matrices` multiplies with Float64x2 SIMD.
+// The engine still does not take the dependency, because:
 //
 //   * A and Q are block diagonal. An 18-state model built from a 2-state
 //     trend and four 4-state seasonal blocks does sum(n_i^2) * n arithmetic,
-//     not n^3 -- about a quarter of the work in that example. `matrices` has
-//     no way to express that; it would multiply the zeros.
+//     not n^3, about a quarter of the work in that example, and `matrices`
+//     would multiply the zeros.
 //   * There is no in-place or out-parameter path, so a smoothing pass would
 //     allocate a result object per operation: roughly twenty per step, or
 //     seventy thousand short-lived objects for a decade of daily data.
-//
-// So the decision is "not yet", not "never", and the thing to revisit is the
-// whole pass rather than one product. If dense 18x18 work ever dominates, the
-// cheaper move is to borrow the Float64x2 kernel rather than the package.
 
 // ignore_for_file: avoid_print
 
@@ -50,7 +39,8 @@ class PerRun implements ScoreEmitter {
   @override
   void emit(String name, double value) {
     print(
-        '${name.padRight(20)}${(value * 100).toStringAsFixed(1).padLeft(9)} ns');
+      '${name.padRight(20)}${(value * 100).toStringAsFixed(1).padLeft(9)} ns',
+    );
   }
 }
 

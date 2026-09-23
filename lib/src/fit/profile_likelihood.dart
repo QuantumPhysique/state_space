@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import '../engine/fast_path_2x2.dart';
 import '../engine/kalman.dart';
+import '../engine/scale.dart';
 import '../engine/timeline.dart';
 import '../model.dart';
 import '../observation.dart';
@@ -26,21 +27,21 @@ import 'penalty.dart';
 /// With [fixedMeasurementVariance] set the concentrating step is skipped: the
 /// filter runs at that noise level and the objective becomes the ordinary log
 /// likelihood. The search still moves in log ratios, so the bracket means the
-/// same thing either way, but there is one real dimension more to explore
-/// because the noise level is no longer solved for. That is the price of
-/// asserting what the scale can measure, and it is the point.
+/// same thing either way and the search has the same number of dimensions.
 class ProfileLikelihood {
+  /// The profile likelihood of [template]'s parameters on [observations].
   ProfileLikelihood(
     this.template,
     List<Observation> observations, {
     this.penalty = const NoPenalty(),
     this.fixedMeasurementVariance,
-  })  : _timeline = Timeline.merge(observations, null),
-        _specs = template.parameterSpecs,
-        span = observations.isEmpty
-            ? 0
-            : observations.last.time - observations.first.time,
-        _dataSpread = _standardDeviation(observations);
+  }) : _timeline = Timeline.merge(observations, null),
+       _specs = template.parameterSpecs,
+       span = observations.isEmpty
+           ? 0
+           : observations.last.time - observations.first.time,
+       _dataSpread = _standardDeviation(observations),
+       _floor = scaleFloor(observations);
 
   /// The model whose parameters are being searched over. Its measurement
   /// variance is ignored.
@@ -61,6 +62,11 @@ class ProfileLikelihood {
   /// Sample standard deviation of the observed values, which is the yardstick
   /// the penalty measures a component's wandering against.
   final double _dataSpread;
+
+  /// The smallest measurement variance the concentrated likelihood is taken
+  /// at. Data a model explains exactly would otherwise profile to zero and an
+  /// unbounded likelihood; see [scaleFloor].
+  final double _floor;
 
   /// Which entries of the parameter vector are log variances, and so have to
   /// be lifted from a ratio to an absolute value before the filter sees them.
@@ -83,14 +89,23 @@ class ProfileLikelihood {
 
   /// Whichever likelihood this instance is maximising: the profile one when
   /// the noise level is being concentrated out, the plain one when it is held.
-  double logLikelihoodOf(FilterResult pass) => fixedMeasurementVariance == null
-      ? pass.profileLogLikelihood
-      : pass.logLikelihood;
+  double logLikelihoodOf(FilterResult pass) {
+    if (fixedMeasurementVariance != null) return pass.logLikelihood;
+    final profiled = pass.profileMeasurementVariance;
+    return profiled >= _floor
+        ? pass.profileLogLikelihood
+        : pass.logLikelihoodAtScale(_floor);
+  }
 
   /// The measurement variance a pass implies, which is the fixed one if there
-  /// is one and the concentrated estimate otherwise.
-  double measurementVarianceOf(FilterResult pass) =>
-      fixedMeasurementVariance ?? pass.profileMeasurementVariance;
+  /// is one and the concentrated estimate, no lower than a tiny floor,
+  /// otherwise.
+  double measurementVarianceOf(FilterResult pass) {
+    final fixed = fixedMeasurementVariance;
+    if (fixed != null) return fixed;
+    final profiled = pass.profileMeasurementVariance;
+    return profiled >= _floor ? profiled : _floor;
+  }
 
   /// The profile log-likelihood alone, which is the number to report and to
   /// compare across models. A penalised objective is fine to maximise and

@@ -16,12 +16,13 @@ List<Observation> _weeklySeries({int n = 400, int seed = 8}) {
   return [
     for (var i = 0; i < n; i++)
       Observation(
-          i.toDouble(),
-          80 -
-              0.004 * i +
-              0.45 * math.cos(2 * math.pi * i / 7) +
-              0.2 * math.sin(4 * math.pi * i / 7) +
-              0.25 * _gaussian(random))
+        i.toDouble(),
+        80 -
+            0.004 * i +
+            0.45 * math.cos(2 * math.pi * i / 7) +
+            0.2 * math.sin(4 * math.pi * i / 7) +
+            0.25 * _gaussian(random),
+      ),
   ];
 }
 
@@ -30,8 +31,9 @@ void main() {
     test('is minus one for a sequence that alternates', () {
       final diagnostics = InnovationDiagnostics(
         times: Float64List.fromList([for (var i = 0; i < 100; i++) i * 1.0]),
-        residuals: Float64List.fromList(
-            [for (var i = 0; i < 100; i++) i.isEven ? 1.0 : -1.0]),
+        residuals: Float64List.fromList([
+          for (var i = 0; i < 100; i++) i.isEven ? 1.0 : -1.0,
+        ]),
       );
       // Not exactly minus one: the sum in the numerator runs over 99 pairs
       // and the one in the denominator over 100 terms.
@@ -49,8 +51,10 @@ void main() {
       expect(() => diagnostics.autocorrelation(0), throwsArgumentError);
       expect(() => diagnostics.autocorrelation(3), throwsArgumentError);
       expect(() => diagnostics.ljungBox(lags: 3), throwsArgumentError);
-      expect(() => diagnostics.ljungBox(lags: 2, fittedParameters: 2),
-          throwsArgumentError);
+      expect(
+        () => diagnostics.ljungBox(lags: 2, fittedParameters: 2),
+        throwsArgumentError,
+      );
     });
   });
 
@@ -83,13 +87,10 @@ void main() {
     });
 
     test('and putting it back makes the evidence go away', () {
-      final diagnostics = StructuralModel(
-        [
-          const LocalLinearTrend(processVariance: 1e-8),
-          TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-6),
-        ],
-        measurementVariance: 0.0625,
-      ).diagnose(data);
+      final diagnostics = StructuralModel([
+        LocalLinearTrend(processVariance: 1e-8),
+        TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-6),
+      ], measurementVariance: 0.0625).diagnose(data);
 
       final test14 = diagnostics.ljungBox(lags: 14, fittedParameters: 2);
       expect(test14.pValue, greaterThan(0.05)); // measured 0.194
@@ -98,21 +99,21 @@ void main() {
       // The residuals are also the right size now, which the trend-only model
       // could not manage either: it had to inflate them to cover the pattern.
       expect(
-          diagnostics.mean.abs(), lessThan(3 / math.sqrt(diagnostics.count)));
-      expect((diagnostics.variance - 1).abs(),
-          lessThan(3 * math.sqrt(2 / diagnostics.count)));
+        diagnostics.mean.abs(),
+        lessThan(3 / math.sqrt(diagnostics.count)),
+      );
+      expect(
+        (diagnostics.variance - 1).abs(),
+        lessThan(3 * math.sqrt(2 / diagnostics.count)),
+      );
     });
 
-    test(
-        'the residual count is the observation count less the flat '
+    test('the residual count is the observation count less the flat '
         'directions', () {
-      final diagnostics = StructuralModel(
-        [
-          const LocalLinearTrend(processVariance: 1e-8),
-          TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-6),
-        ],
-        measurementVariance: 0.0625,
-      ).diagnose(data);
+      final diagnostics = StructuralModel([
+        LocalLinearTrend(processVariance: 1e-8),
+        TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-6),
+      ], measurementVariance: 0.0625).diagnose(data);
       expect(diagnostics.count, data.length - 6);
       expect(diagnostics.times.first, data[6].time);
     });
@@ -137,8 +138,12 @@ void main() {
         level += slope * dt + sd * (root / math.sqrt(3) * a + root / 2 * b);
         slope += sd * math.sqrt(dt) * b;
         time += dt;
-        data.add(Observation(
-            time, level + math.sqrt(measurementVariance) * _gaussian(random)));
+        data.add(
+          Observation(
+            time,
+            level + math.sqrt(measurementVariance) * _gaussian(random),
+          ),
+        );
       }
 
       final diagnostics = StructuralModel.localLinearTrend(
@@ -147,8 +152,10 @@ void main() {
       ).diagnose(data);
 
       expect(diagnostics.ljungBox(lags: 12).pValue, greaterThan(0.05));
-      expect(diagnostics.autocorrelation(1).abs(),
-          lessThan(3 / math.sqrt(diagnostics.count)));
+      expect(
+        diagnostics.autocorrelation(1).abs(),
+        lessThan(3 / math.sqrt(diagnostics.count)),
+      );
     });
   });
 }

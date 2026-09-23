@@ -2,10 +2,12 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../component.dart';
+import '../exceptions.dart';
 import '../initialization.dart';
 import 'cholesky.dart';
 import 'matrix_block.dart';
 import 'recursive_residuals.dart';
+import 'scale.dart';
 import 'timeline.dart';
 
 const double _log2pi = 1.8378770664093456;
@@ -18,6 +20,7 @@ const double _log2pi = 1.8378770664093456;
 /// `t * stateDim + j`, and covariance entry `(i, j)` at
 /// `t * stateDim * stateDim + i * stateDim + j`.
 class FilterResult {
+  /// Assembled by [KalmanFilter.run] and `FastPath2x2.run`.
   FilterResult({
     required this.stateDim,
     required this.stepCount,
@@ -40,7 +43,10 @@ class FilterResult {
     this.standardisedResiduals,
   });
 
+  /// States in the model.
   final int stateDim;
+
+  /// Steps in the timeline the pass ran over.
   final int stepCount;
 
   /// Log marginal likelihood of the observations, diffuse burn-in excluded.
@@ -72,8 +78,7 @@ class FilterResult {
   /// the result is exactly the restricted likelihood.
   ///
   /// It does **not** make likelihoods comparable across models with different
-  /// diffuse dimensions, and the opposite claim stood here until it was
-  /// measured. The integral is against an improper flat prior of unit density,
+  /// diffuse dimensions. The integral is against an improper flat prior of unit density,
   /// so `d` carries units and the answer carries them too: scaling one column
   /// of `B` by `c` scales `|M|` by `c^2` and shifts the log likelihood by
   /// exactly `-log c`, without changing the model, the data or the posterior.
@@ -104,6 +109,8 @@ class FilterResult {
 
   /// The one-step-ahead moments, which stay predicted throughout.
   final Float64List? predictedMean;
+
+  /// Their covariance, laid out as [stateCovariance].
   final Float64List? predictedCovariance;
 
   /// Sensitivity of the state to the flat directions, step-major and
@@ -161,6 +168,24 @@ class FilterResult {
       ? measurementVariance * sumWeightedSquares / usedObservations
       : double.nan;
 
+  /// The likelihood with every variance in the model scaled so that the
+  /// measurement variance is [variance], keeping the ratios this pass was run
+  /// at, or [double.nan] when there is nothing left to profile over.
+  ///
+  /// At [profileMeasurementVariance] this is [profileLogLikelihood]. It is
+  /// what the fit evaluates when the profiled variance falls below a floor.
+  double logLikelihoodAtScale(double variance) {
+    if (!hasResidualDegreesOfFreedom) return double.nan;
+    final n = usedObservations;
+    final weighted = sumWeightedSquares > 0 ? sumWeightedSquares : 0.0;
+    return -0.5 *
+        (n * _log2pi +
+            n * math.log(variance / measurementVariance) +
+            weighted * measurementVariance / variance +
+            sumLogInnovationVariance +
+            diffuseLogDeterminant);
+  }
+
   /// The likelihood at [profileMeasurementVariance], as a function of the
   /// variance ratios alone, or [double.nan] when there is nothing left to
   /// profile over.
@@ -184,20 +209,25 @@ class FilterResult {
 /// pass itself (everything is `O(stateDim^2)`), so the fitting code simply
 /// builds a new filter per likelihood evaluation rather than mutating one.
 class KalmanFilter {
+  /// A filter for [components] at [measurementVariance] under
+  /// [initialization], excluding the first [burnIn] observations from the
+  /// likelihood.
   KalmanFilter(
     this.components, {
     required this.measurementVariance,
     required this.initialization,
     int? burnIn,
-  })  : diffuseDim =
-            initialization is ExactDiffuse ? _diffuseStateCount(components) : 0,
-        burnIn = burnIn ??
-            (initialization is ExactDiffuse
-                ? 0
-                : _diffuseStateCount(components)),
-        stateDim = components.fold(0, (n, c) => n + c.stateDim),
-        _offsets = _blockOffsets(components),
-        _diffuseStates = _diffuseStateIndices(components) {
+  }) : diffuseDim = initialization is ExactDiffuse
+           ? _diffuseStateCount(components)
+           : 0,
+       burnIn =
+           burnIn ??
+           (initialization is ExactDiffuse
+               ? 0
+               : _diffuseStateCount(components)),
+       stateDim = components.fold(0, (n, c) => n + c.stateDim),
+       _offsets = _blockOffsets(components),
+       _diffuseStates = _diffuseStateIndices(components) {
     final n = stateDim;
     final d = diffuseDim;
     _x = Float64List(n);
@@ -225,9 +255,16 @@ class KalmanFilter {
     }
   }
 
+  /// The model's components, in state order.
   final List<Component> components;
+
+  /// Noise variance of an observation of unit relative variance.
   final double measurementVariance;
+
+  /// The prior on the first step's state.
   final Initialization initialization;
+
+  /// Total states across [components].
   final int stateDim;
 
   /// Number of flat directions carried exactly. Zero under an approximate
@@ -319,22 +356,28 @@ class KalmanFilter {
 
   /// Runs the forward pass. With [keepHistory] the filtered and predicted
   /// moments are retained for the RTS backward pass.
-  FilterResult run(Timeline timeline,
-      {bool keepHistory = false, bool keepResiduals = false}) {
+  FilterResult run(
+    Timeline timeline, {
+    bool keepHistory = false,
+    bool keepResiduals = false,
+  }) {
     final n = stateDim;
     final d = diffuseDim;
     final steps = timeline.length;
-    final pieces =
-        keepResiduals ? ResidualPieces(timeline.observationCount, d) : null;
+    final pieces = keepResiduals
+        ? ResidualPieces(timeline.observationCount, d)
+        : null;
 
     final stateMean = keepHistory ? Float64List(steps * n) : null;
     final filteredCov = keepHistory ? Float64List(steps * n * n) : null;
     final predictedMean = keepHistory ? Float64List(steps * n) : null;
     final predictedCov = keepHistory ? Float64List(steps * n * n) : null;
-    final stateSensitivity =
-        keepHistory && d > 0 ? Float64List(steps * n * d) : null;
-    final predictedSensitivity =
-        keepHistory && d > 0 ? Float64List(steps * n * d) : null;
+    final stateSensitivity = keepHistory && d > 0
+        ? Float64List(steps * n * d)
+        : null;
+    final predictedSensitivity = keepHistory && d > 0
+        ? Float64List(steps * n * d)
+        : null;
 
     _initialise();
 
@@ -389,8 +432,7 @@ class KalmanFilter {
     // With no steps there is nothing to report and nothing to estimate, so
     // the diffuse system is left unsolved rather than declared singular.
     if (d > 0 && steps > 0) {
-      final solved = _solveDiffuseSystem(timeline.observationCount,
-          timeline.times[0], timeline.times[steps - 1]);
+      final solved = _solveDiffuseSystem(timeline);
       diffuseMean = solved.mean;
       diffuseCovariance = solved.covariance;
       diffuseLogDeterminant = solved.logDeterminant;
@@ -405,13 +447,15 @@ class KalmanFilter {
       used = timeline.observationCount - d;
     }
 
-    final residuals =
-        pieces == null ? null : recursiveResiduals(pieces, burnIn: burnIn);
+    final residuals = pieces == null
+        ? null
+        : recursiveResiduals(pieces, burnIn: burnIn);
 
     return FilterResult(
       stateDim: n,
       stepCount: steps,
-      logLikelihood: -0.5 *
+      logLikelihood:
+          -0.5 *
           (used * _log2pi + sumLogS + sumWeighted + diffuseLogDeterminant),
       sumLogInnovationVariance: sumLogS,
       sumWeightedSquares: sumWeighted,
@@ -441,7 +485,10 @@ class KalmanFilter {
   /// thing the recursion does over any gap in the middle of a series -- the
   /// only difference is that no observation ever arrives to close it.
   ({Float64List mean, Float64List variance}) project(
-      double from, Float64List horizon, FilterResult result) {
+    double from,
+    Float64List horizon,
+    FilterResult result,
+  ) {
     final n = stateDim;
     final d = diffuseDim;
     final estimate = result.diffuseMean;
@@ -508,12 +555,13 @@ class KalmanFilter {
   /// least-squares solution of `M d = -rhs`, its covariance is `M^-1`, and the
   /// integration leaves `log|M|` behind in the likelihood.
   ({Float64List mean, Float64List covariance, double logDeterminant})
-      _solveDiffuseSystem(int observationCount, double from, double to) {
+  _solveDiffuseSystem(Timeline timeline) {
     final d = diffuseDim;
     final factor = Float64List.fromList(_information);
-    if (!choleskyFactor(factor, d)) {
-      throw StateError(
-          singularDiffuseMessage(components, d, observationCount, from, to));
+    if (timeline.observationCount < d || !factorInformation(factor, d)) {
+      throw UnderdeterminedModelException(
+        singularDiffuseMessage(components, d, timeline),
+      );
     }
 
     var logDeterminant = 0.0;
@@ -708,9 +756,8 @@ class KalmanFilter {
   ///
   /// which is `O(n^2)` rather than `O(n^3)` and, computed as four symmetric
   /// terms and mirrored across the diagonal, is symmetric and positive
-  /// semi-definite by construction for *any* gain — including one degraded by
-  /// rounding. The textbook `P = (I - KH) P-` is algebraically the same thing
-  /// and numerically worse; there is no reason to prefer it here.
+  /// semi-definite by construction for *any* gain, including one degraded by
+  /// rounding, unlike the textbook `P = (I - KH) P-`.
   void _update(double time, double value, double r) {
     final n = stateDim;
     final x = _x, p = _p, xPred = _xPred, pPred = _pPred;
@@ -743,9 +790,7 @@ class KalmanFilter {
       s += h[i] * ph[i];
     }
     if (!(s > 0) || !s.isFinite) {
-      throw StateError('Innovation variance $s at time $time is not positive. '
-          'The model has become numerically degenerate; check for a zero '
-          'process variance combined with a zero observation variance.');
+      throw NumericalBreakdownException(innovationVarianceMessage(s, r, time));
     }
 
     for (var i = 0; i < n; i++) {
@@ -755,7 +800,8 @@ class KalmanFilter {
 
     for (var i = 0; i < n; i++) {
       for (var j = i; j < n; j++) {
-        final updated = pPred[i * n + j] -
+        final updated =
+            pPred[i * n + j] -
             ph[i] * gain[j] -
             gain[i] * ph[j] +
             s * gain[i] * gain[j];
@@ -818,33 +864,78 @@ class KalmanFilter {
 /// much data there was — and the components contribute whatever they know
 /// about their own identifiability, which is knowledge the engine is
 /// deliberately kept clear of.
-String singularDiffuseMessage(List<Component> components, int diffuseDim,
-    int observationCount, double from, double to) {
+String singularDiffuseMessage(
+  List<Component> components,
+  int diffuseDim,
+  Timeline timeline,
+) {
+  final observationCount = timeline.observationCount;
+  final times = [
+    for (var t = 0; t < timeline.length; t++)
+      if (timeline.hasObservation(t)) timeline.times[t],
+  ];
+  final from = times.isEmpty ? 0.0 : times.first;
+  final to = times.isEmpty ? 0.0 : times.last;
+  final resolution = typicalGap(times);
   final reasons = <String>[];
   if (observationCount < diffuseDim) {
-    reasons.add('there are only $observationCount observations for '
-        '$diffuseDim flat directions, and each one costs a degree of freedom');
+    reasons.add(
+      'there are only $observationCount observations for '
+      '$diffuseDim flat directions, and each one costs a degree of freedom',
+    );
   }
   for (final component in components) {
-    final hint = component.identifiabilityHint(from, to);
+    final hint = component.identifiabilityHint(
+      from,
+      to,
+      resolution: resolution,
+    );
     if (hint != null) reasons.add(hint);
   }
   if (reasons.isEmpty && components.length > 1) {
-    reasons.add('two components can produce the same signal on this data — a '
-        'trend and a level both supply a level, and two seasonals that share '
-        'a harmonic are the same function of time');
+    reasons.add(
+      'two components can produce the same signal on this data — a '
+      'trend and a level both supply a level, and two seasonals that share '
+      'a harmonic are the same function of time',
+    );
   }
 
-  final buffer = StringBuffer('the data does not determine the model\'s '
-      '$diffuseDim diffuse states: $observationCount observations left the '
-      'diffuse information matrix singular');
+  final buffer = StringBuffer(
+    'the data does not determine the model\'s '
+    '$diffuseDim diffuse states: $observationCount observations left the '
+    'diffuse information matrix singular',
+  );
   if (reasons.isEmpty) {
     buffer.write('. ');
   } else {
     buffer.write(', because ${reasons.join('; and ')}. ');
   }
-  buffer.write('Either supply more data, drop a component, or fall back to '
-      'ApproximateDiffuse, which returns a very large variance instead of '
-      'refusing.');
+  buffer.write(
+    'Either supply more data, drop a component, or use '
+    'ApproximateDiffuse, which returns a very wide posterior instead of '
+    'refusing when time is in a unit that keeps rates of change near one, '
+    'such as days.',
+  );
   return buffer.toString();
+}
+
+/// Explains an innovation variance that is not a positive finite number.
+///
+/// Shared by both forward-pass implementations.
+String innovationVarianceMessage(double s, double r, double time) {
+  if (!r.isFinite) {
+    return 'the measurement variance of the observation at time $time, its '
+        'relativeVariance times the model\'s measurementVariance, is not a '
+        'finite number';
+  }
+  if (r == 0) {
+    return 'the observation at time $time has relativeVariance 0 and measures '
+        'a direction the model has no uncertainty about, so it cannot be '
+        'honoured exactly. Under ExactDiffuse the first observation always '
+        'does: its value is not yet a constraint on anything. Give it a small '
+        'positive relativeVariance instead';
+  }
+  return 'the innovation variance at time $time is $s, which is not a '
+      'positive number: a component\'s process noise is not a valid '
+      'covariance';
 }

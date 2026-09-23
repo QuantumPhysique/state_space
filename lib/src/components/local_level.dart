@@ -15,9 +15,21 @@ import '../engine/matrix_block.dart';
 /// simplest thing that can go wrong when something in the engine breaks.
 ///
 /// {@category Components}
-class LocalLevel extends Component {
-  const LocalLevel({required this.processVariance})
-      : assert(processVariance > 0, 'processVariance must be positive');
+final class LocalLevel extends Component {
+  /// A level driven by white noise of intensity [processVariance], which must
+  /// be finite and positive.
+  LocalLevel({required this.processVariance}) {
+    if (!(processVariance > 0) || !processVariance.isFinite) {
+      throw ArgumentError.value(
+        processVariance,
+        'processVariance',
+        'must be finite and positive',
+      );
+    }
+  }
+
+  @override
+  String get name => 'LocalLevel';
 
   /// Intensity of the white noise driving the level, in squared signal units
   /// per time unit.
@@ -59,6 +71,13 @@ class LocalLevel extends Component {
   @override
   Component withParameters(Float64List theta) =>
       LocalLevel(processVariance: math.exp(theta[0]));
+
+  @override
+  bool operator ==(Object other) =>
+      other is LocalLevel && other.processVariance == processVariance;
+
+  @override
+  int get hashCode => Object.hash(LocalLevel, processVariance);
 
   @override
   String toString() => 'LocalLevel(processVariance: $processVariance)';

@@ -16,13 +16,19 @@ List<Observation> _series(int n, {int seed = 11}) {
   var time = 0.0;
   for (var i = 0; i < n; i++) {
     time += 0.4 + 1.6 * random.nextDouble();
-    final signal = 80 +
+    final signal =
+        80 +
         0.01 * time -
         0.9 * math.cos(2 * math.pi * time / 7) +
         0.3 * math.sin(4 * math.pi * time / 7) +
         0.5 * math.sin(2 * math.pi * time / 29);
-    data.add(Observation(time, signal + 0.3 * (random.nextDouble() - 0.5),
-        relativeVariance: 0.6 + random.nextDouble()));
+    data.add(
+      Observation(
+        time,
+        signal + 0.3 * (random.nextDouble() - 0.5),
+        relativeVariance: 0.6 + random.nextDouble(),
+      ),
+    );
   }
   return data;
 }
@@ -44,7 +50,8 @@ void main() {
       var time = 0.0;
       for (var i = 0; i < 110; i++) {
         time += 0.4 + 1.6 * random.nextDouble();
-        final signal = -0.9 * math.cos(2 * math.pi * time / 7) +
+        final signal =
+            -0.9 * math.cos(2 * math.pi * time / 7) +
             0.3 * math.sin(4 * math.pi * time / 7);
         out.add(Observation(time, signal + 0.3 * (random.nextDouble() - 0.5)));
       }
@@ -62,27 +69,34 @@ void main() {
       final fast = StructuralModel(
         [
           TrigonometricSeasonal(
-              period: 7, harmonics: 2, processVariance: seasonalVariance)
+            period: 7,
+            harmonics: 2,
+            processVariance: seasonalVariance,
+          ),
         ],
         measurementVariance: measurementVariance,
-        initialization: const ApproximateDiffuse(variance: diffuseVariance),
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
       ).smooth(observations, grid: grid);
 
-      final slow = densePosterior(
-        observations,
-        grid.toList(),
-        [
-          withDiffusePrior(seasonalKernel(7, 2, seasonalVariance),
-              seasonalBasis(7, 2), kappa)
-        ],
-        measurementVariance: measurementVariance,
-      );
+      final slow = densePosterior(observations, grid.toList(), [
+        withDiffusePrior(
+          seasonalKernel(7, 2, seasonalVariance),
+          seasonalBasis(7, 2),
+          kappa,
+        ),
+      ], measurementVariance: measurementVariance);
 
       for (var i = 0; i < grid.length; i++) {
-        expect(fast.level[i], closeTo(slow.mean[0][i], 1e-9),
-            reason: 'mean at grid point $i');
-        expect(fast.levelVariance[i], closeTo(slow.variance[0][i], 1e-9),
-            reason: 'variance at grid point $i');
+        expect(
+          fast.mean[i],
+          closeTo(slow.mean[0][i], 1e-9),
+          reason: 'mean at grid point $i',
+        );
+        expect(
+          fast.variance[i],
+          closeTo(slow.variance[0][i], 1e-9),
+          reason: 'variance at grid point $i',
+        );
       }
     });
 
@@ -91,7 +105,10 @@ void main() {
       final forward = KalmanFilter(
         [
           TrigonometricSeasonal(
-              period: 7, harmonics: 3, processVariance: seasonalVariance)
+            period: 7,
+            harmonics: 3,
+            processVariance: seasonalVariance,
+          ),
         ],
         measurementVariance: measurementVariance,
         initialization: const ExactDiffuse(),
@@ -107,27 +124,41 @@ void main() {
       expect(forward.diffuseDim, 6);
       expect(forward.usedObservations, observations.length - 6);
       expect(
-          forward.diffuseLogDeterminant, closeTo(dense.logDeterminant, 1e-8));
+        forward.diffuseLogDeterminant,
+        closeTo(dense.logDeterminant, 1e-8),
+      );
       expect(forward.logLikelihood, closeTo(dense.logLikelihood, 1e-9));
     });
   });
 
   group('a trend and two seasonals composed', () {
     List<Component> components() => [
-          const LocalLinearTrend(processVariance: trendVariance),
-          TrigonometricSeasonal(
-              period: 7, harmonics: 2, processVariance: seasonalVariance),
-          TrigonometricSeasonal(
-              period: 29, harmonics: 1, processVariance: cycleVariance),
-        ];
+      LocalLinearTrend(processVariance: trendVariance),
+      TrigonometricSeasonal(
+        period: 7,
+        harmonics: 2,
+        processVariance: seasonalVariance,
+      ),
+      TrigonometricSeasonal(
+        period: 29,
+        harmonics: 1,
+        processVariance: cycleVariance,
+      ),
+    ];
 
     List<Kernel> kernels() => [
-          withDiffusePrior(splineKernel(trendVariance), trendBasis(), kappa),
-          withDiffusePrior(seasonalKernel(7, 2, seasonalVariance),
-              seasonalBasis(7, 2), kappa),
-          withDiffusePrior(seasonalKernel(29, 1, cycleVariance),
-              seasonalBasis(29, 1), kappa),
-        ];
+      withDiffusePrior(splineKernel(trendVariance), trendBasis(), kappa),
+      withDiffusePrior(
+        seasonalKernel(7, 2, seasonalVariance),
+        seasonalBasis(7, 2),
+        kappa,
+      ),
+      withDiffusePrior(
+        seasonalKernel(29, 1, cycleVariance),
+        seasonalBasis(29, 1),
+        kappa,
+      ),
+    ];
 
     test('each component gets its own share, not just the total', () {
       // Three blocks of different sizes -- two, four and two states -- summed
@@ -144,25 +175,34 @@ void main() {
       final fast = StructuralModel(
         components(),
         measurementVariance: measurementVariance,
-        initialization: const ApproximateDiffuse(variance: diffuseVariance),
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
       ).smooth(observations, grid: grid);
-      final slow = densePosterior(observations, grid.toList(), kernels(),
-          measurementVariance: measurementVariance);
+      final slow = densePosterior(
+        observations,
+        grid.toList(),
+        kernels(),
+        measurementVariance: measurementVariance,
+      );
 
       expect(fast.componentCount, 3);
       for (var b = 0; b < 3; b++) {
         for (var i = 0; i < grid.length; i++) {
-          expect(fast.componentMean(b)[i], closeTo(slow.mean[b][i], 1e-9),
-              reason: 'component $b mean at grid point $i');
           expect(
-              fast.componentVariance(b)[i], closeTo(slow.variance[b][i], 1e-9),
-              reason: 'component $b variance at grid point $i');
+            fast.componentMean(b)[i],
+            closeTo(slow.mean[b][i], 1e-9),
+            reason: 'component $b mean at grid point $i',
+          );
+          expect(
+            fast.componentVariance(b)[i],
+            closeTo(slow.variance[b][i], 1e-9),
+            reason: 'component $b variance at grid point $i',
+          );
         }
       }
 
       for (var i = 0; i < grid.length; i++) {
-        expect(fast.level[i], closeTo(slow.mean[3][i], 1e-9));
-        expect(fast.levelVariance[i], closeTo(slow.variance[3][i], 1e-9));
+        expect(fast.mean[i], closeTo(slow.mean[3][i], 1e-9));
+        expect(fast.variance[i], closeTo(slow.variance[3][i], 1e-9));
       }
     });
 

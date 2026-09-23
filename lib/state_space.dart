@@ -13,29 +13,32 @@
 ///    and the same log marginal likelihood in `O(N)` time and memory.
 ///
 /// For the default [LocalLinearTrend] the implied kernel is the cubic spline
-/// kernel, so the posterior mean is the natural cubic smoothing spline — as a
-/// Bayesian posterior, with honest uncertainty, computed in linear time.
+/// kernel, so the posterior mean is the natural cubic smoothing spline, with a
+/// credible band, computed in linear time.
 ///
 /// ```dart
 /// final data = [
-///   Observation(0, 81.2),
-///   Observation(1, 80.9),
-///   Observation(4, 80.4),   // gaps are not a special case
-///   Observation(4, 80.6),   // neither are duplicate times
+///   Observation(0, 81.3),
+///   Observation(2, 81.0),   // gaps are not a special case
+///   Observation(3, 80.5),
+///   Observation(7, 80.0),
+///   Observation(8, 80.0),
+///   Observation(8, 79.8),   // neither are duplicate times
+///   // ... four weeks of readings in all
 /// ];
 ///
-/// final result = fit(
+/// final fitted = fit(
 ///   StructuralModel.localLinearTrend(processVariance: 1e-3),
 ///   data,
 /// );
-/// final posterior = result.model.smooth(data);
-/// print(posterior.level);              // the trend
-/// print(posterior.credibleInterval(0));  // and how sure it is
+/// print(fitted.warnings);               // empty when the fit is determined
+/// final posterior = fitted.model.smooth(data);
+/// print(posterior.mean);                // the trend
+/// print(posterior.credibleInterval(0)); // and how sure it is
 /// ```
 ///
 /// Missing data needs no filling, irregular sampling needs no resampling, and
-/// two readings at the same instant need no averaging: all three fall out of
-/// the recursion.
+/// two readings at the same instant need no averaging.
 ///
 /// ## Documentation
 ///
@@ -59,11 +62,13 @@ export 'src/components/regression.dart';
 export 'src/components/stochastic_cycle.dart';
 export 'src/components/trigonometric_seasonal.dart';
 export 'src/diagnostics.dart';
-export 'src/engine/matrix_block.dart' show MatrixBlock;
-export 'src/fit/fit.dart' show fit, SearchStart, samplingResolution;
+export 'src/exceptions.dart';
+export 'src/fit/fit.dart' show fit, SearchStart;
 export 'src/fit/penalty.dart';
 export 'src/initialization.dart';
 export 'src/model.dart';
 export 'src/observation.dart';
 export 'src/parameter_spec.dart';
-export 'src/result.dart';
+export 'src/result.dart'
+    hide newCoefficient, newFitResult, newForecastResult, newSmoothingResult;
+export 'src/time_axis.dart';

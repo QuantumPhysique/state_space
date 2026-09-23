@@ -16,19 +16,24 @@ List<Observation> _series(int n, {int seed = 19}) {
   var time = 0.0;
   for (var i = 0; i < n; i++) {
     time += 0.6 + 1.4 * random.nextDouble();
-    final events = (time >= 80 && time < 87 ? -0.4 : 0.0) +
+    final events =
+        (time >= 80 && time < 87 ? -0.4 : 0.0) +
         (time >= 350 && time < 364 ? 1.2 : 0.0);
-    data.add(Observation(
-        time, 70 - 0.002 * time + events + 0.25 * (random.nextDouble() - 0.5),
-        relativeVariance: 0.7 + random.nextDouble()));
+    data.add(
+      Observation(
+        time,
+        70 - 0.002 * time + events + 0.25 * (random.nextDouble() - 0.5),
+        relativeVariance: 0.7 + random.nextDouble(),
+      ),
+    );
   }
   return data;
 }
 
 RegressionComponent _events() => RegressionComponent([
-      IndicatorRegressor('conference', [(from: 80, to: 87)]),
-      IndicatorRegressor('holiday', [(from: 350, to: 364)]),
-    ]);
+  IndicatorRegressor('conference', [(from: 80, to: 87)]),
+  IndicatorRegressor('holiday', [(from: 350, to: 364)]),
+]);
 
 void main() {
   const processVariance = 2e-6;
@@ -43,13 +48,14 @@ void main() {
     // is the corresponding diagonal of `(B' C^-1 B)^-1`.
     final data = _series(330);
     final components = [
-      const LocalLinearTrend(processVariance: processVariance),
+      LocalLinearTrend(processVariance: processVariance),
       _events(),
     ];
     final origin = data.first.time;
     final regressors = _events().regressors;
 
-    Basis basis() => (s) => [
+    Basis basis() =>
+        (s) => [
           1,
           s,
           for (final regressor in regressors) regressor.at(s + origin),
@@ -86,14 +92,22 @@ void main() {
         measurementVariance: measurementVariance,
       ).smooth(data);
 
-      expect(
-          posterior.coefficients.map((c) => c.name), ['conference', 'holiday']);
+      expect(posterior.coefficients.map((c) => c.name), [
+        'conference',
+        'holiday',
+      ]);
       for (var j = 0; j < 2; j++) {
         final coefficient = posterior.coefficients[j];
-        expect(coefficient.estimate, closeTo(dense.estimate[2 + j], 1e-9),
-            reason: coefficient.name);
-        expect(coefficient.variance, closeTo(dense.variance[2 + j], 1e-11),
-            reason: coefficient.name);
+        expect(
+          coefficient.estimate,
+          closeTo(dense.estimate[2 + j], 1e-9),
+          reason: coefficient.name,
+        );
+        expect(
+          coefficient.variance,
+          closeTo(dense.variance[2 + j], 1e-11),
+          reason: coefficient.name,
+        );
       }
     });
 
@@ -115,7 +129,7 @@ void main() {
       // At the first output time the trend's state *is* the pair of flat
       // directions, and its contribution to the signal is the level.
       expect(posterior.componentMean(0)[0], closeTo(dense.estimate[0], 1e-9));
-      expect(posterior.slope![0], closeTo(dense.estimate[1], 1e-9));
+      expect(posterior.trendSlope![0], closeTo(dense.estimate[1], 1e-9));
     });
 
     test('a coefficient reported the same way at every step', () {
@@ -123,19 +137,26 @@ void main() {
       // everywhere, which is why one number is the right thing to report.
       // Worth asserting, because the smoother arrives at each step by a
       // different route.
-      final model =
-          StructuralModel(components, measurementVariance: measurementVariance);
+      final model = StructuralModel(
+        components,
+        measurementVariance: measurementVariance,
+      );
       final plain = model.smooth(data);
-      final onAGrid = model.smooth(data,
-          grid:
-              Float64List.fromList([for (var i = 0; i < 5; i++) data[i].time]));
+      final onAGrid = model.smooth(
+        data,
+        grid: Float64List.fromList([for (var i = 0; i < 5; i++) data[i].time]),
+      );
       for (var j = 0; j < 2; j++) {
-        expect(onAGrid.coefficients[j].estimate,
-            closeTo(plain.coefficients[j].estimate, 1e-12),
-            reason: plain.coefficients[j].name);
-        expect(onAGrid.coefficients[j].variance,
-            closeTo(plain.coefficients[j].variance, 1e-14),
-            reason: plain.coefficients[j].name);
+        expect(
+          onAGrid.coefficients[j].estimate,
+          closeTo(plain.coefficients[j].estimate, 1e-12),
+          reason: plain.coefficients[j].name,
+        );
+        expect(
+          onAGrid.coefficients[j].variance,
+          closeTo(plain.coefficients[j].variance, 1e-14),
+          reason: plain.coefficients[j].name,
+        );
       }
     });
   });

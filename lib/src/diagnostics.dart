@@ -28,18 +28,21 @@ typedef LjungBoxResult = ({
 /// charges for.
 ///
 /// {@category Choosing a model}
-class InnovationDiagnostics {
-  /// Built by `StructuralModel.diagnose`.
+final class InnovationDiagnostics {
+  /// Diagnostics for standardised [residuals] at [times], which must have the
+  /// same length. `StructuralModel.diagnose` builds one from a model; any
+  /// other source of standardised residuals works too.
   InnovationDiagnostics({
-    required this.times,
-    required this.residuals,
-  }) {
+    required Float64List times,
+    required Float64List residuals,
+  }) : times = Float64List.fromList(times).asUnmodifiableView(),
+       residuals = Float64List.fromList(residuals).asUnmodifiableView() {
     if (times.length != residuals.length) {
       throw ArgumentError('times and residuals must have the same length');
     }
   }
 
-  /// Time of each residual, ascending. The first few observations are absent:
+  /// Time of each residual, ascending, as a read-only view. The first few observations are absent:
   /// they are spent locating the flat directions.
   final Float64List times;
 
@@ -107,7 +110,10 @@ class InnovationDiagnostics {
   double autocorrelation(int lag) {
     if (lag < 1 || lag >= count) {
       throw ArgumentError.value(
-          lag, 'lag', 'must be between 1 and ${count - 1}');
+        lag,
+        'lag',
+        'must be between 1 and ${count - 1}',
+      );
     }
     final centre = mean;
     var cross = 0.0;
@@ -145,18 +151,26 @@ class InnovationDiagnostics {
       throw ArgumentError.value(lags, 'lags', 'must be at least 1');
     }
     if (lags >= count) {
-      throw ArgumentError.value(lags, 'lags',
-          'must be fewer than the $count residuals there are to test');
+      throw ArgumentError.value(
+        lags,
+        'lags',
+        'must be fewer than the $count residuals there are to test',
+      );
     }
     if (fittedParameters < 0) {
       throw ArgumentError.value(
-          fittedParameters, 'fittedParameters', 'cannot be negative');
+        fittedParameters,
+        'fittedParameters',
+        'cannot be negative',
+      );
     }
     final degreesOfFreedom = lags - fittedParameters;
     if (degreesOfFreedom < 1) {
-      throw ArgumentError('$lags lags cannot absorb $fittedParameters fitted '
-          'parameters; ask for more lags than parameters, or the test has '
-          'nothing left to measure');
+      throw ArgumentError(
+        '$lags lags cannot absorb $fittedParameters fitted '
+        'parameters; ask for more lags than parameters, or the test has '
+        'nothing left to measure',
+      );
     }
 
     final centre = mean;

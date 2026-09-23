@@ -3,15 +3,14 @@ import 'dart:typed_data';
 
 import '../component.dart';
 import '../engine/matrix_block.dart';
+import '../exceptions.dart';
 import '../parameter_spec.dart';
 import 'stationary.dart';
 
 /// How many times the process is differentiable, in the usual `nu` notation.
 ///
-/// Only the half-integer orders have a finite-dimensional state-space form, and
-/// only these three are small enough to be worth having: `nu = 7/2` costs a
-/// fourth state to buy a smoothness nobody can tell apart from the fifth-order
-/// one on real data.
+/// Only the half-integer orders have a finite-dimensional state-space form;
+/// these are the three smallest.
 enum MaternOrder {
   /// `nu = 1/2`: the Ornstein-Uhlenbeck process. Continuous, nowhere
   /// differentiable, and the exact continuous-time analogue of an AR(1).
@@ -42,36 +41,37 @@ enum MaternOrder {
 /// a = sqrt(2 nu) |tau| / lengthScale
 /// ```
 ///
-/// This is the first component in the package that is **stationary**, and the
-/// distinction is not a technicality. A trend or a seasonal has no prior of its
-/// own: where the level sits, and where the pattern sits in its cycle, are
-/// questions only the data can answer, and the engine handles them as flat
-/// directions. A Matérn process has an answer built in — it hovers around zero
-/// with variance [variance] and forgets where it has been over about
-/// [lengthScale] — so it needs no diffuse states at all and contributes none.
+/// The class is spelled without the accent because Dart identifiers are
+/// ASCII.
 ///
-/// That makes it the right shape for a component that is a *deviation* rather
-/// than a level: put it alongside a `LocalLinearTrend` and it absorbs the
-/// correlated wobble the trend should not be chasing, leaving the trend to be a
-/// trend. Water retention in a body-weight series is the motivating case, and
-/// `nu = 1/2` is exactly the AR(1) such a series wants.
+/// The process is **stationary**: it hovers around zero with variance
+/// [variance] and forgets where it has been over about [lengthScale], so it
+/// has a proper prior and no diffuse states. Alongside a `LocalLinearTrend` it
+/// absorbs short-lived correlated deviations, such as water retention in a
+/// body-weight series, that the trend would otherwise chase; `nu = 1/2` is the
+/// continuous-time AR(1).
 ///
-/// The order also decides how rough the curve is allowed to be, which is the
-/// modelling choice a reader should actually make. The cubic spline of
-/// `LocalLinearTrend` assumes a trend with a continuous derivative;
-/// `nu = 1/2` assumes nothing of the sort and will happily produce a path with
-/// visible corners. Body weight is arguably closer to the second, which is
-/// worth knowing before reaching automatically for the spline.
+/// The order sets how rough the path may be: `nu = 1/2` produces visible
+/// corners, `nu = 5/2` a curve with two continuous derivatives.
+///
+/// Beside a trend it can also take over the measurement noise: when the
+/// readings carry correlated day-to-day variation, the likelihood can prefer
+/// a Matérn with a large variance and a fitted noise level near zero. Pass
+/// `minimumMeasurementVariance` to [fit] at what the instrument can resolve
+/// whenever a Matérn is in the model; [FitResult.warnings] says when this has
+/// happened.
 ///
 /// Two parameters, and only one of them is a variance: see [parameterSpecs].
 /// [lengthScale] is in the caller's time unit, so the bracket it is searched
 /// over depends on that unit and can be set with [lengthScaleBounds].
 ///
 /// {@category Components}
-class Matern extends Component {
-  /// Validates rather than asserts, for the same reason
-  /// `TrigonometricSeasonal` does: a length scale far outside its bracket
-  /// produces a confident wrong answer rather than an obvious failure.
+final class Matern extends Component {
+  /// A Matérn process of the given [order], [variance] and [lengthScale].
+  ///
+  /// [variance] and [lengthScale] must be finite and positive, and
+  /// [lengthScaleBounds] a positive increasing range: the bracket [fit]
+  /// searches the length scale over.
   Matern({
     required this.order,
     required this.variance,
@@ -80,16 +80,25 @@ class Matern extends Component {
   }) {
     if (!(variance > 0) || !variance.isFinite) {
       throw ArgumentError.value(
-          variance, 'variance', 'must be finite and positive');
+        variance,
+        'variance',
+        'must be finite and positive',
+      );
     }
     if (!(lengthScale > 0) || !lengthScale.isFinite) {
       throw ArgumentError.value(
-          lengthScale, 'lengthScale', 'must be finite and positive');
+        lengthScale,
+        'lengthScale',
+        'must be finite and positive',
+      );
     }
     final (:lower, :upper) = lengthScaleBounds;
     if (!(lower > 0) || !(lower < upper) || !upper.isFinite) {
-      throw ArgumentError.value(lengthScaleBounds, 'lengthScaleBounds',
-          'must be a positive increasing range');
+      throw ArgumentError.value(
+        lengthScaleBounds,
+        'lengthScaleBounds',
+        'must be a positive increasing range',
+      );
     }
   }
 
@@ -97,49 +106,46 @@ class Matern extends Component {
   factory Matern.oneHalf({
     required double variance,
     required double lengthScale,
-    ({
-      double lower,
-      double upper
-    }) lengthScaleBounds = const (lower: 1e-2, upper: 1e4),
-  }) =>
-      Matern(
-        order: MaternOrder.oneHalf,
-        variance: variance,
-        lengthScale: lengthScale,
-        lengthScaleBounds: lengthScaleBounds,
-      );
+    ({double lower, double upper}) lengthScaleBounds = const (
+      lower: 1e-2,
+      upper: 1e4,
+    ),
+  }) => Matern(
+    order: MaternOrder.oneHalf,
+    variance: variance,
+    lengthScale: lengthScale,
+    lengthScaleBounds: lengthScaleBounds,
+  );
 
   /// `nu = 3/2`, two states: once differentiable, and the usual default.
   factory Matern.threeHalves({
     required double variance,
     required double lengthScale,
-    ({
-      double lower,
-      double upper
-    }) lengthScaleBounds = const (lower: 1e-2, upper: 1e4),
-  }) =>
-      Matern(
-        order: MaternOrder.threeHalves,
-        variance: variance,
-        lengthScale: lengthScale,
-        lengthScaleBounds: lengthScaleBounds,
-      );
+    ({double lower, double upper}) lengthScaleBounds = const (
+      lower: 1e-2,
+      upper: 1e4,
+    ),
+  }) => Matern(
+    order: MaternOrder.threeHalves,
+    variance: variance,
+    lengthScale: lengthScale,
+    lengthScaleBounds: lengthScaleBounds,
+  );
 
   /// `nu = 5/2`, three states: twice differentiable.
   factory Matern.fiveHalves({
     required double variance,
     required double lengthScale,
-    ({
-      double lower,
-      double upper
-    }) lengthScaleBounds = const (lower: 1e-2, upper: 1e4),
-  }) =>
-      Matern(
-        order: MaternOrder.fiveHalves,
-        variance: variance,
-        lengthScale: lengthScale,
-        lengthScaleBounds: lengthScaleBounds,
-      );
+    ({double lower, double upper}) lengthScaleBounds = const (
+      lower: 1e-2,
+      upper: 1e4,
+    ),
+  }) => Matern(
+    order: MaternOrder.fiveHalves,
+    variance: variance,
+    lengthScale: lengthScale,
+    lengthScaleBounds: lengthScaleBounds,
+  );
 
   /// Which half-integer smoothness this is.
   final MaternOrder order;
@@ -153,7 +159,7 @@ class Matern extends Component {
   /// Not a correlation *time* in the half-life sense: the convention
   /// `a = sqrt(2 nu) |tau| / lengthScale` makes the three orders comparable, so
   /// a length scale of ten days means about the same amount of memory whichever
-  /// order is used, which is the point of the convention.
+  /// order is used.
   final double lengthScale;
 
   /// Range the fit searches [lengthScale] over, in the caller's time unit.
@@ -179,11 +185,6 @@ class Matern extends Component {
       lengthScale;
 
   /// The covariance function, `k(tau)`.
-  ///
-  /// Exposed because it is the object a reader coming from the Gaussian
-  /// process literature is looking for, and because the whole claim of the
-  /// package is that the recursion computes the same thing. The reference test
-  /// builds an `O(N^3)` dense posterior from this and checks it agrees.
   double covariance(double lag) {
     final a = rate * lag.abs();
     return variance *
@@ -203,44 +204,41 @@ class Matern extends Component {
 
   @override
   List<ParameterSpec> get parameterSpecs => [
-        const VarianceParameter(),
-        ShapeParameter(
-          label: 'length scale',
-          lower: math.log(lengthScaleBounds.lower),
-          upper: math.log(lengthScaleBounds.upper),
-        ),
-      ];
+    const VarianceParameter(),
+    ShapeParameter(
+      label: 'length scale',
+      lower: math.log(lengthScaleBounds.lower),
+      upper: math.log(lengthScaleBounds.upper),
+    ),
+  ];
 
   /// Raises the length-scale bracket to the sampling interval.
   ///
   /// Below one gap between readings a Matérn is indistinguishable from white
-  /// noise, and — this is the part worth stating — the likelihood *prefers*
-  /// that corner, because taking the measurement error for itself explains the
-  /// data slightly better than leaving it alone. See
-  /// [Component.parameterSpecsAt] for the measurement.
-  ///
-  /// One gap rather than two: a Matérn of length scale equal to the sampling
-  /// interval still has a correlation of `exp(-sqrt(2 nu))` between
-  /// neighbouring readings, which is a real thing the data can see, unlike a
-  /// cycle at the Nyquist period.
+  /// noise, and the likelihood prefers that corner; see
+  /// [Component.parameterSpecsAt]. At one gap neighbouring readings still
+  /// correlate by `exp(-sqrt(2 nu))`, which the data can see.
   @override
   List<ParameterSpec> parameterSpecsAt({required double resolution}) {
     if (!(resolution > 0)) return parameterSpecs;
     final floor = math.max(lengthScaleBounds.lower, resolution);
     final upper = lengthScaleBounds.upper;
     if (!(floor < upper)) {
-      throw ArgumentError('a Matern length scale is bracketed at '
-          '[${lengthScaleBounds.lower}, $upper], but the readings are '
-          '$resolution apart, and a length scale below one sampling interval '
-          'is measurement noise rather than a separate component. Widen '
-          'lengthScaleBounds or drop the component.');
+      throw UnderdeterminedModelException(
+        'a Matern length scale is bracketed at '
+        '[${lengthScaleBounds.lower}, $upper], but the readings are '
+        '$resolution apart, and a length scale below one sampling interval '
+        'is measurement noise rather than a separate component. Widen '
+        'lengthScaleBounds or drop the component.',
+      );
     }
     return [
       const VarianceParameter(),
       ShapeParameter(
-          label: 'length scale',
-          lower: math.log(floor),
-          upper: math.log(upper)),
+        label: 'length scale',
+        lower: math.log(floor),
+        upper: math.log(upper),
+      ),
     ];
   }
 
@@ -291,13 +289,10 @@ class Matern extends Component {
   /// Over a very short gap the two terms very nearly cancel — `Q(0,0)` is
   /// `O(dt^3)` for `nu = 3/2` and `O(dt^5)` for `nu = 5/2`, while the terms it
   /// is built from are `O(1)` — so below [_seriesBelow] the integral form is
-  /// summed directly instead. That is not a refinement: computed the other way
-  /// `Q(0,0)` has no correct digits at all once `rate * dt` falls under about
-  /// `6e-6` for `nu = 3/2` or `6e-4` for `nu = 5/2`, and it comes out
-  /// *negative* not much further down, which costs `Q` its positive
-  /// semi-definiteness. The absolute error is only a few units in the last
-  /// place of `variance`, which is why this went unnoticed; the sign is the
-  /// part that matters.
+  /// summed directly instead. Computed the other way `Q(0,0)` has no correct
+  /// digits once `rate * dt` falls under about `6e-6` for `nu = 3/2` or `6e-4`
+  /// for `nu = 5/2`, and it comes out *negative* not much further down, which
+  /// costs `Q` its positive semi-definiteness.
   ///
   /// Which gaps are small enough to reach depends on the caller's time unit
   /// and not on anything the component can see — `rate * dt` is `1.7e-5` for a
@@ -332,9 +327,14 @@ class Matern extends Component {
         // [-1/3, 0, 1]]: the derivative has variance rate^2 / 3, and a value
         // and its second derivative are negatively correlated, which is what
         // stops a twice-differentiable path from curving away forever.
-        double form(double x0, double x1, double x2, double y0, double y1,
-                double y2) =>
-            x0 * y0 + x1 * y1 / 3 + x2 * y2 - (x0 * y2 + x2 * y0) / 3;
+        double form(
+          double x0,
+          double x1,
+          double x2,
+          double y0,
+          double y1,
+          double y2,
+        ) => x0 * y0 + x1 * y1 / 3 + x2 * y2 - (x0 * y2 + x2 * y0) / 3;
         final g00 = 1 - decay * form(a0, a1, a2, a0, a1, a2);
         final g01 = -decay * form(a0, a1, a2, b0, b1, b2);
         final g02 = -1 / 3 - decay * form(a0, a1, a2, c0, c1, c2);
@@ -446,19 +446,13 @@ class Matern extends Component {
     }
   }
 
-  /// For a stationary component this is the exact quantity `Component.wanderOver`
-  /// defines, and it has a closed form only for `nu = 1/2`. It is integrated
-  /// numerically instead — a few hundred kernel evaluations, once per penalty
-  /// evaluation, against a forward pass that costs far more.
+  /// Integrated numerically from [covariance]; only `nu = 1/2` has a closed
+  /// form.
   @override
   double wanderOver(double span) => stationaryWander(covariance, span);
 
-  /// An unobserved [order] beyond `nu = 1/2` carries derivatives, and the
-  /// first of them is the rate of change of the component's own contribution.
-  ///
-  /// `nu = 1/2` has none to report, and that is not an oversight: an
-  /// Ornstein-Uhlenbeck path is nowhere differentiable, so there is no slope
-  /// for the smoother to estimate.
+  /// The derivative state for `nu = 3/2` and `5/2`. An Ornstein-Uhlenbeck
+  /// path (`nu = 1/2`) is nowhere differentiable, so it has none.
   @override
   int? get rateStateIndex => order == MaternOrder.oneHalf ? null : 1;
 
@@ -468,14 +462,30 @@ class Matern extends Component {
 
   @override
   Component withParameters(Float64List theta) => Matern(
-        order: order,
-        variance: math.exp(theta[0]),
-        lengthScale: math.exp(theta[1]),
-        lengthScaleBounds: lengthScaleBounds,
-      );
+    order: order,
+    variance: math.exp(theta[0]),
+    lengthScale: math.exp(theta[1]),
+    lengthScaleBounds: lengthScaleBounds,
+  );
 
   @override
-  String toString() => 'Matern(order: ${order.name}, variance: $variance, '
+  String get name => 'Matern';
+
+  @override
+  bool operator ==(Object other) =>
+      other is Matern &&
+      other.order == order &&
+      other.variance == variance &&
+      other.lengthScale == lengthScale &&
+      other.lengthScaleBounds == lengthScaleBounds;
+
+  @override
+  int get hashCode =>
+      Object.hash(Matern, order, variance, lengthScale, lengthScaleBounds);
+
+  @override
+  String toString() =>
+      'Matern(order: ${order.name}, variance: $variance, '
       'lengthScale: $lengthScale)';
 }
 

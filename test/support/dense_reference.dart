@@ -21,9 +21,9 @@ typedef Basis = List<double> Function(double s);
 
 /// The cubic spline kernel of a [LocalLinearTrend], driving noise only.
 Kernel splineKernel(double processVariance) => (s, t) {
-      final m = math.min(s, t);
-      return processVariance * (m * m * m / 3 + m * m * (s - t).abs() / 2);
-    };
+  final m = math.min(s, t);
+  return processVariance * (m * m * m / 3 + m * m * (s - t).abs() / 2);
+};
 
 /// The kernel of a [TrigonometricSeasonal], driving noise only.
 ///
@@ -77,34 +77,36 @@ Kernel cycleKernel(double period, double damping, double stationaryVariance) =>
           math.cos(2 * math.pi * lag / period);
     };
 
-Basis trendBasis() => (s) => [1, s];
+Basis trendBasis() =>
+    (s) => [1, s];
 
-Basis seasonalBasis(double period, int harmonics) => (s) => [
+Basis seasonalBasis(double period, int harmonics) =>
+    (s) => [
       for (var j = 1; j <= harmonics; j++) ...[
         math.cos(2 * math.pi * j / period * s),
         math.sin(2 * math.pi * j / period * s),
-      ]
+      ],
     ];
 
 /// Adds the contribution of a wide proper prior on the flat directions, which
 /// is what [ApproximateDiffuse] actually puts there.
 Kernel withDiffusePrior(Kernel driving, Basis basis, double kappa) => (s, t) {
-      final bs = basis(s);
-      final bt = basis(t);
-      var prior = 0.0;
-      for (var k = 0; k < bs.length; k++) {
-        prior += bs[k] * bt[k];
-      }
-      return driving(s, t) + kappa * prior;
-    };
+  final bs = basis(s);
+  final bt = basis(t);
+  var prior = 0.0;
+  for (var k = 0; k < bs.length; k++) {
+    prior += bs[k] * bt[k];
+  }
+  return driving(s, t) + kappa * prior;
+};
 
 Kernel sumOf(List<Kernel> parts) => (s, t) {
-      var total = 0.0;
-      for (final part in parts) {
-        total += part(s, t);
-      }
-      return total;
-    };
+  var total = 0.0;
+  for (final part in parts) {
+    total += part(s, t);
+  }
+  return total;
+};
 
 /// Posterior of every component at [queries], the textbook `O(N^3)` way.
 ///
@@ -113,11 +115,8 @@ Kernel sumOf(List<Kernel> parts) => (s, t) {
 /// with `k_i` that component's own kernel and `C` built from the sum. That
 /// decomposition is the definition the filter's per-component output has to
 /// match, and it is the part a trend/seasonal confounding bug hides behind.
-({
-  List<List<double>> mean,
-  List<List<double>> variance,
-  double logLikelihood,
-}) densePosterior(
+({List<List<double>> mean, List<List<double>> variance, double logLikelihood})
+densePosterior(
   List<Observation> data,
   List<double> queries,
   List<Kernel> kernels, {
@@ -137,8 +136,8 @@ Kernel sumOf(List<Kernel> parts) => (s, t) {
       [
         for (var j = 0; j < n; j++)
           total(times[i], times[j]) +
-              (i == j ? data[i].relativeVariance * measurementVariance : 0.0)
-      ]
+              (i == j ? data[i].relativeVariance * measurementVariance : 0.0),
+      ],
   ];
 
   final rhs = <List<double>>[
@@ -147,7 +146,7 @@ Kernel sumOf(List<Kernel> parts) => (s, t) {
         data[i].value,
         for (final kernel in all)
           for (final q in shifted) kernel(q, times[i]),
-      ]
+      ],
   ];
 
   final factor = Matrix64.fromRows(c).cholesky();
@@ -204,7 +203,8 @@ Kernel sumOf(List<Kernel> parts) => (s, t) {
   double logDeterminant,
   List<double> estimate,
   List<double> variance,
-}) restrictedLikelihood(
+})
+restrictedLikelihood(
   List<Observation> data,
   Kernel kernel,
   Basis basis, {
@@ -221,11 +221,11 @@ Kernel sumOf(List<Kernel> parts) => (s, t) {
       [
         for (var j = 0; j < n; j++)
           kernel(times[i], times[j]) +
-              (i == j ? data[i].relativeVariance * measurementVariance : 0.0)
-      ]
+              (i == j ? data[i].relativeVariance * measurementVariance : 0.0),
+      ],
   ];
   final rhs = <List<double>>[
-    for (var i = 0; i < n; i++) [data[i].value, ...design[i]]
+    for (var i = 0; i < n; i++) [data[i].value, ...design[i]],
   ];
 
   final factor = Matrix64.fromRows(c).cholesky();
@@ -255,17 +255,20 @@ Kernel sumOf(List<Kernel> parts) => (s, t) {
   // diagonal of `M^-1` comes back alongside it -- that is the posterior
   // variance of each flat direction under the flat prior, and it is what a
   // reported standard error has to match.
-  final solvedSystem = m.solve(Matrix64.fromRows([
-    for (var k = 0; k < d; k++)
-      [projected[k], for (var l = 0; l < d; l++) k == l ? 1.0 : 0.0]
-  ]));
+  final solvedSystem = m.solve(
+    Matrix64.fromRows([
+      for (var k = 0; k < d; k++)
+        [projected[k], for (var l = 0; l < d; l++) k == l ? 1.0 : 0.0],
+    ]),
+  );
   var explained = 0.0;
   for (var k = 0; k < d; k++) {
     explained += projected[k] * solvedSystem(k, 0);
   }
 
   return (
-    logLikelihood: -0.5 *
+    logLikelihood:
+        -0.5 *
         ((n - d) * math.log(2 * math.pi) +
             logDeterminant +
             informationLogDeterminant +

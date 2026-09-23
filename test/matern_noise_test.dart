@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:state_space/state_space.dart';
+import 'package:state_space/authoring.dart';
 import 'package:test/test.dart';
 
 /// `Q(dt) = P_inf - A(dt) P_inf A(dt)'` is a difference of two quantities of
@@ -34,19 +34,21 @@ void main() {
 
   group('the process noise survives a short gap', () {
     for (final order in MaternOrder.values) {
-      test('${order.name}: Q(0,0) keeps its leading term down to dt = 1e-9',
-          () {
-        final m = Matern(order: order, variance: 1, lengthScale: 10);
-        for (final dt in [1e-2, 1e-3, 1e-5, 1e-7, 1e-9]) {
-          final q = at(m, dt, 0, 0);
-          final leading = leadingQ00(m, dt);
-          // The leading term is only the first of a series in u = rate * dt,
-          // so allow the next order — and nothing more. Written the old way
-          // this was 745 times too large at dt = 1e-3.
-          final slack = leading * (3 * m.rate * dt + 1e-12);
-          expect(q, closeTo(leading, slack), reason: 'dt = $dt');
-        }
-      });
+      test(
+        '${order.name}: Q(0,0) keeps its leading term down to dt = 1e-9',
+        () {
+          final m = Matern(order: order, variance: 1, lengthScale: 10);
+          for (final dt in [1e-2, 1e-3, 1e-5, 1e-7, 1e-9]) {
+            final q = at(m, dt, 0, 0);
+            final leading = leadingQ00(m, dt);
+            // The leading term is only the first of a series in u = rate * dt,
+            // so allow the next order — and nothing more. Written the old way
+            // this was 745 times too large at dt = 1e-3.
+            final slack = leading * (3 * m.rate * dt + 1e-12);
+            expect(q, closeTo(leading, slack), reason: 'dt = $dt');
+          }
+        },
+      );
 
       test('${order.name}: Q stays positive semi-definite', () {
         final m = Matern(order: order, variance: 1, lengthScale: 10);
@@ -59,7 +61,7 @@ void main() {
           for (var k = 1; k <= n; k++) {
             final a = [
               for (var i = 0; i < k; i++)
-                [for (var j = 0; j < k; j++) block.at(i, j)]
+                [for (var j = 0; j < k; j++) block.at(i, j)],
             ];
             var determinant = 1.0;
             for (var c = 0; c < k; c++) {
@@ -75,8 +77,11 @@ void main() {
                 }
               }
             }
-            expect(determinant, greaterThanOrEqualTo(0.0),
-                reason: '${order.name}, dt = $dt, leading minor $k');
+            expect(
+              determinant,
+              greaterThanOrEqualTo(0.0),
+              reason: '${order.name}, dt = $dt, leading minor $k',
+            );
           }
         }
       });
@@ -89,8 +94,11 @@ void main() {
           for (var j = 0; j < m.stateDim; j++) {
             final below = at(m, boundary * (1 - 1e-9), i, j);
             final above = at(m, boundary * (1 + 1e-9), i, j);
-            expect(below, closeTo(above, 1e-8 * math.max(above.abs(), 1e-30)),
-                reason: 'entry ($i, $j)');
+            expect(
+              below,
+              closeTo(above, 1e-8 * math.max(above.abs(), 1e-30)),
+              reason: 'entry ($i, $j)',
+            );
           }
         }
       });
@@ -101,16 +109,15 @@ void main() {
       // is where the closed form had about one correct digit.
       final data = [
         for (var i = 0; i < 200; i++)
-          Observation(i.toDouble(), 80 + math.sin(i / 40) + 0.01 * (i % 7))
+          Observation(i.toDouble(), 80 + math.sin(i / 40) + 0.01 * (i % 7)),
       ];
-      final model = StructuralModel(
-        [Matern.threeHalves(variance: 1, lengthScale: 1e5)],
-        measurementVariance: 0.01,
-      );
+      final model = StructuralModel([
+        Matern.threeHalves(variance: 1, lengthScale: 1e5),
+      ], measurementVariance: 0.01);
       final posterior = model.smooth(data);
       expect(posterior.logMarginalLikelihood.isFinite, isTrue);
       for (var i = 0; i < posterior.length; i++) {
-        expect(posterior.levelVariance[i], greaterThanOrEqualTo(0.0));
+        expect(posterior.variance[i], greaterThanOrEqualTo(0.0));
       }
     });
   });

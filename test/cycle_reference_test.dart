@@ -12,8 +12,13 @@ List<Observation> _series(int n, {int seed = 23}) {
   var time = 0.0;
   for (var i = 0; i < n; i++) {
     time += 0.5 + 1.1 * random.nextDouble();
-    data.add(Observation(time, 0.7 * math.cos(2 * math.pi * time / 9 + 0.4),
-        relativeVariance: 0.7 + random.nextDouble()));
+    data.add(
+      Observation(
+        time,
+        0.7 * math.cos(2 * math.pi * time / 9 + 0.4),
+        relativeVariance: 0.7 + random.nextDouble(),
+      ),
+    );
   }
   return data;
 }
@@ -35,9 +40,10 @@ void main() {
     test('likelihood, posterior mean and variance', () {
       final model = StructuralModel([
         StochasticCycle(
-            period: period,
-            damping: damping,
-            stationaryVariance: stationaryVariance)
+          period: period,
+          damping: damping,
+          stationaryVariance: stationaryVariance,
+        ),
       ], measurementVariance: measurementVariance);
       final posterior = model.smooth(data);
 
@@ -49,35 +55,49 @@ void main() {
       );
 
       expect(
-          posterior.logMarginalLikelihood, closeTo(dense.logLikelihood, 1e-9));
+        posterior.logMarginalLikelihood,
+        closeTo(dense.logLikelihood, 1e-9),
+      );
       for (var i = 0; i < data.length; i++) {
-        expect(posterior.level[i], closeTo(dense.mean[0][i], 1e-10),
-            reason: 'mean at $i');
-        expect(posterior.levelVariance[i], closeTo(dense.variance[0][i], 1e-11),
-            reason: 'variance at $i');
+        expect(
+          posterior.mean[i],
+          closeTo(dense.mean[0][i], 1e-10),
+          reason: 'mean at $i',
+        );
+        expect(
+          posterior.variance[i],
+          closeTo(dense.variance[0][i], 1e-11),
+          reason: 'variance at $i',
+        );
       }
     });
 
     test('and between the readings, where the phase has to be carried', () {
       final grid = [for (var i = 0; i <= 60; i++) 2.4 + i * 1.37];
-      final posterior = StructuralModel([
-        StochasticCycle(
+      final posterior = StructuralModel(
+        [
+          StochasticCycle(
             period: period,
             damping: damping,
-            stationaryVariance: stationaryVariance)
-      ], measurementVariance: measurementVariance)
-          .smooth(data, grid: Float64List.fromList(grid));
-      final dense = densePosterior(
-        data,
-        grid,
-        [cycleKernel(period, damping, stationaryVariance)],
+            stationaryVariance: stationaryVariance,
+          ),
+        ],
         measurementVariance: measurementVariance,
-      );
+      ).smooth(data, grid: Float64List.fromList(grid));
+      final dense = densePosterior(data, grid, [
+        cycleKernel(period, damping, stationaryVariance),
+      ], measurementVariance: measurementVariance);
       for (var i = 0; i < grid.length; i++) {
-        expect(posterior.level[i], closeTo(dense.mean[0][i], 1e-10),
-            reason: 'mean at ${grid[i]}');
-        expect(posterior.levelVariance[i], closeTo(dense.variance[0][i], 1e-11),
-            reason: 'variance at ${grid[i]}');
+        expect(
+          posterior.mean[i],
+          closeTo(dense.mean[0][i], 1e-10),
+          reason: 'mean at ${grid[i]}',
+        );
+        expect(
+          posterior.variance[i],
+          closeTo(dense.variance[0][i], 1e-11),
+          reason: 'variance at ${grid[i]}',
+        );
       }
     });
   });
@@ -90,11 +110,12 @@ void main() {
       final data = _series(180, seed: 31);
       const processVariance = 2e-5;
       final model = StructuralModel([
-        const LocalLinearTrend(processVariance: processVariance),
+        LocalLinearTrend(processVariance: processVariance),
         StochasticCycle(
-            period: period,
-            damping: damping,
-            stationaryVariance: stationaryVariance),
+          period: period,
+          damping: damping,
+          stationaryVariance: stationaryVariance,
+        ),
       ], measurementVariance: measurementVariance);
 
       final dense = restrictedLikelihood(
@@ -107,8 +128,10 @@ void main() {
         measurementVariance: measurementVariance,
       );
 
-      expect(model.smooth(data).logMarginalLikelihood,
-          closeTo(dense.logLikelihood, 1e-9));
+      expect(
+        model.smooth(data).logMarginalLikelihood,
+        closeTo(dense.logLikelihood, 1e-9),
+      );
     });
   });
 }

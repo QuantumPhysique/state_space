@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../component.dart';
+import '../exceptions.dart';
 import '../initialization.dart';
 import 'cholesky.dart';
 import 'kalman.dart';
@@ -48,17 +49,20 @@ FilterResult forwardPass(
 /// loops unrolled and the state held in local doubles instead of typed arrays
 /// — no bounds checks, no block offsets, no matrix views.
 ///
-/// It exists because [fit] runs a forward pass per likelihood evaluation, some
-/// fifty times per call, while the backward pass runs once. Optimising the
-/// backward pass would be optimising the wrong half, so it is left generic.
+/// [fit] runs a forward pass per likelihood evaluation, dozens to hundreds of
+/// times per call, while the backward pass runs once, so only the forward
+/// pass is specialised.
 ///
 /// **This is an optimisation, and it is never load-bearing.** The generic
-/// engine came first, is what the golden and dense-Gaussian-process tests
-/// validate, and remains the definition of what the answer is. This path is
-/// held to it by `fast_path_equivalence_test.dart`, which asserts agreement to
-/// 1e-12 across irregular gaps, repeated timestamps, missing observations and
-/// both initialisations. If the two ever disagree, this one is wrong.
+/// engine is what the golden and dense-Gaussian-process tests validate and
+/// defines the answer. `fast_path_equivalence_test.dart` holds this path to it
+/// to 1e-12 across irregular gaps, repeated timestamps, missing observations
+/// and both initialisations. Under a very wide approximate prior on a series
+/// with extreme gaps (1e-9 and 1000 time units in one series) the two agree
+/// only to a few parts in a million in the log-likelihood, which is the
+/// rounding that prior costs either engine.
 class FastPath2x2 {
+  /// A forward pass for [component], which [handles] must accept.
   FastPath2x2(
     this.component, {
     required this.measurementVariance,
@@ -73,7 +77,9 @@ class FastPath2x2 {
   /// one-column sensitivity in unrolled scalars would double this file to
   /// serve a case nothing yet produces.
   static bool handles(
-      List<Component> components, Initialization initialization) {
+    List<Component> components,
+    Initialization initialization,
+  ) {
     if (components.length != 1) return false;
     final component = components.single;
     if (component.stateDim != 2) return false;
@@ -82,8 +88,13 @@ class FastPath2x2 {
     return diffuse[0] && diffuse[1];
   }
 
+  /// The model's single component.
   final Component component;
+
+  /// Noise variance of an observation of unit relative variance.
   final double measurementVariance;
+
+  /// The prior on the first step's state.
   final Initialization initialization;
   final bool _exact;
 
@@ -117,22 +128,28 @@ class FastPath2x2 {
   }
 
   /// The same contract as [KalmanFilter.run].
-  FilterResult run(Timeline timeline,
-      {bool keepHistory = false, bool keepResiduals = false}) {
+  FilterResult run(
+    Timeline timeline, {
+    bool keepHistory = false,
+    bool keepResiduals = false,
+  }) {
     final steps = timeline.length;
     final dim = _exact ? 2 : 0;
-    final pieces =
-        keepResiduals ? ResidualPieces(timeline.observationCount, dim) : null;
+    final pieces = keepResiduals
+        ? ResidualPieces(timeline.observationCount, dim)
+        : null;
     final loading = Float64List(dim);
 
     final stateMean = keepHistory ? Float64List(steps * 2) : null;
     final filteredCov = keepHistory ? Float64List(steps * 4) : null;
     final predictedMean = keepHistory ? Float64List(steps * 2) : null;
     final predictedCov = keepHistory ? Float64List(steps * 4) : null;
-    final stateSensitivity =
-        keepHistory && _exact ? Float64List(steps * 4) : null;
-    final predictedSensitivity =
-        keepHistory && _exact ? Float64List(steps * 4) : null;
+    final stateSensitivity = keepHistory && _exact
+        ? Float64List(steps * 4)
+        : null;
+    final predictedSensitivity = keepHistory && _exact
+        ? Float64List(steps * 4)
+        : null;
 
     // Prior. Under exact initialisation the flat directions carry no variance
     // at all; under the approximate one they carry a wide proper prior.
@@ -171,7 +188,7 @@ class FastPath2x2 {
     final burn = _exact
         ? 0
         : (component.diffuseStates[0] ? 1 : 0) +
-            (component.diffuseStates[1] ? 1 : 0);
+              (component.diffuseStates[1] ? 1 : 0);
     var seen = 0;
     var used = 0;
     var sumLogS = 0.0;
@@ -232,8 +249,9 @@ class FastPath2x2 {
         final ph1 = p01 * h0 + p11 * h1;
         final s = h0 * ph0 + h1 * ph1 + r;
         if (!(s > 0) || !s.isFinite) {
-          throw StateError('Innovation variance $s at time ${timeline.times[t]}'
-              ' is not positive. The model has become numerically degenerate.');
+          throw NumericalBreakdownException(
+            innovationVarianceMessage(s, r, timeline.times[t]),
+          );
         }
         final k0 = ph0 / s;
         final k1 = ph1 / s;
@@ -304,13 +322,10 @@ class FastPath2x2 {
       // means the two engines agree on the diffuse estimate to the last bit
       // instead of merely to twelve digits.
       final information = Float64List.fromList([m00, m01, m01, m11]);
-      if (!choleskyFactor(information, 2)) {
-        throw StateError(singularDiffuseMessage(
-            [component],
-            2,
-            timeline.observationCount,
-            timeline.times[0],
-            timeline.times[steps - 1]));
+      if (timeline.observationCount < 2 || !factorInformation(information, 2)) {
+        throw UnderdeterminedModelException(
+          singularDiffuseMessage([component], 2, timeline),
+        );
       }
       diffuseLogDeterminant =
           2 * (math.log(information[0]) + math.log(information[3]));
@@ -328,13 +343,15 @@ class FastPath2x2 {
       used = timeline.observationCount - 2;
     }
 
-    final residuals =
-        pieces == null ? null : recursiveResiduals(pieces, burnIn: burn);
+    final residuals = pieces == null
+        ? null
+        : recursiveResiduals(pieces, burnIn: burn);
 
     return FilterResult(
       stateDim: 2,
       stepCount: steps,
-      logLikelihood: -0.5 *
+      logLikelihood:
+          -0.5 *
           (used * _log2pi + sumLogS + sumWeighted + diffuseLogDeterminant),
       sumLogInnovationVariance: sumLogS,
       sumWeightedSquares: sumWeighted,

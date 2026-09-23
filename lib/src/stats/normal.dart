@@ -65,7 +65,10 @@ double normalQuantile(double p) {
 double twoSidedZ(double coverage) {
   if (!(coverage > 0) || !(coverage < 1)) {
     throw ArgumentError.value(
-        coverage, 'coverage', 'must lie strictly between 0 and 1');
+      coverage,
+      'coverage',
+      'must lie strictly between 0 and 1',
+    );
   }
   return normalQuantile(0.5 + coverage / 2);
 }

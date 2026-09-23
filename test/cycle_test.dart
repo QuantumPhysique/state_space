@@ -47,9 +47,11 @@ List<Observation> _cycle({
   final data = <Observation>[];
   for (var day = 0; day < days; day++) {
     data.add(Observation(day.toDouble(), a + noise * normal.next()));
-    final nextA = decay * (a * math.cos(angle) + b * math.sin(angle)) +
+    final nextA =
+        decay * (a * math.cos(angle) + b * math.sin(angle)) +
         kick * normal.next();
-    final nextB = decay * (-a * math.sin(angle) + b * math.cos(angle)) +
+    final nextB =
+        decay * (-a * math.sin(angle) + b * math.cos(angle)) +
         kick * normal.next();
     a = nextA;
     b = nextB;
@@ -75,10 +77,11 @@ void main() {
       final fitted = fit(
         StructuralModel([
           StochasticCycle(
-              period: 3,
-              damping: 0.5,
-              stationaryVariance: 1.0,
-              periodBounds: (lower: 3, upper: 120)),
+            period: 3,
+            damping: 0.5,
+            stationaryVariance: 1.0,
+            periodBounds: (lower: 3, upper: 120),
+          ),
         ]),
         data,
       );
@@ -103,8 +106,11 @@ void main() {
       // held at its optimum and the two trading off against one another, so
       // what is checked here is that it comes out small -- not that it
       // covers.
-      expect(fitted.plateauDecadesByParameter[2] / 2, lessThan(0.02),
-          reason: 'five hundred days should pin the period to a few per cent');
+      expect(
+        fitted.plateauDecadesByParameter[2] / 2,
+        lessThan(0.02),
+        reason: 'five hundred days should pin the period to a few per cent',
+      );
     });
 
     test('and it does not settle for half or twice the truth', () {
@@ -124,10 +130,11 @@ void main() {
       final fitted = fit(
         StructuralModel([
           StochasticCycle(
-              period: 3,
-              damping: 0.5,
-              stationaryVariance: 1.0,
-              periodBounds: (lower: 3, upper: 120)),
+            period: 3,
+            damping: 0.5,
+            stationaryVariance: 1.0,
+            periodBounds: (lower: 3, upper: 120),
+          ),
         ]),
         data,
       );
@@ -135,17 +142,19 @@ void main() {
       double atPeriod(double period) {
         final cycle = fitted.model.components.first as StochasticCycle;
         return StructuralModel([
-          StochasticCycle(
-              period: period,
-              damping: cycle.damping,
-              stationaryVariance: cycle.stationaryVariance),
-        ], measurementVariance: fitted.measurementVariance)
+              StochasticCycle(
+                period: period,
+                damping: cycle.damping,
+                stationaryVariance: cycle.stationaryVariance,
+              ),
+            ], measurementVariance: fitted.measurementVariance)
             .smooth(data)
             .logMarginalLikelihood;
       }
 
-      final best =
-          atPeriod((fitted.model.components.first as StochasticCycle).period);
+      final best = atPeriod(
+        (fitted.model.components.first as StochasticCycle).period,
+      );
       expect(best, greaterThan(atPeriod(7) + 10));
       expect(best, greaterThan(atPeriod(28) + 10));
     });
@@ -169,20 +178,24 @@ void main() {
       );
 
       double widthOver(int days) => fit(
-            StructuralModel([
-              StochasticCycle(
-                  period: 14,
-                  damping: 0.9,
-                  stationaryVariance: 0.25,
-                  periodBounds: (lower: 3, upper: 120)),
-            ]),
-            full.take(days).toList(),
-          ).plateauDecadesByParameter[2];
+        StructuralModel([
+          StochasticCycle(
+            period: 14,
+            damping: 0.9,
+            stationaryVariance: 0.25,
+            periodBounds: (lower: 3, upper: 120),
+          ),
+        ]),
+        full.take(days).toList(),
+      ).plateauDecadesByParameter[2];
 
       final short = widthOver(28);
       final long = widthOver(400);
-      expect(long, lessThan(short / 2),
-          reason: 'a month gave $short decades and a year gave $long');
+      expect(
+        long,
+        lessThan(short / 2),
+        reason: 'a month gave $short decades and a year gave $long',
+      );
     });
   });
 
@@ -204,10 +217,11 @@ void main() {
       final fitted = fit(
         StructuralModel([
           StochasticCycle(
-              period: 5,
-              damping: 0.5,
-              stationaryVariance: 1.0,
-              periodBounds: (lower: 3, upper: 120)),
+            period: 5,
+            damping: 0.5,
+            stationaryVariance: 1.0,
+            periodBounds: (lower: 3, upper: 120),
+          ),
         ]),
         data,
       );
@@ -241,16 +255,21 @@ void main() {
   group('validation', () {
     test('damping outside (0, 1) is refused', () {
       expect(
-          () => StochasticCycle(period: 7, damping: 1, stationaryVariance: 1),
-          throwsArgumentError);
+        () => StochasticCycle(period: 7, damping: 1, stationaryVariance: 1),
+        throwsArgumentError,
+      );
       expect(
-          () => StochasticCycle(period: 7, damping: 0, stationaryVariance: 1),
-          throwsArgumentError);
+        () => StochasticCycle(period: 7, damping: 0, stationaryVariance: 1),
+        throwsArgumentError,
+      );
     });
 
     test('a round trip through the parameter vector changes nothing', () {
-      final cycle =
-          StochasticCycle(period: 28, damping: 0.94, stationaryVariance: 1.7);
+      final cycle = StochasticCycle(
+        period: 28,
+        damping: 0.94,
+        stationaryVariance: 1.7,
+      );
       final copy = cycle.withParameters(cycle.parameters) as StochasticCycle;
       expect(copy.period, closeTo(28, 1e-12));
       expect(copy.damping, closeTo(0.94, 1e-12));

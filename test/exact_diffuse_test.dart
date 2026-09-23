@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:state_space/authoring.dart';
 import 'package:state_space/src/engine/kalman.dart';
 import 'package:state_space/src/engine/rts.dart';
 import 'package:state_space/src/engine/timeline.dart';
-import 'package:state_space/state_space.dart';
 import 'package:test/test.dart';
 
 /// A local linear trend that starts from a known point instead of a flat
@@ -14,7 +14,7 @@ import 'package:test/test.dart';
 /// condition differs. This is the reference the sensitivity is checked
 /// against, and it is the only thing in the package that exercises
 /// [Component.properPrior].
-class AnchoredTrend extends Component {
+final class AnchoredTrend extends Component {
   const AnchoredTrend(this.inner, this.level, this.rate);
 
   final LocalLinearTrend inner;
@@ -47,7 +47,10 @@ class AnchoredTrend extends Component {
   Float64List get parameters => inner.parameters;
   @override
   Component withParameters(Float64List theta) => AnchoredTrend(
-      inner.withParameters(theta) as LocalLinearTrend, level, rate);
+    inner.withParameters(theta) as LocalLinearTrend,
+    level,
+    rate,
+  );
   @override
   int? get rateStateIndex => 1;
 }
@@ -66,15 +69,18 @@ List<Observation> series({int n = 60, int seed = 21}) {
 const processVariance = 6e-4;
 const measurementVariance = 0.08;
 
-FilterResult runFilter(List<Component> components, List<Observation> data,
-        Initialization initialization) =>
-    KalmanFilter(components,
-            measurementVariance: measurementVariance,
-            initialization: initialization)
-        .run(Timeline.merge(data, null), keepHistory: true);
+FilterResult runFilter(
+  List<Component> components,
+  List<Observation> data,
+  Initialization initialization,
+) => KalmanFilter(
+  components,
+  measurementVariance: measurementVariance,
+  initialization: initialization,
+).run(Timeline.merge(data, null), keepHistory: true);
 
 void main() {
-  const trend = LocalLinearTrend(processVariance: processVariance);
+  final trend = LocalLinearTrend(processVariance: processVariance);
 
   test('the sensitivity really is the derivative of the state', () {
     // The augmentation claims x(t) = xa(t) + Xb(t) d, exactly, for any d. So
@@ -88,7 +94,10 @@ void main() {
 
     final augmented = runFilter([trend], data, const ExactDiffuse());
     final anchored = runFilter(
-        [AnchoredTrend(trend, level, rate)], data, const ExactDiffuse());
+      [AnchoredTrend(trend, level, rate)],
+      data,
+      const ExactDiffuse(),
+    );
 
     expect(augmented.diffuseDim, 2);
     expect(anchored.diffuseDim, 0);
@@ -96,11 +105,15 @@ void main() {
     final sensitivity = augmented.stateSensitivity!;
     for (var t = 0; t < augmented.stepCount; t++) {
       for (var i = 0; i < 2; i++) {
-        final reconstructed = augmented.stateMean![t * 2 + i] +
+        final reconstructed =
+            augmented.stateMean![t * 2 + i] +
             sensitivity[(t * 2 + i) * 2] * level +
             sensitivity[(t * 2 + i) * 2 + 1] * rate;
-        expect(reconstructed, closeTo(anchored.stateMean![t * 2 + i], 1e-10),
-            reason: 'state $i at step $t');
+        expect(
+          reconstructed,
+          closeTo(anchored.stateMean![t * 2 + i], 1e-10),
+          reason: 'state $i at step $t',
+        );
       }
     }
   });
@@ -111,12 +124,17 @@ void main() {
     // than tracked through a second covariance recursion.
     final data = series();
     final augmented = runFilter([trend], data, const ExactDiffuse());
-    final anchored =
-        runFilter([AnchoredTrend(trend, 100, 5)], data, const ExactDiffuse());
+    final anchored = runFilter(
+      [AnchoredTrend(trend, 100, 5)],
+      data,
+      const ExactDiffuse(),
+    );
 
     for (var i = 0; i < augmented.stateCovariance!.length; i++) {
-      expect(augmented.stateCovariance![i],
-          closeTo(anchored.stateCovariance![i], 1e-15));
+      expect(
+        augmented.stateCovariance![i],
+        closeTo(anchored.stateCovariance![i], 1e-15),
+      );
     }
   });
 
@@ -133,15 +151,21 @@ void main() {
     final last = exact.stepCount - 1;
 
     double worstErrorAt(double variance) {
-      final approximate =
-          runFilter([trend], data, ApproximateDiffuse(variance: variance));
+      final approximate = runFilter(
+        [trend],
+        data,
+        ApproximateDiffuse(variance: variance),
+      );
       var worst = 0.0;
       for (var i = 0; i < 2; i++) {
-        final combined = exact.stateMean![last * 2 + i] +
+        final combined =
+            exact.stateMean![last * 2 + i] +
             sensitivity[(last * 2 + i) * 2] * estimate[0] +
             sensitivity[(last * 2 + i) * 2 + 1] * estimate[1];
         worst = math.max(
-            worst, (combined - approximate.stateMean![last * 2 + i]).abs());
+          worst,
+          (combined - approximate.stateMean![last * 2 + i]).abs(),
+        );
       }
       return worst;
     }
@@ -157,55 +181,66 @@ void main() {
   group('smoothing', () {
     /// The smoothed posterior, by whichever route.
     ({Float64List mean, Float64List covariance}) posterior(
-        List<Observation> data, Initialization initialization) {
+      List<Observation> data,
+      Initialization initialization,
+    ) {
       final timeline = Timeline.merge(data, null);
-      final forward = KalmanFilter([trend],
-              measurementVariance: measurementVariance,
-              initialization: initialization)
-          .run(timeline, keepHistory: true);
+      final forward = KalmanFilter(
+        [trend],
+        measurementVariance: measurementVariance,
+        initialization: initialization,
+      ).run(timeline, keepHistory: true);
       RtsSmoother([trend])
         ..smoothInPlace(timeline, forward)
         ..combineDiffuse(forward);
       return (mean: forward.stateMean!, covariance: forward.stateCovariance!);
     }
 
-    test('the exact posterior is the limit of a widening approximate prior',
-        () {
-      // Here the comparison is honest at every step: both sides condition on
-      // the whole series. This is the claim exact initialisation exists to
-      // make, so it is worth watching it converge rather than just checking
-      // it once.
-      final data = series();
-      final exact = posterior(data, const ExactDiffuse());
+    test(
+      'the exact posterior is the limit of a widening approximate prior',
+      () {
+        // Here the comparison is honest at every step: both sides condition on
+        // the whole series. This is the claim exact initialisation exists to
+        // make, so it is worth watching it converge rather than just checking
+        // it once.
+        final data = series();
+        final exact = posterior(data, const ExactDiffuse());
 
-      ({double mean, double variance}) errorAt(double variance) {
-        final approximate =
-            posterior(data, ApproximateDiffuse(variance: variance));
-        var worstMean = 0.0;
-        var worstVariance = 0.0;
-        for (var i = 0; i < exact.mean.length; i++) {
-          worstMean =
-              math.max(worstMean, (exact.mean[i] - approximate.mean[i]).abs());
+        ({double mean, double variance}) errorAt(double variance) {
+          final approximate = posterior(
+            data,
+            ApproximateDiffuse(variance: variance),
+          );
+          var worstMean = 0.0;
+          var worstVariance = 0.0;
+          for (var i = 0; i < exact.mean.length; i++) {
+            worstMean = math.max(
+              worstMean,
+              (exact.mean[i] - approximate.mean[i]).abs(),
+            );
+          }
+          for (var i = 0; i < exact.covariance.length; i++) {
+            worstVariance = math.max(
+              worstVariance,
+              (exact.covariance[i] - approximate.covariance[i]).abs(),
+            );
+          }
+          return (mean: worstMean, variance: worstVariance);
         }
-        for (var i = 0; i < exact.covariance.length; i++) {
-          worstVariance = math.max(worstVariance,
-              (exact.covariance[i] - approximate.covariance[i]).abs());
-        }
-        return (mean: worstMean, variance: worstVariance);
-      }
 
-      // Two decades of prior buy two decades of agreement, in the mean and
-      // in the covariance alike. The window matters: past about 1e7 the
-      // covariance stops improving, because the arithmetic noise in numbers
-      // of that size has overtaken the approximation being measured, and past
-      // about 1e9 the mean does the same. That ceiling is precisely what
-      // exact initialisation removes.
-      final loose = errorAt(1e4);
-      final tighter = errorAt(1e6);
-      expect(loose.mean, lessThan(1e-2));
-      expect(tighter.mean, lessThan(loose.mean / 50));
-      expect(tighter.variance, lessThan(loose.variance / 50));
-    });
+        // Two decades of prior buy two decades of agreement, in the mean and
+        // in the covariance alike. The window matters: past about 1e7 the
+        // covariance stops improving, because the arithmetic noise in numbers
+        // of that size has overtaken the approximation being measured, and past
+        // about 1e9 the mean does the same. That ceiling is precisely what
+        // exact initialisation removes.
+        final loose = errorAt(1e4);
+        final tighter = errorAt(1e6);
+        expect(loose.mean, lessThan(1e-2));
+        expect(tighter.mean, lessThan(loose.mean / 50));
+        expect(tighter.variance, lessThan(loose.variance / 50));
+      },
+    );
 
     test('and it costs the first two steps nothing', () {
       // The four digits the approximate prior threw away at the start of the
@@ -213,13 +248,15 @@ void main() {
       // two large numbers to lose them in.
       final data = series();
       final exact = posterior(data, const ExactDiffuse());
-      final wide = posterior(data, const ApproximateDiffuse(variance: 1e9));
+      final wide = posterior(data, ApproximateDiffuse(variance: 1e9));
 
       for (var t = 0; t < 2; t++) {
         for (var e = 0; e < 4; e++) {
-          expect(exact.covariance[t * 4 + e],
-              closeTo(wide.covariance[t * 4 + e], 1e-6),
-              reason: 'P^s[$t][$e]');
+          expect(
+            exact.covariance[t * 4 + e],
+            closeTo(wide.covariance[t * 4 + e], 1e-6),
+            reason: 'P^s[$t][$e]',
+          );
         }
       }
     });
@@ -230,16 +267,17 @@ void main() {
       // same arithmetic. fast_path_equivalence_test.dart is where that is
       // pinned properly; this only checks the wiring reaches the same answer.
       final data = series();
-      final model = StructuralModel([trend],
-          measurementVariance: measurementVariance,
-          initialization: const ExactDiffuse());
+      final model = StructuralModel(
+        [trend],
+        measurementVariance: measurementVariance,
+        initialization: const ExactDiffuse(),
+      );
       final result = model.smooth(data);
       final engine = posterior(data, const ExactDiffuse());
 
       for (var t = 0; t < data.length; t++) {
-        expect(result.level[t], closeTo(engine.mean[t * 2], 1e-12));
-        expect(
-            result.levelVariance[t], closeTo(engine.covariance[t * 4], 1e-12));
+        expect(result.mean[t], closeTo(engine.mean[t * 2], 1e-12));
+        expect(result.variance[t], closeTo(engine.covariance[t * 4], 1e-12));
       }
     });
   });
@@ -251,8 +289,13 @@ void main() {
     expect(
       () =>
           runFilter([trend], [const Observation(0, 80)], const ExactDiffuse()),
-      throwsA(isA<StateError>()
-          .having((e) => e.message, 'message', contains('does not determine'))),
+      throwsA(
+        isA<UnderdeterminedModelException>().having(
+          (e) => e.message,
+          'message',
+          contains('does not determine'),
+        ),
+      ),
     );
   });
 }

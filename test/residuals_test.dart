@@ -30,16 +30,15 @@ void main() {
   group('recursive residuals under a flat prior', () {
     final data = _series(140);
     final components = [
-      const LocalLinearTrend(processVariance: 4e-5),
+      LocalLinearTrend(processVariance: 4e-5),
       TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 3e-4),
     ];
 
     FilterResult run({bool exact = true}) => KalmanFilter(
-          components,
-          measurementVariance: 0.01,
-          initialization:
-              exact ? const ExactDiffuse() : const ApproximateDiffuse(),
-        ).run(Timeline.merge(data, null), keepResiduals: true);
+      components,
+      measurementVariance: 0.01,
+      initialization: exact ? ExactDiffuse() : ApproximateDiffuse(),
+    ).run(Timeline.merge(data, null), keepResiduals: true);
 
     test('cost exactly one observation per flat direction', () {
       final forward = run();
@@ -73,15 +72,19 @@ void main() {
       // whiteness test reading them would be measuring the smoother rather
       // than the model.
       final forward = run();
-      final smoothed =
-          StructuralModel(components, measurementVariance: 0.01).smooth(data);
+      final smoothed = StructuralModel(
+        components,
+        measurementVariance: 0.01,
+      ).smooth(data);
       var inSample = 0.0;
       for (var i = 0; i < data.length; i++) {
-        final r = data[i].value - smoothed.level[i];
+        final r = data[i].value - smoothed.mean[i];
         inSample += r * r / 0.01;
       }
-      expect(inSample,
-          lessThan(0.9 * _sumOfSquares(forward.standardisedResiduals!)));
+      expect(
+        inSample,
+        lessThan(0.9 * _sumOfSquares(forward.standardisedResiduals!)),
+      );
     });
 
     test('are the limit of a wide proper prior, at the rate 1/kappa', () {
@@ -113,9 +116,11 @@ void main() {
           final gap = (exact[i] - approximate.standardisedResiduals![i]).abs();
           if (gap > worst) worst = gap;
         }
-        expect(worst, lessThan(previous / 90),
-            reason:
-                'kappa \$kappa should be a hundredfold closer than the last');
+        expect(
+          worst,
+          lessThan(previous / 90),
+          reason: 'kappa \$kappa should be a hundredfold closer than the last',
+        );
         previous = worst;
       }
       expect(previous, lessThan(1e-4));
@@ -139,18 +144,23 @@ void main() {
         // it, and the two are correlated over the step.
         final sd = math.sqrt(processVariance);
         final a = _gaussian(random), b = _gaussian(random);
-        level += slope * dt +
+        level +=
+            slope * dt +
             sd *
                 (dt * math.sqrt(dt) / math.sqrt(3) * a +
                     dt * math.sqrt(dt) / 2 * b);
         slope += sd * math.sqrt(dt) * b;
         time += dt;
-        data.add(Observation(
-            time, level + math.sqrt(measurementVariance) * _gaussian(random)));
+        data.add(
+          Observation(
+            time,
+            level + math.sqrt(measurementVariance) * _gaussian(random),
+          ),
+        );
       }
 
       final forward = forwardPass(
-        [const LocalLinearTrend(processVariance: processVariance)],
+        [LocalLinearTrend(processVariance: processVariance)],
         Timeline.merge(data, null),
         measurementVariance: measurementVariance,
         initialization: const ExactDiffuse(),
@@ -175,20 +185,29 @@ void main() {
   group('both engines', () {
     test('produce the same residuals', () {
       final data = _series(90, seed: 44);
-      final component = const LocalLinearTrend(processVariance: 5e-4);
-      final fast = forwardPass([component], Timeline.merge(data, null),
-          measurementVariance: 0.02,
-          initialization: const ExactDiffuse(),
-          keepResiduals: true);
-      final generic = KalmanFilter([component],
-              measurementVariance: 0.02, initialization: const ExactDiffuse())
-          .run(Timeline.merge(data, null), keepResiduals: true);
+      final component = LocalLinearTrend(processVariance: 5e-4);
+      final fast = forwardPass(
+        [component],
+        Timeline.merge(data, null),
+        measurementVariance: 0.02,
+        initialization: const ExactDiffuse(),
+        keepResiduals: true,
+      );
+      final generic = KalmanFilter(
+        [component],
+        measurementVariance: 0.02,
+        initialization: const ExactDiffuse(),
+      ).run(Timeline.merge(data, null), keepResiduals: true);
 
-      expect(fast.standardisedResiduals!.length,
-          generic.standardisedResiduals!.length);
+      expect(
+        fast.standardisedResiduals!.length,
+        generic.standardisedResiduals!.length,
+      );
       for (var i = 0; i < fast.standardisedResiduals!.length; i++) {
-        expect(fast.standardisedResiduals![i],
-            closeTo(generic.standardisedResiduals![i], 1e-12));
+        expect(
+          fast.standardisedResiduals![i],
+          closeTo(generic.standardisedResiduals![i], 1e-12),
+        );
       }
     });
   });

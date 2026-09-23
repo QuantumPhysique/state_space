@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:state_space/state_space.dart';
+import 'package:state_space/authoring.dart';
 import 'package:test/test.dart';
 
 /// A shape parameter measured in time units has a floor below which it stops
@@ -21,25 +21,27 @@ void main() {
     return [
       for (var i = 0; i < days; i++)
         Observation(
-            i.toDouble(),
-            80 +
-                0.002 * i +
-                0.5 * math.sin(2 * math.pi * i / 7) +
-                0.3 * gaussian())
+          i.toDouble(),
+          80 +
+              0.002 * i +
+              0.5 * math.sin(2 * math.pi * i / 7) +
+              0.3 * gaussian(),
+        ),
     ];
   }
 
   group('samplingResolution', () {
     test('is the median gap, and ignores repeated timestamps', () {
       expect(
-          samplingResolution([
-            Observation(0, 1),
-            Observation(0, 1.1),
-            Observation(1, 2),
-            Observation(2, 3),
-            Observation(20, 4),
-          ]),
-          1);
+        samplingResolution([
+          Observation(0, 1),
+          Observation(0, 1.1),
+          Observation(1, 2),
+          Observation(2, 3),
+          Observation(20, 4),
+        ]),
+        1,
+      );
     });
 
     test('is zero when there is nothing to measure', () {
@@ -48,14 +50,34 @@ void main() {
       expect(samplingResolution([Observation(4, 1), Observation(4, 2)]), 0);
     });
 
+    test('counts two readings on one morning as one visit', () {
+      // Every day weighed twice, five minutes apart: the readings are a day
+      // apart, not five minutes.
+      final doubled = [
+        for (var i = 0; i < 100; i++) ...[
+          Observation(i.toDouble(), 80),
+          Observation(i + 5 / 1440, 80.1),
+        ],
+      ];
+      expect(samplingResolution(doubled), closeTo(1, 0.01));
+      final someDoubled = [
+        for (var i = 0; i < 100; i++) ...[
+          Observation(i.toDouble(), 80),
+          if (i % 5 < 2) Observation(i + 5 / 1440, 80.1),
+        ],
+      ];
+      expect(samplingResolution(someDoubled), closeTo(1, 0.01));
+    });
+
     test('survives a diary with holidays in it', () {
       expect(
-          samplingResolution([
-            for (var i = 0; i < 30; i++) Observation(i.toDouble(), 80),
-            Observation(60, 80),
-            Observation(61, 80),
-          ]),
-          1);
+        samplingResolution([
+          for (var i = 0; i < 30; i++) Observation(i.toDouble(), 80),
+          Observation(60, 80),
+          Observation(61, 80),
+        ]),
+        1,
+      );
     });
   });
 
@@ -65,36 +87,43 @@ void main() {
       const trueNoise = 0.3;
 
       final withoutMatern = fit(
-          StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
-            TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
-          ]),
-          data);
+        StructuralModel([
+          LocalLinearTrend(processVariance: 1e-4),
+          TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
+        ]),
+        data,
+      );
       final withMatern = fit(
-          StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
-            TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
-            Matern.oneHalf(variance: 0.05, lengthScale: 5),
-          ]),
-          data);
+        StructuralModel([
+          LocalLinearTrend(processVariance: 1e-4),
+          TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
+          Matern.oneHalf(variance: 0.05, lengthScale: 5),
+        ]),
+        data,
+      );
 
       // Before the floor this came back at 0.002, a hundred and fifty times
       // too small, because the Matern had taken the measurement error.
-      expect(math.sqrt(withMatern.measurementVariance),
-          closeTo(trueNoise, 0.1 * trueNoise));
-      expect(math.sqrt(withMatern.measurementVariance),
-          closeTo(math.sqrt(withoutMatern.measurementVariance), 0.05));
+      expect(
+        math.sqrt(withMatern.measurementVariance),
+        closeTo(trueNoise, 0.1 * trueNoise),
+      );
+      expect(
+        math.sqrt(withMatern.measurementVariance),
+        closeTo(math.sqrt(withoutMatern.measurementVariance), 0.05),
+      );
     });
 
     test('and a predictive band that covers about 95 per cent', () {
       final data = weekly(730);
       final fitted = fit(
-          StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
-            TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
-            Matern.oneHalf(variance: 0.05, lengthScale: 5),
-          ]),
-          data);
+        StructuralModel([
+          LocalLinearTrend(processVariance: 1e-4),
+          TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
+          Matern.oneHalf(variance: 0.05, lengthScale: 5),
+        ]),
+        data,
+      );
       final posterior = fitted.model.smooth(data);
 
       var inside = 0;
@@ -110,11 +139,12 @@ void main() {
     test('the length scale never lands below one sampling interval', () {
       final data = weekly(730);
       final fitted = fit(
-          StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
-            Matern.oneHalf(variance: 0.05, lengthScale: 5),
-          ]),
-          data);
+        StructuralModel([
+          LocalLinearTrend(processVariance: 1e-4),
+          Matern.oneHalf(variance: 0.05, lengthScale: 5),
+        ]),
+        data,
+      );
       final matern = fitted.model.components[1] as Matern;
       expect(matern.lengthScale, greaterThanOrEqualTo(1.0));
     });
@@ -124,50 +154,65 @@ void main() {
       // floor has to move with it.
       final sparse = [
         for (var i = 0; i < 200; i++)
-          Observation(i * 10.0, 80 + 0.02 * i + 0.3 * math.sin(i / 3.0))
+          Observation(i * 10.0, 80 + 0.02 * i + 0.3 * math.sin(i / 3.0)),
       ];
       expect(samplingResolution(sparse), 10);
       final fitted = fit(
-          StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
-            Matern.oneHalf(variance: 0.05, lengthScale: 50),
-          ]),
-          sparse);
-      expect((fitted.model.components[1] as Matern).lengthScale,
-          greaterThanOrEqualTo(10.0));
+        StructuralModel([
+          LocalLinearTrend(processVariance: 1e-4),
+          Matern.oneHalf(variance: 0.05, lengthScale: 50),
+        ]),
+        sparse,
+      );
+      expect(
+        (fitted.model.components[1] as Matern).lengthScale,
+        greaterThanOrEqualTo(10.0),
+      );
     });
 
     test('a caller who asks for a higher floor still gets it', () {
       final data = weekly(365);
       final fitted = fit(
-          StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
-            Matern.oneHalf(
-                variance: 0.05,
-                lengthScale: 30,
-                lengthScaleBounds: (lower: 20, upper: 1e4)),
-          ]),
-          data);
-      expect((fitted.model.components[1] as Matern).lengthScale,
-          greaterThanOrEqualTo(20.0));
+        StructuralModel([
+          LocalLinearTrend(processVariance: 1e-4),
+          Matern.oneHalf(
+            variance: 0.05,
+            lengthScale: 30,
+            lengthScaleBounds: (lower: 20, upper: 1e4),
+          ),
+        ]),
+        data,
+      );
+      expect(
+        (fitted.model.components[1] as Matern).lengthScale,
+        greaterThanOrEqualTo(20.0),
+      );
     });
 
     test('and is told plainly when no bracket survives the sampling', () {
       final sparse = [
-        for (var i = 0; i < 40; i++) Observation(i * 1000.0, 80 + 0.001 * i)
+        for (var i = 0; i < 40; i++) Observation(i * 1000.0, 80 + 0.001 * i),
       ];
       expect(
-          () => fit(
-              StructuralModel([
-                const LocalLinearTrend(processVariance: 1e-4),
-                Matern.oneHalf(
-                    variance: 0.05,
-                    lengthScale: 5,
-                    lengthScaleBounds: (lower: 0.1, upper: 10)),
-              ]),
-              sparse),
-          throwsA(isA<ArgumentError>().having((e) => e.toString(), 'message',
-              contains('is measurement noise rather than a separate'))));
+        () => fit(
+          StructuralModel([
+            LocalLinearTrend(processVariance: 1e-4),
+            Matern.oneHalf(
+              variance: 0.05,
+              lengthScale: 5,
+              lengthScaleBounds: (lower: 0.1, upper: 10),
+            ),
+          ]),
+          sparse,
+        ),
+        throwsA(
+          isA<UnderdeterminedModelException>().having(
+            (e) => e.toString(),
+            'message',
+            contains('is measurement noise rather than a separate'),
+          ),
+        ),
+      );
     });
   });
 
@@ -175,35 +220,46 @@ void main() {
     test('the fitted period is at least twice the sampling interval', () {
       final sparse = [
         for (var i = 0; i < 300; i++)
-          Observation(i * 5.0, 80 + math.sin(2 * math.pi * i * 5 / 90))
+          Observation(i * 5.0, 80 + math.sin(2 * math.pi * i * 5 / 90)),
       ];
       final fitted = fit(
-          StructuralModel([
-            const LocalLevel(processVariance: 1e-4),
-            StochasticCycle(period: 90, damping: 0.99, stationaryVariance: 0.5),
-          ]),
-          sparse);
-      expect((fitted.model.components[1] as StochasticCycle).period,
-          greaterThanOrEqualTo(10.0));
+        StructuralModel([
+          LocalLevel(processVariance: 1e-4),
+          StochasticCycle(period: 90, damping: 0.99, stationaryVariance: 0.5),
+        ]),
+        sparse,
+      );
+      expect(
+        (fitted.model.components[1] as StochasticCycle).period,
+        greaterThanOrEqualTo(10.0),
+      );
     });
 
     test('and says so when the whole bracket is below Nyquist', () {
       final sparse = [
-        for (var i = 0; i < 60; i++) Observation(i * 500.0, 80 + 0.001 * i)
+        for (var i = 0; i < 60; i++) Observation(i * 500.0, 80 + 0.001 * i),
       ];
       expect(
-          () => fit(
-              StructuralModel([
-                const LocalLevel(processVariance: 1e-4),
-                StochasticCycle(
-                    period: 90,
-                    damping: 0.99,
-                    stationaryVariance: 0.5,
-                    periodBounds: (lower: 2, upper: 400)),
-              ]),
-              sparse),
-          throwsA(isA<ArgumentError>()
-              .having((e) => e.toString(), 'message', contains('Nyquist'))));
+        () => fit(
+          StructuralModel([
+            LocalLevel(processVariance: 1e-4),
+            StochasticCycle(
+              period: 90,
+              damping: 0.99,
+              stationaryVariance: 0.5,
+              periodBounds: (lower: 2, upper: 400),
+            ),
+          ]),
+          sparse,
+        ),
+        throwsA(
+          isA<UnderdeterminedModelException>().having(
+            (e) => e.toString(),
+            'message',
+            contains('Nyquist'),
+          ),
+        ),
+      );
     });
   });
 }
