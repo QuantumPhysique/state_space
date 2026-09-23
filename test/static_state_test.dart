@@ -55,29 +55,39 @@ void main() {
       for (var i = 0; i < n; i++)
         if (i % 9 != 4) // a missing morning here and there
           Observation(
-              i.toDouble(),
-              80 -
-                  0.004 * i +
-                  (i >= 40 && i < 54 ? 1.3 : 0.0) +
-                  (i >= 120 && i < 127 ? -0.5 : 0.0) +
-                  0.3 * gaussian(),
-              relativeVariance: i % 17 == 0 ? 0.5 : 1.0)
+            i.toDouble(),
+            80 -
+                0.004 * i +
+                (i >= 40 && i < 54 ? 1.3 : 0.0) +
+                (i >= 120 && i < 127 ? -0.5 : 0.0) +
+                0.3 * gaussian(),
+            relativeVariance: i % 17 == 0 ? 0.5 : 1.0,
+          ),
     ];
   }
 
   RegressionComponent events() => RegressionComponent([
-        IndicatorRegressor('christmas', [(from: 40.0, to: 54.0)]),
-        IndicatorRegressor('conference', [(from: 120.0, to: 127.0)]),
-        StepRegressor('dose', Float64List.fromList([30, 90]),
-            Float64List.fromList([1, 0.25])),
-      ]);
+    IndicatorRegressor('christmas', [(from: 40.0, to: 54.0)]),
+    IndicatorRegressor('conference', [(from: 120.0, to: 127.0)]),
+    StepRegressor(
+      'dose',
+      Float64List.fromList([30, 90]),
+      Float64List.fromList([1, 0.25]),
+    ),
+  ]);
 
   /// Smooths with the backward pass forced to run over every state.
   SmoothingResult unreduced(
-      List<Component> components, List<Observation> data, Float64List? grid) {
+    List<Component> components,
+    List<Observation> data,
+    Float64List? grid,
+  ) {
     final timeline = Timeline.merge(data, grid);
-    final filter = KalmanFilter(components,
-        measurementVariance: 0.09, initialization: const ExactDiffuse());
+    final filter = KalmanFilter(
+      components,
+      measurementVariance: 0.09,
+      initialization: const ExactDiffuse(),
+    );
     final result = filter.run(timeline, keepHistory: true);
     RtsSmoother(components)
       ..smoothInPlace(timeline, result)
@@ -94,7 +104,9 @@ void main() {
       var at = 0;
       for (final c in components) {
         c.observationAt(
-            timeline.times[t], Float64List.sublistView(h, at, at + c.stateDim));
+          timeline.times[t],
+          Float64List.sublistView(h, at, at + c.stateDim),
+        );
         at += c.stateDim;
       }
       var signal = 0.0, spread = 0.0;
@@ -124,22 +136,25 @@ void main() {
       ('at the observation times', null),
       (
         'on a coarse grid',
-        Float64List.fromList([for (var d = 0; d <= 210; d += 7) d.toDouble()])
+        Float64List.fromList([for (var d = 0; d <= 210; d += 7) d.toDouble()]),
       ),
       (
         'on a grid running past both ends',
-        Float64List.fromList([for (var d = -10; d <= 220; d += 3) d.toDouble()])
+        Float64List.fromList([
+          for (var d = -10; d <= 220; d += 3) d.toDouble(),
+        ]),
       ),
     ]) {
       test(name, () {
-        final reduced = StructuralModel(
-          [LocalLinearTrend(processVariance: 1e-4), events()],
-          measurementVariance: 0.09,
-        ).smooth(data, grid: grid);
+        final reduced = StructuralModel([
+          LocalLinearTrend(processVariance: 1e-4),
+          events(),
+        ], measurementVariance: 0.09).smooth(data, grid: grid);
         final reference = unreduced(
-            [LocalLinearTrend(processVariance: 1e-4), _Opaque(events())],
-            data,
-            grid);
+          [LocalLinearTrend(processVariance: 1e-4), _Opaque(events())],
+          data,
+          grid,
+        );
 
         // Relative, because the reference is the *less* accurate of the two:
         // its predicted covariance is structurally singular, so every one of
@@ -150,25 +165,32 @@ void main() {
 
         expect(reduced.length, reference.length);
         for (var i = 0; i < reduced.length; i++) {
-          expect(reduced.mean[i],
-              closeTo(reference.mean[i], tolerance(reference.mean[i])),
-              reason: 'level at output $i');
-          expect(reduced.variance[i],
-              closeTo(reference.variance[i], tolerance(reference.variance[i])),
-              reason: 'variance at output $i');
+          expect(
+            reduced.mean[i],
+            closeTo(reference.mean[i], tolerance(reference.mean[i])),
+            reason: 'level at output $i',
+          );
+          expect(
+            reduced.variance[i],
+            closeTo(reference.variance[i], tolerance(reference.variance[i])),
+            reason: 'variance at output $i',
+          );
         }
         expect(
-            reduced.logMarginalLikelihood,
-            closeTo(reference.logMarginalLikelihood,
-                tolerance(reference.logMarginalLikelihood)));
+          reduced.logMarginalLikelihood,
+          closeTo(
+            reference.logMarginalLikelihood,
+            tolerance(reference.logMarginalLikelihood),
+          ),
+        );
       });
     }
 
     test('including the coefficients and their standard errors', () {
-      final model = StructuralModel(
-        [LocalLinearTrend(processVariance: 1e-4), events()],
-        measurementVariance: 0.09,
-      );
+      final model = StructuralModel([
+        LocalLinearTrend(processVariance: 1e-4),
+        events(),
+      ], measurementVariance: 0.09);
       final coefficients = model.smooth(data).coefficients;
       expect(coefficients, hasLength(3));
       expect(coefficients[0].estimate, closeTo(1.3, 0.2));
@@ -182,17 +204,14 @@ void main() {
     test('a model of nothing but regression columns still works', () {
       final flat = [
         for (var i = 0; i < 60; i++)
-          Observation(i.toDouble(), i >= 20 && i < 40 ? 3.0 : 1.0)
+          Observation(i.toDouble(), i >= 20 && i < 40 ? 3.0 : 1.0),
       ];
-      final posterior = StructuralModel(
-        [
-          RegressionComponent([
-            IndicatorRegressor('always', [(from: -1.0, to: 100.0)]),
-            IndicatorRegressor('middle', [(from: 20.0, to: 40.0)]),
-          ])
-        ],
-        measurementVariance: 1e-6,
-      ).smooth(flat);
+      final posterior = StructuralModel([
+        RegressionComponent([
+          IndicatorRegressor('always', [(from: -1.0, to: 100.0)]),
+          IndicatorRegressor('middle', [(from: 20.0, to: 40.0)]),
+        ]),
+      ], measurementVariance: 1e-6).smooth(flat);
       expect(posterior.coefficients[0].estimate, closeTo(1.0, 1e-6));
       expect(posterior.coefficients[1].estimate, closeTo(2.0, 1e-6));
       for (var i = 0; i < posterior.length; i++) {
@@ -209,10 +228,10 @@ void main() {
         initialization: ApproximateDiffuse(variance: 1e8),
       );
       final posterior = model.smooth(data);
-      final exact = StructuralModel(
-        [LocalLinearTrend(processVariance: 1e-4), events()],
-        measurementVariance: 0.09,
-      ).smooth(data);
+      final exact = StructuralModel([
+        LocalLinearTrend(processVariance: 1e-4),
+        events(),
+      ], measurementVariance: 0.09).smooth(data);
       for (var i = 0; i < posterior.length; i++) {
         expect(posterior.mean[i], closeTo(exact.mean[i], 1e-4));
       }

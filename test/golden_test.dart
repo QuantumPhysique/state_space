@@ -12,32 +12,34 @@ import 'package:test/test.dart';
 /// A fixture produced by `tool/generate_fixtures.py`.
 class Fixture {
   Fixture(Map<String, dynamic> json)
-      : name = json['name'] as String,
-        description = json['description'] as String,
-        initializationName = json['initialization'] as String,
-        diffuseObservations = json['diffuseObservations'] as int,
-        processVariance = (json['processVariance'] as num).toDouble(),
-        measurementVariance = (json['measurementVariance'] as num).toDouble(),
-        diffuseVariance = (json['diffuseVariance'] as num).toDouble(),
-        times = _doubles(json['times']),
-        values = (json['values'] as List)
-            .map((v) => v == null ? null : (v as num).toDouble())
-            .toList(),
-        relativeVariances = _doubles(json['relativeVariances']),
-        predictedState = _doubles(json['predictedState']),
-        predictedStateCov = _doubles(json['predictedStateCov']),
-        filteredState = _doubles(json['filteredState']),
-        filteredStateCov = _doubles(json['filteredStateCov']),
-        smoothedState = _doubles(json['smoothedState']),
-        smoothedStateCov = _doubles(json['smoothedStateCov']),
-        loglikelihoodObs = _doubles(json['loglikelihoodObs']);
+    : name = json['name'] as String,
+      description = json['description'] as String,
+      initializationName = json['initialization'] as String,
+      diffuseObservations = json['diffuseObservations'] as int,
+      processVariance = (json['processVariance'] as num).toDouble(),
+      measurementVariance = (json['measurementVariance'] as num).toDouble(),
+      diffuseVariance = (json['diffuseVariance'] as num).toDouble(),
+      times = _doubles(json['times']),
+      values = (json['values'] as List)
+          .map((v) => v == null ? null : (v as num).toDouble())
+          .toList(),
+      relativeVariances = _doubles(json['relativeVariances']),
+      predictedState = _doubles(json['predictedState']),
+      predictedStateCov = _doubles(json['predictedStateCov']),
+      filteredState = _doubles(json['filteredState']),
+      filteredStateCov = _doubles(json['filteredStateCov']),
+      smoothedState = _doubles(json['smoothedState']),
+      smoothedStateCov = _doubles(json['smoothedStateCov']),
+      loglikelihoodObs = _doubles(json['loglikelihoodObs']);
 
-  static Fixture load(String name) =>
-      Fixture(jsonDecode(File('test/fixtures/$name.json').readAsStringSync())
-          as Map<String, dynamic>);
+  static Fixture load(String name) => Fixture(
+    jsonDecode(File('test/fixtures/$name.json').readAsStringSync())
+        as Map<String, dynamic>,
+  );
 
-  static Float64List _doubles(Object? raw) => Float64List.fromList(
-      [for (final v in raw! as List) (v as num).toDouble()]);
+  static Float64List _doubles(Object? raw) => Float64List.fromList([
+    for (final v in raw! as List) (v as num).toDouble(),
+  ]);
 
   final String name;
   final String description;
@@ -66,11 +68,14 @@ class Fixture {
 
   /// The observed points, in time order.
   List<Observation> get observations => [
-        for (var t = 0; t < steps; t++)
-          if (values[t] != null)
-            Observation(times[t], values[t]!,
-                relativeVariance: relativeVariances[t])
-      ];
+    for (var t = 0; t < steps; t++)
+      if (values[t] != null)
+        Observation(
+          times[t],
+          values[t]!,
+          relativeVariance: relativeVariances[t],
+        ),
+  ];
 
   /// Whether every step is the same length, which is what decides whether
   /// statsmodels' transition matrix is genuinely time-varying.
@@ -86,25 +91,29 @@ class Fixture {
   /// The times with no observation, which the Dart side reproduces by asking
   /// for output there. A step with nothing to update on is a step either way.
   Float64List get missingTimes => Float64List.fromList([
-        for (var t = 0; t < steps; t++)
-          if (values[t] == null) times[t]
-      ]);
+    for (var t = 0; t < steps; t++)
+      if (values[t] == null) times[t],
+  ]);
 
   Initialization get initialization => initializationName == 'diffuse'
       ? const ExactDiffuse()
       : ApproximateDiffuse(variance: diffuseVariance);
 
   StructuralModel get model => StructuralModel.localLinearTrend(
-        processVariance: processVariance,
-        measurementVariance: measurementVariance,
-        initialization: initialization,
-      );
+    processVariance: processVariance,
+    measurementVariance: measurementVariance,
+    initialization: initialization,
+  );
 }
 
 /// Compares against a reference whose magnitude varies over ten orders of
 /// magnitude, from a smoothed slope near 1e-3 to a diffuse prior at 1e5.
 void expectClose(
-    double actual, double expected, double relative, String where) {
+  double actual,
+  double expected,
+  double relative,
+  String where,
+) {
   final tolerance = relative * math.max(1, expected.abs());
   expect(actual, closeTo(expected, tolerance), reason: where);
 }
@@ -141,16 +150,32 @@ void main() {
       test('predicted and filtered states', () {
         for (var t = 0; t < fixture.steps; t++) {
           for (var i = 0; i < 2; i++) {
-            expectClose(forward.predictedMean![t * 2 + i],
-                fixture.predictedState[t * 2 + i], 1e-10, 'predicted[$t][$i]');
-            expectClose(forward.stateMean![t * 2 + i],
-                fixture.filteredState[t * 2 + i], 1e-10, 'filtered[$t][$i]');
+            expectClose(
+              forward.predictedMean![t * 2 + i],
+              fixture.predictedState[t * 2 + i],
+              1e-10,
+              'predicted[$t][$i]',
+            );
+            expectClose(
+              forward.stateMean![t * 2 + i],
+              fixture.filteredState[t * 2 + i],
+              1e-10,
+              'filtered[$t][$i]',
+            );
           }
           for (var e = 0; e < 4; e++) {
-            expectClose(forward.predictedCovariance![t * 4 + e],
-                fixture.predictedStateCov[t * 4 + e], 1e-9, 'P-[$t][$e]');
-            expectClose(forward.stateCovariance![t * 4 + e],
-                fixture.filteredStateCov[t * 4 + e], 1e-9, 'P[$t][$e]');
+            expectClose(
+              forward.predictedCovariance![t * 4 + e],
+              fixture.predictedStateCov[t * 4 + e],
+              1e-9,
+              'P-[$t][$e]',
+            );
+            expectClose(
+              forward.stateCovariance![t * 4 + e],
+              fixture.filteredStateCov[t * 4 + e],
+              1e-9,
+              'P[$t][$e]',
+            );
           }
         }
       });
@@ -184,8 +209,12 @@ void main() {
         RtsSmoother(fixture.model.components).smoothInPlace(timeline, forward);
         for (var t = 0; t < fixture.steps; t++) {
           for (var i = 0; i < 2; i++) {
-            expectClose(forward.stateMean![t * 2 + i],
-                fixture.smoothedState[t * 2 + i], 1e-9, 'smoothed[$t][$i]');
+            expectClose(
+              forward.stateMean![t * 2 + i],
+              fixture.smoothedState[t * 2 + i],
+              1e-9,
+              'smoothed[$t][$i]',
+            );
           }
         }
       });
@@ -194,8 +223,12 @@ void main() {
         RtsSmoother(fixture.model.components).smoothInPlace(timeline, forward);
         for (var t = diffuseStates; t < fixture.steps; t++) {
           for (var e = 0; e < 4; e++) {
-            expectClose(forward.stateCovariance![t * 4 + e],
-                fixture.smoothedStateCov[t * 4 + e], 1e-11, 'P^s[$t][$e]');
+            expectClose(
+              forward.stateCovariance![t * 4 + e],
+              fixture.smoothedStateCov[t * 4 + e],
+              1e-11,
+              'P^s[$t][$e]',
+            );
           }
         }
       });
@@ -217,8 +250,12 @@ void main() {
         RtsSmoother(fixture.model.components).smoothInPlace(timeline, forward);
         for (var t = 0; t < diffuseStates; t++) {
           for (var e = 0; e < 4; e++) {
-            expectClose(forward.stateCovariance![t * 4 + e],
-                fixture.smoothedStateCov[t * 4 + e], 1e-3, 'P^s[$t][$e]');
+            expectClose(
+              forward.stateCovariance![t * 4 + e],
+              fixture.smoothedStateCov[t * 4 + e],
+              1e-3,
+              'P^s[$t][$e]',
+            );
           }
         }
       });
@@ -246,8 +283,10 @@ void main() {
 
       test('agrees on how many observations the flat directions cost', () {
         expect(fixture.diffuseObservations, diffuseStates);
-        expect(smoothed.usedObservations,
-            fixture.observations.length - diffuseStates);
+        expect(
+          smoothed.usedObservations,
+          fixture.observations.length - diffuseStates,
+        );
       });
 
       test('smoothed states and covariances, from the very first step', () {
@@ -273,13 +312,21 @@ void main() {
         for (var t = 0; t < fixture.steps; t++) {
           for (var i = 0; i < 2; i++) {
             if (t == 0 && i == 1 && !trustFirstStepSlope) continue;
-            expectClose(smoothed.stateMean![t * 2 + i],
-                fixture.smoothedState[t * 2 + i], 1e-10, 'smoothed[$t][$i]');
+            expectClose(
+              smoothed.stateMean![t * 2 + i],
+              fixture.smoothedState[t * 2 + i],
+              1e-10,
+              'smoothed[$t][$i]',
+            );
           }
           for (var e = 0; e < 4; e++) {
             if (t == 0 && e != 0 && !trustFirstStepSlope) continue;
-            expectClose(smoothed.stateCovariance![t * 4 + e],
-                fixture.smoothedStateCov[t * 4 + e], 1e-10, 'P^s[$t][$e]');
+            expectClose(
+              smoothed.stateCovariance![t * 4 + e],
+              fixture.smoothedStateCov[t * 4 + e],
+              1e-10,
+              'P^s[$t][$e]',
+            );
           }
         }
       });

@@ -26,7 +26,9 @@ const _documented = [
 void main() {
   test('the documented first example fits without a warning', () {
     final fitted = fit(
-        StructuralModel.localLinearTrend(processVariance: 1e-3), _documented);
+      StructuralModel.localLinearTrend(processVariance: 1e-3),
+      _documented,
+    );
     expect(fitted.warnings, isEmpty);
     expect(fitted.parameterStatus, [ParameterStatus.determined]);
     expect(fitted.plateauDecades, lessThan(1.5));

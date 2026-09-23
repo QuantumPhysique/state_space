@@ -26,26 +26,33 @@ MatrixBlock _product(MatrixBlock left, MatrixBlock right) {
 
 void main() {
   group('the seasonal transition', () {
-    final component =
-        TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 1e-3);
+    final component = TrigonometricSeasonal(
+      period: 7,
+      harmonics: 3,
+      processVariance: 1e-3,
+    );
 
-    test('composes over gaps, which is what makes irregular sampling exact',
-        () {
-      // A(a) A(b) = A(a + b) is the whole argument for the rotation form.
-      // Splitting a step in two, or inserting an output grid point in the
-      // middle of one, has to leave the answer alone.
-      const first = 1.3;
-      const second = 2.9;
-      final composed = _product(
-          _transition(component, first), _transition(component, second));
-      final direct = _transition(component, first + second);
+    test(
+      'composes over gaps, which is what makes irregular sampling exact',
+      () {
+        // A(a) A(b) = A(a + b) is the whole argument for the rotation form.
+        // Splitting a step in two, or inserting an output grid point in the
+        // middle of one, has to leave the answer alone.
+        const first = 1.3;
+        const second = 2.9;
+        final composed = _product(
+          _transition(component, first),
+          _transition(component, second),
+        );
+        final direct = _transition(component, first + second);
 
-      for (var i = 0; i < component.stateDim; i++) {
-        for (var j = 0; j < component.stateDim; j++) {
-          expect(composed.at(i, j), closeTo(direct.at(i, j), 1e-14));
+        for (var i = 0; i < component.stateDim; i++) {
+          for (var j = 0; j < component.stateDim; j++) {
+            expect(composed.at(i, j), closeTo(direct.at(i, j), 1e-14));
+          }
         }
-      }
-    });
+      },
+    );
 
     test('is the identity after a full period', () {
       final full = _transition(component, 7);
@@ -56,22 +63,24 @@ void main() {
       }
     });
 
-    test('is orthogonal, so the pattern neither grows nor decays on its own',
-        () {
-      final a = _transition(component, 0.7);
-      final transpose = MatrixBlock.dense(a.rows, a.cols);
-      for (var i = 0; i < a.rows; i++) {
-        for (var j = 0; j < a.cols; j++) {
-          transpose.set(i, j, a.at(j, i));
+    test(
+      'is orthogonal, so the pattern neither grows nor decays on its own',
+      () {
+        final a = _transition(component, 0.7);
+        final transpose = MatrixBlock.dense(a.rows, a.cols);
+        for (var i = 0; i < a.rows; i++) {
+          for (var j = 0; j < a.cols; j++) {
+            transpose.set(i, j, a.at(j, i));
+          }
         }
-      }
-      final identity = _product(a, transpose);
-      for (var i = 0; i < a.rows; i++) {
-        for (var j = 0; j < a.cols; j++) {
-          expect(identity.at(i, j), closeTo(i == j ? 1 : 0, 1e-15));
+        final identity = _product(a, transpose);
+        for (var i = 0; i < a.rows; i++) {
+          for (var j = 0; j < a.cols; j++) {
+            expect(identity.at(i, j), closeTo(i == j ? 1 : 0, 1e-15));
+          }
         }
-      }
-    });
+      },
+    );
 
     test('leaves a zero gap alone', () {
       final none = _transition(component, 0);
@@ -105,15 +114,23 @@ void main() {
       // sits above pi per day and is an alias of one already present.
       final daily = [
         for (var i = 0; i < 60; i++)
-          Observation(i.toDouble(), 80 + math.sin(2 * math.pi * i / 7))
+          Observation(i.toDouble(), 80 + math.sin(2 * math.pi * i / 7)),
       ];
       StructuralModel model(int harmonics, double period) => StructuralModel([
-            LocalLinearTrend(processVariance: 1e-3),
-            TrigonometricSeasonal(
-                period: period, harmonics: harmonics, processVariance: 1e-3),
-          ]);
-      final refused = throwsA(isA<UnderdeterminedModelException>()
-          .having((e) => e.message, 'message', contains('Nyquist')));
+        LocalLinearTrend(processVariance: 1e-3),
+        TrigonometricSeasonal(
+          period: period,
+          harmonics: harmonics,
+          processVariance: 1e-3,
+        ),
+      ]);
+      final refused = throwsA(
+        isA<UnderdeterminedModelException>().having(
+          (e) => e.message,
+          'message',
+          contains('Nyquist'),
+        ),
+      );
       expect(() => fit(model(4, 7), daily), refused);
       expect(() => fit(model(6, 12), daily), refused);
       expect(() => model(4, 7).smooth(daily), refused);
@@ -124,7 +141,7 @@ void main() {
       // An annual pattern with time in years and monthly readings.
       final monthly = [
         for (var i = 0; i < 48; i++)
-          Observation(i / 12, 80 + math.sin(2 * math.pi * i / 12))
+          Observation(i / 12, 80 + math.sin(2 * math.pi * i / 12)),
       ];
       final annual = StructuralModel([
         LocalLinearTrend(processVariance: 1e-3),
@@ -134,10 +151,14 @@ void main() {
     });
 
     test('round-trips its parameter', () {
-      final component =
-          TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 4e-3);
-      final rebuilt = component.withParameters(component.parameters)
-          as TrigonometricSeasonal;
+      final component = TrigonometricSeasonal(
+        period: 7,
+        harmonics: 2,
+        processVariance: 4e-3,
+      );
+      final rebuilt =
+          component.withParameters(component.parameters)
+              as TrigonometricSeasonal;
       // exp(log(v)) is not v: the round trip costs a couple of ulps, which
       // at this magnitude is a few parts in 1e16.
       expect(rebuilt.processVariance, closeTo(4e-3, 4e-3 * 1e-15));
@@ -149,9 +170,13 @@ void main() {
       // The derivative of a sinusoid is another sinusoid, not one of the
       // states, so there is nothing here for SmoothingResult.slope to mean.
       expect(
-          TrigonometricSeasonal(period: 7, harmonics: 1, processVariance: 1e-3)
-              .rateStateIndex,
-          isNull);
+        TrigonometricSeasonal(
+          period: 7,
+          harmonics: 1,
+          processVariance: 1e-3,
+        ).rateStateIndex,
+        isNull,
+      );
     });
   });
 
@@ -165,7 +190,8 @@ void main() {
       var t = 0.0;
       for (var i = 0; i < 120; i++) {
         t += 0.3 + random.nextDouble();
-        final signal = 2 * math.cos(2 * math.pi * t / 7) +
+        final signal =
+            2 * math.cos(2 * math.pi * t / 7) +
             0.5 * math.sin(4 * math.pi * t / 7);
         out.add(Observation(t, signal + 0.05 * (random.nextDouble() - 0.5)));
       }
@@ -174,16 +200,14 @@ void main() {
 
     test('recovers the waveform it was generated from', () {
       final observations = data();
-      final result = StructuralModel(
-        [
-          TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-10)
-        ],
-        measurementVariance: 1e-3,
-      ).smooth(observations);
+      final result = StructuralModel([
+        TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-10),
+      ], measurementVariance: 1e-3).smooth(observations);
 
       for (var i = 0; i < result.length; i++) {
         final t = result.times[i];
-        final truth = 2 * math.cos(2 * math.pi * t / 7) +
+        final truth =
+            2 * math.cos(2 * math.pi * t / 7) +
             0.5 * math.sin(4 * math.pi * t / 7);
         expect(result.mean[i], closeTo(truth, 0.01));
       }
@@ -194,17 +218,22 @@ void main() {
       // is still the same waveform -- unlike a trend, whose band opens up.
       final observations = data();
       final last = observations.last.time;
-      final forecast = StructuralModel(
-        [
-          TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-10)
-        ],
-        measurementVariance: 1e-3,
-      ).forecast(
-          observations, Float64List.fromList([last + 3, last + 10, last + 14]));
+      final forecast =
+          StructuralModel([
+            TrigonometricSeasonal(
+              period: 7,
+              harmonics: 2,
+              processVariance: 1e-10,
+            ),
+          ], measurementVariance: 1e-3).forecast(
+            observations,
+            Float64List.fromList([last + 3, last + 10, last + 14]),
+          );
 
       for (var i = 0; i < forecast.length; i++) {
         final t = forecast.times[i];
-        final truth = 2 * math.cos(2 * math.pi * t / 7) +
+        final truth =
+            2 * math.cos(2 * math.pi * t / 7) +
             0.5 * math.sin(4 * math.pi * t / 7);
         expect(forecast.mean[i], closeTo(truth, 0.02));
       }
@@ -217,30 +246,44 @@ void main() {
       // engine knows only that the information matrix came out singular; it
       // knows the count itself, and asks the component about the rest.
       final short = [
-        for (var i = 0; i < 5; i++) Observation(i * 0.75, 1.0 + 0.1 * i)
+        for (var i = 0; i < 5; i++) Observation(i * 0.75, 1.0 + 0.1 * i),
       ];
       expect(
         () => StructuralModel([
-          TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 1e-3)
+          TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 1e-3),
         ]).smooth(short),
-        throwsA(isA<UnderdeterminedModelException>()
-            .having((e) => e.message, 'message', contains('degree of freedom'))
-            .having((e) => e.message, 'message',
-                contains('has not been round once'))),
+        throwsA(
+          isA<UnderdeterminedModelException>()
+              .having(
+                (e) => e.message,
+                'message',
+                contains('degree of freedom'),
+              )
+              .having(
+                (e) => e.message,
+                'message',
+                contains('has not been round once'),
+              ),
+        ),
       );
     });
 
     test('two components that supply the same level say that instead', () {
       final data = [
-        for (var i = 0; i < 30; i++) Observation(i.toDouble(), 5.0 + 0.1 * i)
+        for (var i = 0; i < 30; i++) Observation(i.toDouble(), 5.0 + 0.1 * i),
       ];
       expect(
         () => StructuralModel([
           LocalLinearTrend(processVariance: 1e-3),
           LocalLevel(processVariance: 1e-3),
         ]).smooth(data),
-        throwsA(isA<UnderdeterminedModelException>()
-            .having((e) => e.message, 'message', contains('the same signal'))),
+        throwsA(
+          isA<UnderdeterminedModelException>().having(
+            (e) => e.message,
+            'message',
+            contains('the same signal'),
+          ),
+        ),
       );
     });
 
@@ -248,11 +291,13 @@ void main() {
       final random = math.Random(2);
       final data = [
         for (var i = 0; i < 40; i++)
-          Observation(i * 0.75,
-              math.cos(2 * math.pi * i * 0.75 / 7) + 0.05 * random.nextDouble())
+          Observation(
+            i * 0.75,
+            math.cos(2 * math.pi * i * 0.75 / 7) + 0.05 * random.nextDouble(),
+          ),
       ];
       final result = StructuralModel([
-        TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 1e-3)
+        TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 1e-3),
       ]).smooth(data);
       expect(result.logMarginalLikelihood.isFinite, isTrue);
     });

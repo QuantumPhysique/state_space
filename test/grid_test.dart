@@ -16,17 +16,19 @@ List<Observation> _data() {
 }
 
 StructuralModel _model() => StructuralModel.localLinearTrend(
-      processVariance: 8e-4,
-      measurementVariance: 0.2,
-    );
+  processVariance: 8e-4,
+  measurementVariance: 0.2,
+);
 
 void main() {
   group('output grid', () {
     test('asking for output at the observation times changes nothing', () {
       final data = _data();
       final plain = _model().smooth(data);
-      final gridded = _model().smooth(data,
-          grid: Float64List.fromList([for (final o in data) o.time]));
+      final gridded = _model().smooth(
+        data,
+        grid: Float64List.fromList([for (final o in data) o.time]),
+      );
 
       expect(gridded.length, data.length);
       for (var i = 0; i < data.length; i++) {
@@ -35,12 +37,13 @@ void main() {
         expect(gridded.variance[i], closeTo(plain.variance[i], 1e-14));
         expect(gridded.trendSlope![i], closeTo(plain.trendSlope![i], 1e-14));
       }
-      expect(gridded.logMarginalLikelihood,
-          closeTo(plain.logMarginalLikelihood, 1e-12));
+      expect(
+        gridded.logMarginalLikelihood,
+        closeTo(plain.logMarginalLikelihood, 1e-12),
+      );
     });
 
-    test(
-        'extra grid points between observations do not disturb the ones on '
+    test('extra grid points between observations do not disturb the ones on '
         'top of them', () {
       // The interpolated points are steps with nothing to update on, so they
       // carry no information and must leave the rest of the answer alone.
@@ -76,20 +79,23 @@ void main() {
         for (var i = 0; i < 12; i++)
           Observation(60 + i.toDouble(), 77 + 0.04 * i),
       ];
-      final result =
-          _model().smooth(data, grid: Float64List.fromList([11, 35, 60]));
+      final result = _model().smooth(
+        data,
+        grid: Float64List.fromList([11, 35, 60]),
+      );
 
       expect(result.variance[1], greaterThan(10 * result.variance[0]));
       expect(result.variance[1], greaterThan(10 * result.variance[2]));
     });
 
-    test(
-        'the band widens beyond the last observation, at the rate the model '
+    test('the band widens beyond the last observation, at the rate the model '
         'says it should', () {
       final data = _data();
       final last = data.last.time;
-      final result = _model().smooth(data,
-          grid: Float64List.fromList([last, last + 5, last + 50, last + 400]));
+      final result = _model().smooth(
+        data,
+        grid: Float64List.fromList([last, last + 5, last + 50, last + 400]),
+      );
 
       expect(result.variance[1], greaterThan(result.variance[0]));
       expect(result.variance[2], greaterThan(result.variance[1]));

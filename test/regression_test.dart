@@ -25,19 +25,20 @@ List<Observation> _withEvents({
   return [
     for (var day = 0; day < days; day++)
       Observation(
-          day.toDouble(),
-          70 -
-              0.002 * day +
-              (day >= 80 && day < 87 ? conferenceEffect : 0) +
-              (day >= 350 && day < 364 ? holidayEffect : 0) +
-              noise * _gaussian(random))
+        day.toDouble(),
+        70 -
+            0.002 * day +
+            (day >= 80 && day < 87 ? conferenceEffect : 0) +
+            (day >= 350 && day < 364 ? holidayEffect : 0) +
+            noise * _gaussian(random),
+      ),
   ];
 }
 
 RegressionComponent _events() => RegressionComponent([
-      IndicatorRegressor('conference', [(from: 80, to: 87)]),
-      IndicatorRegressor('holiday', [(from: 350, to: 364)]),
-    ]);
+  IndicatorRegressor('conference', [(from: 80, to: 87)]),
+  IndicatorRegressor('holiday', [(from: 350, to: 364)]),
+]);
 
 void main() {
   group('an indicator regressor', () {
@@ -61,13 +62,17 @@ void main() {
 
     test('refuses spans that are out of order or overlapping', () {
       expect(
-          () => IndicatorRegressor('x', [(from: 5, to: 9), (from: 3, to: 4)]),
-          throwsArgumentError);
+        () => IndicatorRegressor('x', [(from: 5, to: 9), (from: 3, to: 4)]),
+        throwsArgumentError,
+      );
       expect(
-          () => IndicatorRegressor('x', [(from: 0, to: 9), (from: 3, to: 12)]),
-          throwsArgumentError);
-      expect(() => IndicatorRegressor('x', [(from: 5, to: 5)]),
-          throwsArgumentError);
+        () => IndicatorRegressor('x', [(from: 0, to: 9), (from: 3, to: 12)]),
+        throwsArgumentError,
+      );
+      expect(
+        () => IndicatorRegressor('x', [(from: 5, to: 5)]),
+        throwsArgumentError,
+      );
     });
 
     test('knows when it has nothing to say about a stretch of time', () {
@@ -98,13 +103,21 @@ void main() {
 
     test('refuses mismatched or unsorted knots', () {
       expect(
-          () => StepRegressor(
-              'x', Float64List.fromList([0, 1]), Float64List.fromList([1])),
-          throwsArgumentError);
+        () => StepRegressor(
+          'x',
+          Float64List.fromList([0, 1]),
+          Float64List.fromList([1]),
+        ),
+        throwsArgumentError,
+      );
       expect(
-          () => StepRegressor(
-              'x', Float64List.fromList([5, 1]), Float64List.fromList([1, 2])),
-          throwsArgumentError);
+        () => StepRegressor(
+          'x',
+          Float64List.fromList([5, 1]),
+          Float64List.fromList([1, 2]),
+        ),
+        throwsArgumentError,
+      );
     });
   });
 
@@ -131,11 +144,12 @@ void main() {
       expect(component.parameterCount, 0);
       expect(component.parameters, isEmpty);
       expect(
-          StructuralModel([
-            LocalLinearTrend(processVariance: 1e-3),
-            component,
-          ]).parameterCount,
-          1);
+        StructuralModel([
+          LocalLinearTrend(processVariance: 1e-3),
+          component,
+        ]).parameterCount,
+        1,
+      );
     });
 
     test('reads the design at the time it is asked about', () {
@@ -157,14 +171,13 @@ void main() {
     test('gets the effect and an honest error bar', () {
       const holiday = 1.2;
       const conference = -0.4;
-      final data =
-          _withEvents(holidayEffect: holiday, conferenceEffect: conference);
+      final data = _withEvents(
+        holidayEffect: holiday,
+        conferenceEffect: conference,
+      );
 
       final fitted = fit(
-        StructuralModel([
-          LocalLinearTrend(processVariance: 1e-4),
-          _events(),
-        ]),
+        StructuralModel([LocalLinearTrend(processVariance: 1e-4), _events()]),
         data,
       );
       // One free variance, not three: the two coefficients are states.
@@ -172,20 +185,22 @@ void main() {
       expect(fitted.varianceRatio, isPositive);
 
       final posterior = fitted.model.smooth(data);
-      expect(
-          posterior.coefficients.map((c) => c.name), ['conference', 'holiday']);
+      expect(posterior.coefficients.map((c) => c.name), [
+        'conference',
+        'holiday',
+      ]);
 
-      final estimates = {
-        for (final c in posterior.coefficients) c.name: c,
-      };
+      final estimates = {for (final c in posterior.coefficients) c.name: c};
       for (final (name, truth) in [
         ('holiday', holiday),
         ('conference', conference),
       ]) {
         final coefficient = estimates[name]!;
-        expect((coefficient.estimate - truth).abs(),
-            lessThan(2.5 * coefficient.standardError),
-            reason: '$name: $coefficient against a true $truth');
+        expect(
+          (coefficient.estimate - truth).abs(),
+          lessThan(2.5 * coefficient.standardError),
+          reason: '$name: $coefficient against a true $truth',
+        );
         final interval = coefficient.interval();
         expect(interval.lo, lessThan(truth));
         expect(interval.hi, greaterThan(truth));
@@ -196,8 +211,10 @@ void main() {
       // costs: 0.25 / sqrt(14) is 0.067 for the fortnight, 0.25 / sqrt(7) is
       // 0.094 for the week.
       expect(estimates['holiday']!.standardError, lessThan(0.2));
-      expect(estimates['conference']!.standardError,
-          greaterThan(estimates['holiday']!.standardError));
+      expect(
+        estimates['conference']!.standardError,
+        greaterThan(estimates['holiday']!.standardError),
+      );
     });
 
     test('and covers the truth about as often as it claims to', () {
@@ -208,12 +225,12 @@ void main() {
       var covered = 0;
       for (var seed = 1; seed <= 20; seed++) {
         final data = _withEvents(
-            holidayEffect: holiday, conferenceEffect: -0.4, seed: seed);
+          holidayEffect: holiday,
+          conferenceEffect: -0.4,
+          seed: seed,
+        );
         final fitted = fit(
-          StructuralModel([
-            LocalLinearTrend(processVariance: 1e-4),
-            _events(),
-          ]),
+          StructuralModel([LocalLinearTrend(processVariance: 1e-4), _events()]),
           data,
         );
         final coefficient = fitted.model
@@ -226,19 +243,23 @@ void main() {
       expect(covered, greaterThanOrEqualTo(16));
     });
 
-    test(
-        'says which regressor never fired, rather than going singular '
+    test('says which regressor never fired, rather than going singular '
         'quietly', () {
-      final data =
-          _withEvents(holidayEffect: 1.2, conferenceEffect: -0.4, days: 200);
+      final data = _withEvents(
+        holidayEffect: 1.2,
+        conferenceEffect: -0.4,
+        days: 200,
+      );
       expect(
         () => StructuralModel([
           LocalLinearTrend(processVariance: 1e-4),
           _events(),
         ]).smooth(data),
-        throwsA(isA<UnderdeterminedModelException>()
-            .having((e) => e.message, 'message', contains('"holiday"'))
-            .having((e) => e.message, 'message', contains('zero everywhere'))),
+        throwsA(
+          isA<UnderdeterminedModelException>()
+              .having((e) => e.message, 'message', contains('"holiday"'))
+              .having((e) => e.message, 'message', contains('zero everywhere')),
+        ),
       );
     });
 
@@ -252,7 +273,7 @@ void main() {
           IndicatorRegressor('level', [(from: -1, to: 1e9)]),
           IndicatorRegressor('conference', [(from: 80, to: 87)]),
           IndicatorRegressor('holiday', [(from: 350, to: 364)]),
-        ])
+        ]),
       ]);
 
       final fitted = fit(model, data);
@@ -263,15 +284,14 @@ void main() {
       expect(fitted.evaluations, 1, reason: 'nothing was searched');
 
       final estimates = {
-        for (final c in fitted.model.smooth(data).coefficients) c.name: c
+        for (final c in fitted.model.smooth(data).coefficients) c.name: c,
       };
       // An always-on column is the level, and the series drifts down by 0.002
       // a day over four hundred days, so it lands on the average of 69.6.
       expect(estimates['level']!.estimate, closeTo(69.6, 0.1));
     });
 
-    test('and dropping the trend biases every event by where the trend was',
-        () {
+    test('and dropping the trend biases every event by where the trend was', () {
       // Worth pinning, because the fit still looks fine. Without somewhere for
       // the drift to go, each event coefficient absorbs the difference between
       // the level when it happened and the level on average -- the December
@@ -282,10 +302,7 @@ void main() {
       final data = _withEvents(holidayEffect: 1.2, conferenceEffect: -0.4);
 
       final withTrend = fit(
-        StructuralModel([
-          LocalLinearTrend(processVariance: 1e-4),
-          _events(),
-        ]),
+        StructuralModel([LocalLinearTrend(processVariance: 1e-4), _events()]),
         data,
       );
       final without = fit(
@@ -293,13 +310,14 @@ void main() {
           RegressionComponent([
             IndicatorRegressor('level', [(from: -1, to: 1e9)]),
             ..._events().regressors,
-          ])
+          ]),
         ]),
         data,
       );
 
-      Map<String, Coefficient> read(FitResult f) =>
-          {for (final c in f.model.smooth(data).coefficients) c.name: c};
+      Map<String, Coefficient> read(FitResult f) => {
+        for (final c in f.model.smooth(data).coefficients) c.name: c,
+      };
       final good = read(withTrend);
       final bad = read(without);
 
@@ -312,15 +330,21 @@ void main() {
       // four standard errors respectively, with no widening of the error bars
       // to warn anybody.
       expect(
-          bad['holiday']!.estimate, lessThan(good['holiday']!.estimate - 0.2));
-      expect(bad['conference']!.estimate,
-          greaterThan(good['conference']!.estimate + 0.15));
+        bad['holiday']!.estimate,
+        lessThan(good['holiday']!.estimate - 0.2),
+      );
+      expect(
+        bad['conference']!.estimate,
+        greaterThan(good['conference']!.estimate + 0.15),
+      );
 
       // The one thing that does give it away is the noise level: the drift
       // has nowhere to go, so it is reported as measurement error. 0.33
       // against 0.25.
-      expect(math.sqrt(without.measurementVariance),
-          greaterThan(1.25 * math.sqrt(withTrend.measurementVariance)));
+      expect(
+        math.sqrt(without.measurementVariance),
+        greaterThan(1.25 * math.sqrt(withTrend.measurementVariance)),
+      );
     });
   });
 }

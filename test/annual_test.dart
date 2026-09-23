@@ -15,13 +15,14 @@ List<Observation> _withAnnual(int days, {int seed = 7}) {
   return [
     for (var day = 0; day < days; day++)
       Observation(
-          day.toDouble(),
-          78 -
-              0.001 * day +
-              0.4 * math.cos(2 * math.pi * day / 7) +
-              0.15 * math.sin(4 * math.pi * day / 7) +
-              1.1 * math.cos(2 * math.pi * (day - 30) / 365.25) +
-              0.3 * _gaussian(random))
+        day.toDouble(),
+        78 -
+            0.001 * day +
+            0.4 * math.cos(2 * math.pi * day / 7) +
+            0.15 * math.sin(4 * math.pi * day / 7) +
+            1.1 * math.cos(2 * math.pi * (day - 30) / 365.25) +
+            0.3 * _gaussian(random),
+      ),
   ];
 }
 
@@ -31,20 +32,20 @@ List<Observation> _withoutAnnual(int days, {int seed = 3}) {
   return [
     for (var day = 0; day < days; day++)
       Observation(
-          day.toDouble(),
-          78 -
-              0.001 * day +
-              0.4 * math.cos(2 * math.pi * day / 7) +
-              0.3 * _gaussian(random))
+        day.toDouble(),
+        78 -
+            0.001 * day +
+            0.4 * math.cos(2 * math.pi * day / 7) +
+            0.3 * _gaussian(random),
+      ),
   ];
 }
 
 StructuralModel _model() => StructuralModel([
-      LocalLinearTrend(processVariance: 1e-5),
-      TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-5),
-      TrigonometricSeasonal(
-          period: 365.25, harmonics: 2, processVariance: 1e-5),
-    ]);
+  LocalLinearTrend(processVariance: 1e-5),
+  TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-5),
+  TrigonometricSeasonal(period: 365.25, harmonics: 2, processVariance: 1e-5),
+]);
 
 double _amplitude(SmoothingResult posterior, int component) {
   final share = posterior.componentMean(component);
@@ -84,28 +85,36 @@ void main() {
       expect(math.sqrt(fitted.measurementVariance), closeTo(0.3, 0.03));
 
       expect(
-          fitted.model
-              .diagnose(data)
-              .ljungBox(lags: 20, fittedParameters: 3)
-              .pValue,
-          greaterThan(0.05));
+        fitted.model
+            .diagnose(data)
+            .ljungBox(lags: 20, fittedParameters: 3)
+            .pValue,
+        greaterThan(0.05),
+      );
     });
 
-    test('and reports the rigid components as shrunk rather than estimated',
-        () {
-      // The simulated components do not evolve, so a variance of zero is the
-      // truth and the fit should say it has hit the boundary rather than
-      // quoting a number and a width as though it had found an interior
-      // optimum.
-      final data = _withAnnual(3 * 365);
-      final fitted = fit(_model(), data);
+    test(
+      'and reports the rigid components as shrunk rather than estimated',
+      () {
+        // The simulated components do not evolve, so a variance of zero is the
+        // truth and the fit should say it has hit the boundary rather than
+        // quoting a number and a width as though it had found an interior
+        // optimum.
+        final data = _withAnnual(3 * 365);
+        final fitted = fit(_model(), data);
 
-      expect(fitted.parameterStatus, hasLength(3));
-      expect(fitted.parameterStatus, contains(ParameterStatus.shrunkToNothing));
-      expect(fitted.atBracketEdge, isTrue);
-      expect(fitted.parameterStatus,
-          isNot(contains(ParameterStatus.beyondBracket)));
-    });
+        expect(fitted.parameterStatus, hasLength(3));
+        expect(
+          fitted.parameterStatus,
+          contains(ParameterStatus.shrunkToNothing),
+        );
+        expect(fitted.atBracketEdge, isTrue);
+        expect(
+          fitted.parameterStatus,
+          isNot(contains(ParameterStatus.beyondBracket)),
+        );
+      },
+    );
   });
 
   group('an annual component on less than a year of data', () {
@@ -152,10 +161,14 @@ void main() {
       final short = fit(_model(), _withoutAnnual(180)).model;
       final full = fit(_model(), _withoutAnnual(365)).model;
 
-      final atShort =
-          _meanStandardDeviation(short.smooth(_withoutAnnual(180)), 2);
-      final atFull =
-          _meanStandardDeviation(full.smooth(_withoutAnnual(365)), 2);
+      final atShort = _meanStandardDeviation(
+        short.smooth(_withoutAnnual(180)),
+        2,
+      );
+      final atFull = _meanStandardDeviation(
+        full.smooth(_withoutAnnual(365)),
+        2,
+      );
 
       expect(atFull, lessThan(atShort / 10));
       expect(atFull, lessThan(0.15));

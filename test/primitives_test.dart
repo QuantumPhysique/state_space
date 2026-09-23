@@ -47,8 +47,12 @@ void main() {
       // The same singular matrix with one direction scaled by 1e8: the bare
       // pivot is rounding noise whose sign varies, the relative one is not.
       for (final scale in [1e-8, 1.0, 1e8]) {
-        final a = Float64List.fromList(
-            [1, scale, scale, scale * scale * (1 + 1e-15)]);
+        final a = Float64List.fromList([
+          1,
+          scale,
+          scale,
+          scale * scale * (1 + 1e-15),
+        ]);
         expect(factorInformation(a, 2), isFalse, reason: 'scale $scale');
         final b = Float64List.fromList([1, scale, scale, 2 * scale * scale]);
         expect(factorInformation(b, 2), isTrue, reason: 'scale $scale');
@@ -87,20 +91,25 @@ void main() {
   test('credibleInterval scales with the coverage asked for', () {
     final data = [
       for (var i = 0; i < 40; i++)
-        Observation(i.toDouble(), 80 + 0.01 * i + 0.1 * math.sin(i * 1.7))
+        Observation(i.toDouble(), 80 + 0.01 * i + 0.1 * math.sin(i * 1.7)),
     ];
     final posterior = StructuralModel.localLinearTrend(
-            processVariance: 1e-3, measurementVariance: 0.01)
-        .smooth(data);
+      processVariance: 1e-3,
+      measurementVariance: 0.01,
+    ).smooth(data);
     double width(double coverage) {
       final band = posterior.credibleInterval(10, coverage: coverage);
       return band.hi - band.lo;
     }
 
-    expect(width(0.99) / width(0.95),
-        closeTo(2.5758293035489004 / 1.959963984540054, 1e-9));
     expect(
-        () => posterior.credibleInterval(10, coverage: 1), throwsArgumentError);
+      width(0.99) / width(0.95),
+      closeTo(2.5758293035489004 / 1.959963984540054, 1e-9),
+    );
+    expect(
+      () => posterior.credibleInterval(10, coverage: 1),
+      throwsArgumentError,
+    );
     final band = posterior.credibleBand(coverage: 0.99);
     final one = posterior.credibleInterval(10, coverage: 0.99);
     expect(band.lo[10], one.lo);
@@ -125,10 +134,13 @@ void main() {
     // s2 - (2 s2 l / T^2) (T - l (1 - exp(-T / l))).
     const s2 = 0.7, l = 3.0;
     for (final span in [1.0, 10.0, 100.0]) {
-      final exact = s2 -
+      final exact =
+          s2 -
           2 * s2 * l / (span * span) * (span - l * (1 - math.exp(-span / l)));
-      expect(stationaryWander((tau) => s2 * math.exp(-tau / l), span),
-          closeTo(math.sqrt(exact), 1e-6 * math.sqrt(exact)));
+      expect(
+        stationaryWander((tau) => s2 * math.exp(-tau / l), span),
+        closeTo(math.sqrt(exact), 1e-6 * math.sqrt(exact)),
+      );
     }
   });
 }

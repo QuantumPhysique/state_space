@@ -36,12 +36,20 @@ double _quadratic(Float64List x) {
 void main() {
   group('the simplex search', () {
     test('walks up the Rosenbrock valley', () {
-      var result = maximiseSimplex(_rosenbrock, Float64List.fromList([-1.2, 1]),
-          step: 0.5, tolerance: 1e-12);
+      var result = maximiseSimplex(
+        _rosenbrock,
+        Float64List.fromList([-1.2, 1]),
+        step: 0.5,
+        tolerance: 1e-12,
+      );
       // One restart, as the fitting code does: a fresh simplex around the
       // answer is the standard insurance against a collapsed one.
-      result = maximiseSimplex(_rosenbrock, result.argument,
-          step: 0.1, tolerance: 1e-14);
+      result = maximiseSimplex(
+        _rosenbrock,
+        result.argument,
+        step: 0.1,
+        tolerance: 1e-14,
+      );
 
       expect(result.argument[0], closeTo(1, 1e-5));
       expect(result.argument[1], closeTo(1, 1e-5));
@@ -49,10 +57,18 @@ void main() {
     });
 
     test('finds the maximum of Beale from a long way out', () {
-      var result = maximiseSimplex(_beale, Float64List.fromList([0, 0]),
-          step: 1, tolerance: 1e-12);
-      result =
-          maximiseSimplex(_beale, result.argument, step: 0.1, tolerance: 1e-14);
+      var result = maximiseSimplex(
+        _beale,
+        Float64List.fromList([0, 0]),
+        step: 1,
+        tolerance: 1e-12,
+      );
+      result = maximiseSimplex(
+        _beale,
+        result.argument,
+        step: 0.1,
+        tolerance: 1e-14,
+      );
 
       expect(result.argument[0], closeTo(3, 1e-5));
       expect(result.argument[1], closeTo(0.5, 1e-5));
@@ -60,13 +76,19 @@ void main() {
 
     test('handles four dimensions without help', () {
       final result = maximiseSimplex(
-          _quadratic, Float64List.fromList([0, 0, 0, 0]),
-          step: 2, tolerance: 1e-12);
+        _quadratic,
+        Float64List.fromList([0, 0, 0, 0]),
+        step: 2,
+        tolerance: 1e-12,
+      );
 
       expect(result.converged, isTrue);
       for (final (i, expected) in [1.5, -2.0, 0.25, 3.0].indexed) {
-        expect(result.argument[i], closeTo(expected, 1e-5),
-            reason: 'coordinate $i');
+        expect(
+          result.argument[i],
+          closeTo(expected, 1e-5),
+          reason: 'coordinate $i',
+        );
       }
     });
 
@@ -76,32 +98,49 @@ void main() {
       // single-component model would use if it were not better served by
       // golden section.
       final result = maximiseSimplex(
-          (x) => -(x[0] - 2.5) * (x[0] - 2.5), Float64List.fromList([0]),
-          step: 1, tolerance: 1e-14);
+        (x) => -(x[0] - 2.5) * (x[0] - 2.5),
+        Float64List.fromList([0]),
+        step: 1,
+        tolerance: 1e-14,
+      );
       expect(result.argument[0], closeTo(2.5, 1e-6));
     });
 
     test('reports that it stopped early when it did', () {
-      final result = maximiseSimplex(_rosenbrock, Float64List.fromList([-3, 4]),
-          step: 0.5, tolerance: 1e-16, maxEvaluations: 30);
+      final result = maximiseSimplex(
+        _rosenbrock,
+        Float64List.fromList([-3, 4]),
+        step: 0.5,
+        tolerance: 1e-16,
+        maxEvaluations: 30,
+      );
       expect(result.converged, isFalse);
       expect(result.evaluations, lessThanOrEqualTo(40));
     });
 
     test('refuses an empty parameter vector', () {
       expect(
-          () => maximiseSimplex((x) => 0, Float64List(0)), throwsArgumentError);
+        () => maximiseSimplex((x) => 0, Float64List(0)),
+        throwsArgumentError,
+      );
     });
 
     test('does not care about the scale of the objective', () {
       // Adding a constant and multiplying by a positive one moves the answer
       // nowhere, which it must not, because a profile likelihood carries an
       // arbitrary additive constant.
-      final plain = maximiseSimplex(_beale, Float64List.fromList([1, 1]),
-          step: 0.5, tolerance: 1e-12);
+      final plain = maximiseSimplex(
+        _beale,
+        Float64List.fromList([1, 1]),
+        step: 0.5,
+        tolerance: 1e-12,
+      );
       final shifted = maximiseSimplex(
-          (x) => 3 * _beale(x) + 1e6, Float64List.fromList([1, 1]),
-          step: 0.5, tolerance: 3e-12);
+        (x) => 3 * _beale(x) + 1e6,
+        Float64List.fromList([1, 1]),
+        step: 0.5,
+        tolerance: 3e-12,
+      );
       expect(shifted.argument[0], closeTo(plain.argument[0], 1e-4));
       expect(shifted.argument[1], closeTo(plain.argument[1], 1e-4));
     });

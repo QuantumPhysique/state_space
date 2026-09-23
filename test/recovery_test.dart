@@ -54,8 +54,9 @@ List<Observation> simulate({
 
   for (var i = 0; i < count; i++) {
     if (i > 0) {
-      final dt =
-          irregular ? meanGap * (0.25 + 1.5 * gaps.nextDouble()) : meanGap;
+      final dt = irregular
+          ? meanGap * (0.25 + 1.5 * gaps.nextDouble())
+          : meanGap;
       final z0 = noise.next();
       final z1 = noise.next();
       level += rate * dt + sigma * (dt * math.sqrt(dt) / math.sqrt(3) * z0);
@@ -89,11 +90,16 @@ void main() {
         expect(result.converged, isTrue);
         expect(result.atBracketEdge, isFalse);
         expect(result.isFlat, isFalse);
-        expect(math.log(result.varianceRatio / trueRatio).abs(), lessThan(0.7),
-            reason: 'seed $seed recovered ${result.varianceRatio}');
-        expect(result.measurementVariance,
-            closeTo(measurementVariance, 0.15 * measurementVariance),
-            reason: 'seed $seed');
+        expect(
+          math.log(result.varianceRatio / trueRatio).abs(),
+          lessThan(0.7),
+          reason: 'seed $seed recovered ${result.varianceRatio}',
+        );
+        expect(
+          result.measurementVariance,
+          closeTo(measurementVariance, 0.15 * measurementVariance),
+          reason: 'seed $seed',
+        );
       }
     });
 
@@ -106,17 +112,19 @@ void main() {
         final errors = <double>[
           for (var seed = 1; seed <= 7; seed++)
             math
-                .log(fit(
-                      StructuralModel.localLinearTrend(processVariance: 1),
-                      simulate(
-                        count: count,
-                        processVariance: processVariance,
-                        measurementVariance: measurementVariance,
-                        seed: seed * 17,
-                      ),
-                    ).varianceRatio /
-                    trueRatio)
-                .abs()
+                .log(
+                  fit(
+                        StructuralModel.localLinearTrend(processVariance: 1),
+                        simulate(
+                          count: count,
+                          processVariance: processVariance,
+                          measurementVariance: measurementVariance,
+                          seed: seed * 17,
+                        ),
+                      ).varianceRatio /
+                      trueRatio,
+                )
+                .abs(),
         ]..sort();
         return errors[errors.length ~/ 2];
       }
@@ -141,21 +149,22 @@ void main() {
       // The profile likelihood is the real likelihood at the concentrated
       // variance, so refitting nothing and simply running the forward pass on
       // the returned model has to give the same number back.
-      expect(result.model.logLikelihood(data),
-          closeTo(result.logMarginalLikelihood, 1e-9));
+      expect(
+        result.model.logLikelihood(data),
+        closeTo(result.logMarginalLikelihood, 1e-9),
+      );
     });
   });
 
   group('diagnostics', () {
-    test(
-        'white noise drives the trend to the floor and says the profile is '
+    test('white noise drives the trend to the floor and says the profile is '
         'flat', () {
       // There is no trend to find, so every sufficiently small process
       // variance fits equally well and the likelihood has nothing to say.
       final noise = Gaussian(42);
       final data = [
         for (var i = 0; i < 300; i++)
-          Observation(i.toDouble(), 50 + 0.5 * noise.next())
+          Observation(i.toDouble(), 50 + 0.5 * noise.next()),
       ];
       final result = fit(
         StructuralModel.localLinearTrend(processVariance: 1),
@@ -173,25 +182,33 @@ void main() {
       // refuses it for the real reason, on the first evaluation.
       expect(
         () => fit(
-            StructuralModel([
-              LocalLinearTrend(processVariance: 1e-3),
-              LocalLevel(processVariance: 1e-3),
-            ]),
-            simulate(
-              count: 50,
-              processVariance: 1e-3,
-              measurementVariance: 0.1,
-              seed: 1,
-            )),
-        throwsA(isA<UnderdeterminedModelException>()
-            .having((e) => e.message, 'message', contains('the same signal'))),
+          StructuralModel([
+            LocalLinearTrend(processVariance: 1e-3),
+            LocalLevel(processVariance: 1e-3),
+          ]),
+          simulate(
+            count: 50,
+            processVariance: 1e-3,
+            measurementVariance: 0.1,
+            seed: 1,
+          ),
+        ),
+        throwsA(
+          isA<UnderdeterminedModelException>().having(
+            (e) => e.message,
+            'message',
+            contains('the same signal'),
+          ),
+        ),
       );
     });
 
     test('refuses to fit fewer observations than there are diffuse states', () {
       expect(
-        () => fit(StructuralModel.localLinearTrend(processVariance: 1),
-            [const Observation(0, 1), const Observation(1, 2)]),
+        () => fit(StructuralModel.localLinearTrend(processVariance: 1), [
+          const Observation(0, 1),
+          const Observation(1, 2),
+        ]),
         throwsA(isA<UnderdeterminedModelException>()),
       );
     });

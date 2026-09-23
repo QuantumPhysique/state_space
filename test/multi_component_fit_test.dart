@@ -17,7 +17,7 @@ double _gaussian(math.Random random) =>
 /// discrete shortcut would be generating from a different model and the
 /// recovery test would be measuring the gap between them.
 ({List<Observation> data, List<double> trend, List<double> seasonal})
-    _simulate({
+_simulate({
   required double trendVariance,
   required double seasonalVariance,
   required double measurementVariance,
@@ -62,19 +62,26 @@ double _gaussian(math.Random random) =>
     time += dt;
     trend.add(level);
     seasonal.add(pattern);
-    data.add(Observation(time,
-        level + pattern + math.sqrt(measurementVariance) * _gaussian(random)));
+    data.add(
+      Observation(
+        time,
+        level + pattern + math.sqrt(measurementVariance) * _gaussian(random),
+      ),
+    );
   }
   return (data: data, trend: trend, seasonal: seasonal);
 }
 
 StructuralModel _start() => StructuralModel([
-      LocalLinearTrend(processVariance: 1e-3),
-      TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
-    ]);
+  LocalLinearTrend(processVariance: 1e-3),
+  TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
+]);
 
-double _rootMeanSquare(Float64List fitted, List<double> truth,
-    {bool centre = false}) {
+double _rootMeanSquare(
+  Float64List fitted,
+  List<double> truth, {
+  bool centre = false,
+}) {
   var offset = 0.0;
   if (centre) {
     for (var i = 0; i < truth.length; i++) {
@@ -116,17 +123,27 @@ void main() {
         // log ratio is 0.37 for the trend and 0.33 for the seasonal, so this
         // is roughly two and a half standard errors.
         final trendError = math.log(
-            result.varianceRatios[0] / (trendVariance / measurementVariance));
-        final seasonalError = math.log(result.varianceRatios[1] /
-            (seasonalVariance / measurementVariance));
-        expect(trendError.abs(), lessThan(1.0),
-            reason: 'seed $seed trend ratio ${result.varianceRatios[0]}');
-        expect(seasonalError.abs(), lessThan(1.0),
-            reason: 'seed $seed seasonal ratio ${result.varianceRatios[1]}');
+          result.varianceRatios[0] / (trendVariance / measurementVariance),
+        );
+        final seasonalError = math.log(
+          result.varianceRatios[1] / (seasonalVariance / measurementVariance),
+        );
+        expect(
+          trendError.abs(),
+          lessThan(1.0),
+          reason: 'seed $seed trend ratio ${result.varianceRatios[0]}',
+        );
+        expect(
+          seasonalError.abs(),
+          lessThan(1.0),
+          reason: 'seed $seed seasonal ratio ${result.varianceRatios[1]}',
+        );
 
-        expect(result.measurementVariance,
-            closeTo(measurementVariance, 0.25 * measurementVariance),
-            reason: 'seed $seed');
+        expect(
+          result.measurementVariance,
+          closeTo(measurementVariance, 0.25 * measurementVariance),
+          reason: 'seed $seed',
+        );
       }
     });
 
@@ -148,10 +165,15 @@ void main() {
       // constant -- moving a fixed amount from one to the other changes
       // nothing observable -- so the trend is compared after centring. The
       // seasonal has no level of its own and is compared as it stands.
-      final seasonal =
-          _rootMeanSquare(smoothed.componentMean(1), simulation.seasonal);
-      final trend = _rootMeanSquare(smoothed.componentMean(0), simulation.trend,
-          centre: true);
+      final seasonal = _rootMeanSquare(
+        smoothed.componentMean(1),
+        simulation.seasonal,
+      );
+      final trend = _rootMeanSquare(
+        smoothed.componentMean(0),
+        simulation.trend,
+        centre: true,
+      );
 
       // Measured 0.076 and 0.049 against a measurement standard deviation of
       // 0.2: each component is recovered to about a quarter of the noise on a
@@ -173,10 +195,14 @@ void main() {
       final fitted = fit(_start(), simulation.data).model;
       final diagnostics = fitted.diagnose(simulation.data);
 
-      expect(diagnostics.ljungBox(lags: 14, fittedParameters: 2).pValue,
-          greaterThan(0.05));
-      expect((diagnostics.variance - 1).abs(),
-          lessThan(4 * math.sqrt(2 / diagnostics.count)));
+      expect(
+        diagnostics.ljungBox(lags: 14, fittedParameters: 2).pValue,
+        greaterThan(0.05),
+      );
+      expect(
+        (diagnostics.variance - 1).abs(),
+        lessThan(4 * math.sqrt(2 / diagnostics.count)),
+      );
     });
   });
 
@@ -196,9 +222,15 @@ void main() {
 
     test('refuses to name a single variance ratio', () {
       expect(
-          () => result.varianceRatio,
-          throwsA(isA<StateError>().having(
-              (e) => e.message, 'message', contains('2 variance ratios'))));
+        () => result.varianceRatio,
+        throwsA(
+          isA<StateError>().having(
+            (e) => e.message,
+            'message',
+            contains('2 variance ratios'),
+          ),
+        ),
+      );
     });
 
     test('gives a plateau width per parameter', () {
@@ -207,8 +239,10 @@ void main() {
         expect(width, greaterThan(0));
         expect(width, lessThan(1));
       }
-      expect(result.plateauDecades,
-          result.plateauDecadesByParameter.reduce(math.max));
+      expect(
+        result.plateauDecades,
+        result.plateauDecadesByParameter.reduce(math.max),
+      );
       expect(result.isFlat, isFalse);
     });
 
@@ -230,8 +264,11 @@ void main() {
         count: 200,
         seed: 1,
       );
-      final penalised =
-          fit(_start(), simulation.data, penalty: ComplexityPenalty());
+      final penalised = fit(
+        _start(),
+        simulation.data,
+        penalty: ComplexityPenalty(),
+      );
       final plain = fit(_start(), simulation.data);
 
       expect(penalised.varianceRatios[1], lessThan(1e-7));
@@ -241,8 +278,10 @@ void main() {
 
       // And the likelihood it reports is the unpenalised one, so it stays
       // comparable with the fit that used no penalty at all.
-      expect(penalised.logMarginalLikelihood,
-          lessThan(plain.logMarginalLikelihood + 1e-9));
+      expect(
+        penalised.logMarginalLikelihood,
+        lessThan(plain.logMarginalLikelihood + 1e-9),
+      );
     });
 
     test('a wider scale penalises less', () {
@@ -253,15 +292,24 @@ void main() {
         count: 200,
         seed: 5,
       );
-      final tight = fit(_start(), simulation.data,
-          penalty: ComplexityPenalty(scale: 0.25));
-      final loose =
-          fit(_start(), simulation.data, penalty: ComplexityPenalty(scale: 4));
+      final tight = fit(
+        _start(),
+        simulation.data,
+        penalty: ComplexityPenalty(scale: 0.25),
+      );
+      final loose = fit(
+        _start(),
+        simulation.data,
+        penalty: ComplexityPenalty(scale: 4),
+      );
 
       expect(tight.logPenalty, lessThan(loose.logPenalty));
       for (var i = 0; i < 2; i++) {
-        expect(tight.varianceRatios[i], lessThan(loose.varianceRatios[i]),
-            reason: 'parameter $i');
+        expect(
+          tight.varianceRatios[i],
+          lessThan(loose.varianceRatios[i]),
+          reason: 'parameter $i',
+        );
       }
     });
   });

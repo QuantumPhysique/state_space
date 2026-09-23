@@ -15,9 +15,9 @@ StructuralModel _trend() =>
     StructuralModel.localLinearTrend(processVariance: 1e-3);
 
 StructuralModel _trendWeekly() => StructuralModel([
-      LocalLinearTrend(processVariance: 1e-3),
-      TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-5),
-    ]);
+  LocalLinearTrend(processVariance: 1e-3),
+  TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-5),
+]);
 
 void main() {
   group('a Matern beside the trend', () {
@@ -28,21 +28,34 @@ void main() {
             LocalLinearTrend(processVariance: 1e-3),
             if (weekly)
               TrigonometricSeasonal(
-                  period: 7, harmonics: 2, processVariance: 1e-5),
+                period: 7,
+                harmonics: 2,
+                processVariance: 1e-5,
+              ),
             Matern.oneHalf(variance: 0.05, lengthScale: 3),
           ]);
           final free = fit(model, series.observations);
           // Starting from a realistic noise level and letting it go.
-          final pinned =
-              fit(model, series.observations, fixedMeasurementVariance: 0.01);
-          final released = fit(pinned.model, series.observations,
-              start: SearchStart.previousParameters);
-          expect(free.logMarginalLikelihood,
-              greaterThanOrEqualTo(released.logMarginalLikelihood - 0.01),
-              reason:
-                  '${series.name}, weekly $weekly: a better optimum exists');
-          expect(math.sqrt(free.measurementVariance), greaterThan(0.02),
-              reason: '${series.name}, weekly $weekly');
+          final pinned = fit(
+            model,
+            series.observations,
+            fixedMeasurementVariance: 0.01,
+          );
+          final released = fit(
+            pinned.model,
+            series.observations,
+            start: SearchStart.previousParameters,
+          );
+          expect(
+            free.logMarginalLikelihood,
+            greaterThanOrEqualTo(released.logMarginalLikelihood - 0.01),
+            reason: '${series.name}, weekly $weekly: a better optimum exists',
+          );
+          expect(
+            math.sqrt(free.measurementVariance),
+            greaterThan(0.02),
+            reason: '${series.name}, weekly $weekly',
+          );
         }
       }
     });
@@ -56,9 +69,11 @@ void main() {
         for (var d = 0; d < 200; d++)
           () {
             level += 0.02 * _gaussian(random);
-            return Observation(d.toDouble(),
-                ((level + 0.25 * _gaussian(random)) * 10).round() / 10);
-          }()
+            return Observation(
+              d.toDouble(),
+              ((level + 0.25 * _gaussian(random)) * 10).round() / 10,
+            );
+          }(),
       ];
     }
 
@@ -68,13 +83,15 @@ void main() {
         for (final factor in [10.0, 0.1]) {
           final typo = [
             for (final o in clean)
-              o.time == 150 ? Observation(150, o.value * factor) : o
+              o.time == 150 ? Observation(150, o.value * factor) : o,
           ];
           for (final model in [_trend(), _trendWeekly()]) {
             final fitted = fit(model, typo);
             expect(fitted.largestResidual!.time, 150);
-            expect(fitted.warnings,
-                contains(contains('the reading at time 150.0')));
+            expect(
+              fitted.warnings,
+              contains(contains('the reading at time 150.0')),
+            );
           }
         }
       }
@@ -83,9 +100,11 @@ void main() {
     test('is not invented on clean data', () {
       for (var seed = 1; seed <= 20; seed++) {
         final fitted = fit(_trendWeekly(), diary(seed));
-        expect(fitted.largestResidual!.score.abs(),
-            lessThan(FitResult.outlierScore),
-            reason: 'seed $seed');
+        expect(
+          fitted.largestResidual!.score.abs(),
+          lessThan(FitResult.outlierScore),
+          reason: 'seed $seed',
+        );
       }
     });
   });
@@ -96,14 +115,18 @@ void main() {
         for (final offset in [0.0, 0.3]) {
           for (final n in [5, 10, 20]) {
             final flat = [
-              for (var i = 0; i < n; i++) Observation(i + offset, value)
+              for (var i = 0; i < n; i++) Observation(i + offset, value),
             ];
             for (final model in [_trend(), if (n >= 10) _trendWeekly()]) {
               expect(fit(model, flat).measurementVariance, greaterThan(0));
               expect(
-                  fit(model, flat, minimumMeasurementVariance: 0.01)
-                      .measurementVariance,
-                  0.01);
+                fit(
+                  model,
+                  flat,
+                  minimumMeasurementVariance: 0.01,
+                ).measurementVariance,
+                0.01,
+              );
             }
           }
         }
@@ -117,37 +140,43 @@ void main() {
     });
   });
 
-  test('a short series with a rich seasonal never blames a caller argument',
-      () {
-    // Nine rounded readings and three weekly harmonics: the search can wander
-    // into a corner of the surface where the likelihood is not a number.
-    for (var seed = 0; seed < 40; seed++) {
-      final random = math.Random(seed);
-      final data = [
-        for (var i = 0; i < 9; i++)
-          Observation(
-              i.toDouble(), ((80 + 0.3 * _gaussian(random)) * 10).round() / 10)
-      ];
-      final model = StructuralModel([
-        LocalLinearTrend(processVariance: 1e-2),
-        TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 1e-3),
-      ]);
-      try {
-        fit(model, data);
-      } on UnderdeterminedModelException {
-        // An honest refusal is fine; an ArgumentError about processVariance
-        // is not.
+  test(
+    'a short series with a rich seasonal never blames a caller argument',
+    () {
+      // Nine rounded readings and three weekly harmonics: the search can wander
+      // into a corner of the surface where the likelihood is not a number.
+      for (var seed = 0; seed < 40; seed++) {
+        final random = math.Random(seed);
+        final data = [
+          for (var i = 0; i < 9; i++)
+            Observation(
+              i.toDouble(),
+              ((80 + 0.3 * _gaussian(random)) * 10).round() / 10,
+            ),
+        ];
+        final model = StructuralModel([
+          LocalLinearTrend(processVariance: 1e-2),
+          TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 1e-3),
+        ]);
+        try {
+          fit(model, data);
+        } on UnderdeterminedModelException {
+          // An honest refusal is fine; an ArgumentError about processVariance
+          // is not.
+        }
       }
-    }
-  });
+    },
+  );
 
   test('too few observations is one exception, whatever the count', () {
     for (final n in [0, 1, 2]) {
       expect(
-          () => fit(_trend(),
-              [for (var i = 0; i < n; i++) Observation(i.toDouble(), 80)]),
-          throwsA(isA<UnderdeterminedModelException>()),
-          reason: '$n observations');
+        () => fit(_trend(), [
+          for (var i = 0; i < n; i++) Observation(i.toDouble(), 80),
+        ]),
+        throwsA(isA<UnderdeterminedModelException>()),
+        reason: '$n observations',
+      );
     }
   });
 
@@ -157,11 +186,16 @@ void main() {
         final before = series.firstDays(from).observations;
         final after = series.firstDays(to).observations;
         final cold = fit(_trend(), after);
-        final warm = fit(fit(_trend(), before).model, after,
-            start: SearchStart.previousParameters);
-        expect(warm.logMarginalLikelihood,
-            closeTo(cold.logMarginalLikelihood, 1e-3),
-            reason: '${series.name}, $from to $to days');
+        final warm = fit(
+          fit(_trend(), before).model,
+          after,
+          start: SearchStart.previousParameters,
+        );
+        expect(
+          warm.logMarginalLikelihood,
+          closeTo(cold.logMarginalLikelihood, 1e-3),
+          reason: '${series.name}, $from to $to days',
+        );
       }
     }
   });
@@ -176,11 +210,12 @@ void main() {
           () {
             level += 0.02 * _gaussian(random);
             return Observation(
-                d.toDouble(),
-                level +
-                    0.2 * math.sin(2 * math.pi * d / 7) +
-                    0.2 * _gaussian(random));
-          }()
+              d.toDouble(),
+              level +
+                  0.2 * math.sin(2 * math.pi * d / 7) +
+                  0.2 * _gaussian(random),
+            );
+          }(),
       ];
       final fitted = fit(_trendWeekly(), data);
       if (fitted.parameterStatus[1] != ParameterStatus.shrunkToNothing) {

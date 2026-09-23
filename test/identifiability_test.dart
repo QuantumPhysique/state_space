@@ -15,7 +15,7 @@ List<Observation> _series(int n, int seed, {bool jitter = false}) {
         level += slope + 0.05 * (random.nextDouble() - 0.5);
         final time = i + (jitter ? random.nextDouble() : 0.0);
         return Observation(time, level + 0.1 * (random.nextDouble() - 0.5));
-      }()
+      }(),
   ];
 }
 
@@ -53,7 +53,10 @@ void main() {
         LocalLinearTrend(processVariance: 1e-4),
         RegressionComponent([
           StepRegressor(
-              'dose', Float64List.fromList([-5]), Float64List.fromList([1])),
+            'dose',
+            Float64List.fromList([-5]),
+            Float64List.fromList([1]),
+          ),
         ]),
       ], measurementVariance: 0.01);
       for (var seed = 0; seed < 10; seed++) {
@@ -65,10 +68,14 @@ void main() {
       final grid = Float64List.fromList([0, 1, 2, 3, 4]);
       for (final noise in [0.04, 0.25, 1.0, 4.0]) {
         final model = StructuralModel.localLinearTrend(
-            processVariance: 1, measurementVariance: noise);
+          processVariance: 1,
+          measurementVariance: noise,
+        );
         for (final time in [0.0, 0.3, 1.3, 2.7, 4.0]) {
-          expect(() => model.smooth([Observation(time, 80)], grid: grid),
-              _refused);
+          expect(
+            () => model.smooth([Observation(time, 80)], grid: grid),
+            _refused,
+          );
         }
       }
     });
@@ -79,7 +86,10 @@ void main() {
       final model = StructuralModel([
         LocalLinearTrend(processVariance: 1e-4),
         TrigonometricSeasonal(
-            period: 365.25, harmonics: 2, processVariance: 1e-9),
+          period: 365.25,
+          harmonics: 2,
+          processVariance: 1e-9,
+        ),
       ]);
       expect(model.smooth(_series(60, 3)).mean, hasLength(60));
     });
@@ -88,10 +98,12 @@ void main() {
       const day = 86400000.0;
       final data = [
         for (final o in _series(365, 3))
-          Observation(1.7e12 + o.time * day, o.value)
+          Observation(1.7e12 + o.time * day, o.value),
       ];
       final model = StructuralModel.localLinearTrend(
-          processVariance: 1e-4 / (day * day * day), measurementVariance: 0.01);
+        processVariance: 1e-4 / (day * day * day),
+        measurementVariance: 0.01,
+      );
       expect(model.smooth(data).variance.every((v) => v > 0), isTrue);
     });
   });
@@ -104,9 +116,15 @@ void main() {
         const Observation(2, 80.1),
       ];
       expect(
-          () => StructuralModel.localLevel(processVariance: 0.01).smooth(data),
-          throwsA(isA<NumericalBreakdownException>().having(
-              (e) => e.message, 'message', contains('relativeVariance 0'))));
+        () => StructuralModel.localLevel(processVariance: 0.01).smooth(data),
+        throwsA(
+          isA<NumericalBreakdownException>().having(
+            (e) => e.message,
+            'message',
+            contains('relativeVariance 0'),
+          ),
+        ),
+      );
     });
 
     test('whose variance overflows says so', () {
@@ -116,11 +134,18 @@ void main() {
         const Observation(2, 80.1),
       ];
       expect(
-          () => StructuralModel.localLevel(
-                  processVariance: 0.01, measurementVariance: 10)
-              .smooth(data),
-          throwsA(isA<NumericalBreakdownException>().having(
-              (e) => e.message, 'message', contains('not a finite number'))));
+        () => StructuralModel.localLevel(
+          processVariance: 0.01,
+          measurementVariance: 10,
+        ).smooth(data),
+        throwsA(
+          isA<NumericalBreakdownException>().having(
+            (e) => e.message,
+            'message',
+            contains('not a finite number'),
+          ),
+        ),
+      );
     });
   });
 }

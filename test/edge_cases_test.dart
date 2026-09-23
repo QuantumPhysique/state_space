@@ -15,10 +15,10 @@ StructuralModel _trend({double processVariance = 1e-3}) =>
 /// The same model under the older, approximate prior, for the cases where a
 /// very large number is more useful than an exception.
 StructuralModel _wideTrend() => StructuralModel.localLinearTrend(
-      processVariance: 1e-3,
-      measurementVariance: 0.25,
-      initialization: ApproximateDiffuse(),
-    );
+  processVariance: 1e-3,
+  measurementVariance: 0.25,
+  initialization: ApproximateDiffuse(),
+);
 
 void main() {
   _degenerateReporting();
@@ -37,8 +37,13 @@ void main() {
       // whose size is an artefact of the prior.
       expect(
         () => _trend().smooth([const Observation(4, 82.5)]),
-        throwsA(isA<UnderdeterminedModelException>().having(
-            (e) => e.message, 'message', contains('does not determine'))),
+        throwsA(
+          isA<UnderdeterminedModelException>().having(
+            (e) => e.message,
+            'message',
+            contains('does not determine'),
+          ),
+        ),
       );
     });
 
@@ -132,44 +137,59 @@ void main() {
       expect(
         () =>
             _trend().smooth([const Observation(2, 1), const Observation(1, 1)]),
-        throwsA(isA<ArgumentError>().having(
-            (e) => e.message.toString(), 'message', contains('sorted'))),
+        throwsA(
+          isA<ArgumentError>().having(
+            (e) => e.message.toString(),
+            'message',
+            contains('sorted'),
+          ),
+        ),
       );
     });
 
     test('rejects NaN and infinity', () {
-      expect(() => _trend().smooth([Observation(0, double.nan)]),
-          throwsArgumentError);
-      expect(() => _trend().smooth([Observation(double.infinity, 1)]),
-          throwsArgumentError);
       expect(
-          () => _trend().smooth([
-                const Observation(0, 1),
-                Observation(1, 1, relativeVariance: double.nan)
-              ]),
-          throwsArgumentError);
+        () => _trend().smooth([Observation(0, double.nan)]),
+        throwsArgumentError,
+      );
+      expect(
+        () => _trend().smooth([Observation(double.infinity, 1)]),
+        throwsArgumentError,
+      );
+      expect(
+        () => _trend().smooth([
+          const Observation(0, 1),
+          Observation(1, 1, relativeVariance: double.nan),
+        ]),
+        throwsArgumentError,
+      );
     });
 
     test('rejects a negative observation variance', () {
       expect(
-          () =>
-              _trend().smooth([const Observation(0, 1, relativeVariance: -1)]),
-          throwsArgumentError);
+        () => _trend().smooth([const Observation(0, 1, relativeVariance: -1)]),
+        throwsArgumentError,
+      );
     });
 
     test('rejects an unsorted grid', () {
       expect(
-          () => _trend().smooth([const Observation(0, 1)],
-              grid: Float64List.fromList([3, 1])),
-          throwsArgumentError);
+        () => _trend().smooth([
+          const Observation(0, 1),
+        ], grid: Float64List.fromList([3, 1])),
+        throwsArgumentError,
+      );
     });
 
     test('rejects a model with no components or a bad variance', () {
       expect(() => StructuralModel(const []), throwsArgumentError);
       expect(
-          () => StructuralModel.localLinearTrend(
-              processVariance: 1e-3, measurementVariance: 0),
-          throwsArgumentError);
+        () => StructuralModel.localLinearTrend(
+          processVariance: 1e-3,
+          measurementVariance: 0,
+        ),
+        throwsArgumentError,
+      );
     });
   });
 
@@ -182,7 +202,8 @@ void main() {
     for (var i = 0; i < 4000; i++) {
       value += 0.02 * (random.nextDouble() - 0.5);
       data.add(
-          Observation(i.toDouble(), value + 0.3 * (random.nextDouble() - 0.5)));
+        Observation(i.toDouble(), value + 0.3 * (random.nextDouble() - 0.5)),
+      );
     }
     final result = _trend().smooth(data);
     expect(result.logMarginalLikelihood.isFinite, isTrue);
@@ -196,15 +217,16 @@ void main() {
 /// Degenerate shapes that used to reach arithmetic rather than a guard.
 void _degenerateReporting() {
   group('nothing left to estimate from', () {
-    test(
-        'a model with as many flat directions as observations profiles to '
+    test('a model with as many flat directions as observations profiles to '
         'NaN rather than to a number', () {
       // Two readings, a two-state trend: both are spent locating the state, so
       // there is no residual degree of freedom and no noise level to concentrate
       // out. This used to be 0/0 arriving as NaN by accident, and could as
       // easily have arrived as a finite number.
-      final timeline =
-          Timeline.merge([Observation(0, 80.0), Observation(1, 80.4)], null);
+      final timeline = Timeline.merge([
+        Observation(0, 80.0),
+        Observation(1, 80.4),
+      ], null);
       final pass = forwardPass(
         [LocalLinearTrend(processVariance: 1e-3)],
         timeline,
@@ -219,30 +241,40 @@ void _degenerateReporting() {
 
     test('and fit refuses it with an explanation', () {
       expect(
-          () => fit(StructuralModel.localLinearTrend(processVariance: 1),
-              [Observation(0, 80.0), Observation(1, 80.4)]),
-          throwsA(isA<UnderdeterminedModelException>().having(
-              (e) => e.toString(),
-              'message',
-              contains('too few observations'))));
+        () => fit(StructuralModel.localLinearTrend(processVariance: 1), [
+          Observation(0, 80.0),
+          Observation(1, 80.4),
+        ]),
+        throwsA(
+          isA<UnderdeterminedModelException>().having(
+            (e) => e.toString(),
+            'message',
+            contains('too few observations'),
+          ),
+        ),
+      );
     });
 
-    test('a single residual reports no spread rather than a spread of zero',
-        () {
-      final diagnostics =
-          StructuralModel.localLinearTrend(processVariance: 1e-3).diagnose([
-        Observation(0, 80.0),
-        Observation(1, 80.4),
-        Observation(2, 80.1),
-      ]);
-      expect(diagnostics.count, 1);
-      expect(diagnostics.variance.isNaN, isTrue);
-      expect(diagnostics.toString(), contains('n/a'));
-    });
+    test(
+      'a single residual reports no spread rather than a spread of zero',
+      () {
+        final diagnostics =
+            StructuralModel.localLinearTrend(processVariance: 1e-3).diagnose([
+              Observation(0, 80.0),
+              Observation(1, 80.4),
+              Observation(2, 80.1),
+            ]);
+        expect(diagnostics.count, 1);
+        expect(diagnostics.variance.isNaN, isTrue);
+        expect(diagnostics.toString(), contains('n/a'));
+      },
+    );
 
     test('no residuals at all is a sentence and not a crash', () {
       final diagnostics = InnovationDiagnostics(
-          times: Float64List(0), residuals: Float64List(0));
+        times: Float64List(0),
+        residuals: Float64List(0),
+      );
       expect(diagnostics.count, 0);
       expect(diagnostics.mean.isNaN, isTrue);
       expect(diagnostics.variance.isNaN, isTrue);
@@ -255,7 +287,9 @@ void _degenerateReporting() {
       expect(() => ComplexityPenalty(scale: 0), throwsArgumentError);
       expect(() => ComplexityPenalty(scale: -1), throwsArgumentError);
       expect(
-          () => ComplexityPenalty(scale: double.infinity), throwsArgumentError);
+        () => ComplexityPenalty(scale: double.infinity),
+        throwsArgumentError,
+      );
     });
 
     test('a tail probability outside (0, 1) is refused', () {

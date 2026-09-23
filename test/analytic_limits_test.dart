@@ -97,86 +97,97 @@ void main() {
     });
   });
 
-  group('exact initialisation reaches the limits instead of approaching them',
-      () {
-    test('a rigid trend is ordinary least squares, full stop', () {
-      // The same test as above with no kappa in it. What was a limit becomes
-      // an identity, and the tolerance drops by five orders of magnitude --
-      // all that is left is the fact that the process variance is 1e-16
-      // rather than actually zero.
-      final data = _series();
-      final line = _ols(data);
-      final result = StructuralModel.localLinearTrend(
-        processVariance: 1e-16,
-        measurementVariance: 0.25,
-      ).smooth(data);
+  group(
+    'exact initialisation reaches the limits instead of approaching them',
+    () {
+      test('a rigid trend is ordinary least squares, full stop', () {
+        // The same test as above with no kappa in it. What was a limit becomes
+        // an identity, and the tolerance drops by five orders of magnitude --
+        // all that is left is the fact that the process variance is 1e-16
+        // rather than actually zero.
+        final data = _series();
+        final line = _ols(data);
+        final result = StructuralModel.localLinearTrend(
+          processVariance: 1e-16,
+          measurementVariance: 0.25,
+        ).smooth(data);
 
-      for (var i = 0; i < data.length; i++) {
-        expect(result.mean[i],
+        for (var i = 0; i < data.length; i++) {
+          expect(
+            result.mean[i],
             closeTo(line.intercept + line.slope * data[i].time, 1e-9),
-            reason: 'level at $i');
-        expect(result.trendSlope![i], closeTo(line.slope, 1e-11));
-      }
-    });
+            reason: 'level at $i',
+          );
+          expect(result.trendSlope![i], closeTo(line.slope, 1e-11));
+        }
+      });
 
-    test('a rigid level is the precision-weighted mean, full stop', () {
-      final data = [
-        const Observation(0, 10.0),
-        const Observation(1, 12.0, relativeVariance: 0.25),
-        const Observation(5, 11.0),
-        const Observation(9, 13.0, relativeVariance: 4.0),
-      ];
-      final result = StructuralModel.localLevel(
-        processVariance: 1e-18,
-        measurementVariance: 1.0,
-      ).smooth(data);
+      test('a rigid level is the precision-weighted mean, full stop', () {
+        final data = [
+          const Observation(0, 10.0),
+          const Observation(1, 12.0, relativeVariance: 0.25),
+          const Observation(5, 11.0),
+          const Observation(9, 13.0, relativeVariance: 4.0),
+        ];
+        final result = StructuralModel.localLevel(
+          processVariance: 1e-18,
+          measurementVariance: 1.0,
+        ).smooth(data);
 
-      var weight = 0.0, weighted = 0.0;
-      for (final o in data) {
-        weight += 1 / o.relativeVariance;
-        weighted += o.value / o.relativeVariance;
-      }
+        var weight = 0.0, weighted = 0.0;
+        for (final o in data) {
+          weight += 1 / o.relativeVariance;
+          weighted += o.value / o.relativeVariance;
+        }
 
-      for (var i = 0; i < data.length; i++) {
-        expect(result.mean[i], closeTo(weighted / weight, 1e-12));
-        expect(result.variance[i], closeTo(1 / weight, 1e-12));
-      }
-    });
+        for (var i = 0; i < data.length; i++) {
+          expect(result.mean[i], closeTo(weighted / weight, 1e-12));
+          expect(result.variance[i], closeTo(1 / weight, 1e-12));
+        }
+      });
 
-    test('reversing time reverses the answer, with nothing left over', () {
-      // Under a genuinely flat prior there is no anchor at either end, so the
-      // symmetry of the cubic spline kernel is exact rather than asymptotic.
-      final data = _series();
-      final span = data.last.time + data.first.time;
-      final reversed = [
-        for (final o in data.reversed) Observation(span - o.time, o.value)
-      ];
-      final model = StructuralModel.localLinearTrend(
-        processVariance: 5e-4,
-        measurementVariance: 0.2,
-      );
+      test('reversing time reverses the answer, with nothing left over', () {
+        // Under a genuinely flat prior there is no anchor at either end, so the
+        // symmetry of the cubic spline kernel is exact rather than asymptotic.
+        final data = _series();
+        final span = data.last.time + data.first.time;
+        final reversed = [
+          for (final o in data.reversed) Observation(span - o.time, o.value),
+        ];
+        final model = StructuralModel.localLinearTrend(
+          processVariance: 5e-4,
+          measurementVariance: 0.2,
+        );
 
-      final forward = model.smooth(data);
-      final backward = model.smooth(reversed);
-      final n = data.length;
-      for (var i = 0; i < n; i++) {
-        expect(backward.mean[n - 1 - i], closeTo(forward.mean[i], 1e-10),
-            reason: 'level at $i');
-        expect(backward.trendSlope![n - 1 - i],
+        final forward = model.smooth(data);
+        final backward = model.smooth(reversed);
+        final n = data.length;
+        for (var i = 0; i < n; i++) {
+          expect(
+            backward.mean[n - 1 - i],
+            closeTo(forward.mean[i], 1e-10),
+            reason: 'level at $i',
+          );
+          expect(
+            backward.trendSlope![n - 1 - i],
             closeTo(-forward.trendSlope![i], 1e-11),
-            reason: 'slope at $i');
-        expect(
-            backward.variance[n - 1 - i], closeTo(forward.variance[i], 1e-12),
-            reason: 'variance at $i');
-      }
-    });
-  });
+            reason: 'slope at $i',
+          );
+          expect(
+            backward.variance[n - 1 - i],
+            closeTo(forward.variance[i], 1e-12),
+            reason: 'variance at $i',
+          );
+        }
+      });
+    },
+  );
 
   group('invariances the model is supposed to have', () {
     test('shifting every time by a constant changes nothing', () {
       final data = _series();
       final shifted = [
-        for (final o in data) Observation(o.time + 1234.5, o.value)
+        for (final o in data) Observation(o.time + 1234.5, o.value),
       ];
       final model = StructuralModel.localLinearTrend(processVariance: 1e-3);
 
@@ -192,8 +203,7 @@ void main() {
       expect(b.logMarginalLikelihood, closeTo(a.logMarginalLikelihood, 1e-9));
     });
 
-    test(
-        'scaling every variance scales the posterior variance and leaves '
+    test('scaling every variance scales the posterior variance and leaves '
         'the posterior mean alone', () {
       // This is the invariance the profile likelihood in fit() rests on, so
       // it is worth asserting directly rather than trusting that it follows.
@@ -223,7 +233,7 @@ void main() {
       final data = _series();
       final span = data.last.time + data.first.time;
       final reversed = [
-        for (final o in data.reversed) Observation(span - o.time, o.value)
+        for (final o in data.reversed) Observation(span - o.time, o.value),
       ];
       // Symmetric in the diffuse limit only: a finite prior is anchored at
       // whichever end comes first, which is the one thing reversal moves.
@@ -240,11 +250,16 @@ void main() {
         // A prior of 1e8 sits at the sweet spot: wide enough that the
         // asymmetry it causes is down at 1e-8, narrow enough that the
         // arithmetic noise from covariances of that size has not caught up.
-        expect(backward.mean[n - 1 - i], closeTo(forward.mean[i], 1e-6),
-            reason: 'level at $i');
-        expect(backward.trendSlope![n - 1 - i],
-            closeTo(-forward.trendSlope![i], 1e-6),
-            reason: 'slope at $i');
+        expect(
+          backward.mean[n - 1 - i],
+          closeTo(forward.mean[i], 1e-6),
+          reason: 'level at $i',
+        );
+        expect(
+          backward.trendSlope![n - 1 - i],
+          closeTo(-forward.trendSlope![i], 1e-6),
+          reason: 'slope at $i',
+        );
       }
     });
   });
@@ -261,10 +276,14 @@ void main() {
 
     var previous = double.infinity;
     for (var n = 8; n <= data.length; n += 4) {
-      final variance =
-          model.smooth(data.sublist(0, n), grid: probe).variance[0];
-      expect(variance, lessThanOrEqualTo(previous * (1 + 1e-12)),
-          reason: 'variance grew when going to $n observations');
+      final variance = model
+          .smooth(data.sublist(0, n), grid: probe)
+          .variance[0];
+      expect(
+        variance,
+        lessThanOrEqualTo(previous * (1 + 1e-12)),
+        reason: 'variance grew when going to $n observations',
+      );
       previous = variance;
     }
   });

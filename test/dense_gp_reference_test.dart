@@ -19,8 +19,12 @@ import 'package:test/test.dart';
 /// ```
 ///
 /// with `s` measured from the first time point, where the prior is stated.
-double _kernel(double s, double t,
-    {required double processVariance, required double kappa}) {
+double _kernel(
+  double s,
+  double t, {
+  required double processVariance,
+  required double kappa,
+}) {
   final m = math.min(s, t);
   final spline = m * m * m / 3 + m * m * (s - t).abs() / 2;
   return kappa * (1 + s * t) + processVariance * spline;
@@ -32,7 +36,7 @@ double _kernel(double s, double t,
 /// `C = K + R`. Cubic in the number of observations, quadratic in memory, and
 /// completely uninterested in whether the sampling is regular.
 ({List<double> mean, List<double> variance, double logLikelihood})
-    _densePosterior(
+_densePosterior(
   List<Observation> data,
   List<double> queries, {
   required double processVariance,
@@ -50,8 +54,8 @@ double _kernel(double s, double t,
       [
         for (var j = 0; j < n; j++)
           k(data[i].time - origin, data[j].time - origin) +
-              (i == j ? data[i].relativeVariance * measurementVariance : 0.0)
-      ]
+              (i == j ? data[i].relativeVariance * measurementVariance : 0.0),
+      ],
   ];
 
   // One right-hand side per thing we want: the data, then each query's
@@ -61,7 +65,7 @@ double _kernel(double s, double t,
       [
         data[i].value,
         for (final q in queries) k(q - origin, data[i].time - origin),
-      ]
+      ],
   ];
 
   final factor = Matrix64.fromRows(c).cholesky();
@@ -124,7 +128,8 @@ double _kernel(double s, double t,
   double logDeterminant,
   List<double> estimate,
   List<List<double>> spread,
-}) _restrictedLikelihood(
+})
+_restrictedLikelihood(
   List<Observation> data, {
   required double processVariance,
   required double measurementVariance,
@@ -142,13 +147,13 @@ double _kernel(double s, double t,
       [
         for (var j = 0; j < n; j++)
           spline(times[i], times[j]) +
-              (i == j ? data[i].relativeVariance * measurementVariance : 0.0)
-      ]
+              (i == j ? data[i].relativeVariance * measurementVariance : 0.0),
+      ],
   ];
 
   // Solve against the data and against both columns of the design at once.
   final rhs = <List<double>>[
-    for (var i = 0; i < n; i++) [data[i].value, 1.0, times[i]]
+    for (var i = 0; i < n; i++) [data[i].value, 1.0, times[i]],
   ];
   final factor = Matrix64.fromRows(covariance).cholesky();
   final solved = factor.solve(Matrix64.fromRows(rhs));
@@ -159,13 +164,13 @@ double _kernel(double s, double t,
   }
 
   final design = [
-    for (var i = 0; i < n; i++) [1.0, times[i]]
+    for (var i = 0; i < n; i++) [1.0, times[i]],
   ];
   var quadratic = 0.0;
   final projected = [0.0, 0.0];
   final information = [
     [0.0, 0.0],
-    [0.0, 0.0]
+    [0.0, 0.0],
   ];
   for (var i = 0; i < n; i++) {
     quadratic += data[i].value * solved(i, 0);
@@ -177,7 +182,8 @@ double _kernel(double s, double t,
     }
   }
 
-  final determinant = information[0][0] * information[1][1] -
+  final determinant =
+      information[0][0] * information[1][1] -
       information[0][1] * information[1][0];
   final inverse = [
     [information[1][1] / determinant, -information[0][1] / determinant],
@@ -193,7 +199,8 @@ double _kernel(double s, double t,
   }
 
   return (
-    logLikelihood: -0.5 *
+    logLikelihood:
+        -0.5 *
         ((n - 2) * math.log(2 * math.pi) +
             logDeterminant +
             math.log(determinant) +
@@ -212,98 +219,116 @@ List<Observation> _irregularSeries(int n, {int seed = 7}) {
   for (var i = 0; i < n; i++) {
     time += 0.2 + 3 * random.nextDouble();
     final trend = 80 + 0.02 * time - 3 * math.sin(time / 25);
-    data.add(Observation(time, trend + 0.4 * (random.nextDouble() - 0.5),
-        relativeVariance: 0.5 + random.nextDouble()));
+    data.add(
+      Observation(
+        time,
+        trend + 0.4 * (random.nextDouble() - 0.5),
+        relativeVariance: 0.5 + random.nextDouble(),
+      ),
+    );
   }
   return data;
 }
 
 void main() {
-  group('exact diffuse initialisation against the dense restricted likelihood',
-      () {
-    test('the augmented filter computes the restricted likelihood', () {
-      const processVariance = 3e-4;
-      const measurementVariance = 0.04;
-      final data = _irregularSeries(100);
+  group(
+    'exact diffuse initialisation against the dense restricted likelihood',
+    () {
+      test('the augmented filter computes the restricted likelihood', () {
+        const processVariance = 3e-4;
+        const measurementVariance = 0.04;
+        final data = _irregularSeries(100);
 
-      final forward = KalmanFilter(
-        [LocalLinearTrend(processVariance: processVariance)],
-        measurementVariance: measurementVariance,
-        initialization: const ExactDiffuse(),
-      ).run(Timeline.merge(data, null));
+        final forward = KalmanFilter(
+          [LocalLinearTrend(processVariance: processVariance)],
+          measurementVariance: measurementVariance,
+          initialization: const ExactDiffuse(),
+        ).run(Timeline.merge(data, null));
 
-      final dense = _restrictedLikelihood(data,
+        final dense = _restrictedLikelihood(
+          data,
           processVariance: processVariance,
-          measurementVariance: measurementVariance);
+          measurementVariance: measurementVariance,
+        );
 
-      expect(forward.logLikelihood, closeTo(dense.logLikelihood, 1e-9));
-      expect(forward.usedObservations, data.length - 2);
-    });
+        expect(forward.logLikelihood, closeTo(dense.logLikelihood, 1e-9));
+        expect(forward.usedObservations, data.length - 2);
+      });
 
-    test('the smoothed initial state is the least-squares estimate', () {
-      // At the first time point the state *is* the pair of flat directions,
-      // so the smoothed level and slope there must equal the generalised
-      // least-squares estimate the dense form computes directly. This is the
-      // sharpest single check on the augmentation: it involves the whole
-      // series through C, and it is exactly where an implementation that
-      // fumbles the flat directions goes wrong first.
-      const processVariance = 5e-4;
-      const measurementVariance = 0.05;
-      final data = _irregularSeries(90, seed: 31);
+      test('the smoothed initial state is the least-squares estimate', () {
+        // At the first time point the state *is* the pair of flat directions,
+        // so the smoothed level and slope there must equal the generalised
+        // least-squares estimate the dense form computes directly. This is the
+        // sharpest single check on the augmentation: it involves the whole
+        // series through C, and it is exactly where an implementation that
+        // fumbles the flat directions goes wrong first.
+        const processVariance = 5e-4;
+        const measurementVariance = 0.05;
+        final data = _irregularSeries(90, seed: 31);
 
-      final dense = _restrictedLikelihood(data,
+        final dense = _restrictedLikelihood(
+          data,
           processVariance: processVariance,
-          measurementVariance: measurementVariance);
-      final smoothed = StructuralModel.localLinearTrend(
-        processVariance: processVariance,
-        measurementVariance: measurementVariance,
-      ).smooth(data);
+          measurementVariance: measurementVariance,
+        );
+        final smoothed = StructuralModel.localLinearTrend(
+          processVariance: processVariance,
+          measurementVariance: measurementVariance,
+        ).smooth(data);
 
-      expect(smoothed.mean[0], closeTo(dense.estimate[0], 1e-9));
-      expect(smoothed.trendSlope![0], closeTo(dense.estimate[1], 1e-11));
+        expect(smoothed.mean[0], closeTo(dense.estimate[0], 1e-9));
+        expect(smoothed.trendSlope![0], closeTo(dense.estimate[1], 1e-11));
 
-      // And its covariance is the estimate's covariance, all four entries.
-      final timeline = Timeline.merge(data, null);
-      final components = [LocalLinearTrend(processVariance: processVariance)];
-      final forward = KalmanFilter(components,
-              measurementVariance: measurementVariance,
-              initialization: const ExactDiffuse())
-          .run(timeline, keepHistory: true);
-      RtsSmoother(components)
-        ..smoothInPlace(timeline, forward)
-        ..combineDiffuse(forward);
+        // And its covariance is the estimate's covariance, all four entries.
+        final timeline = Timeline.merge(data, null);
+        final components = [LocalLinearTrend(processVariance: processVariance)];
+        final forward = KalmanFilter(
+          components,
+          measurementVariance: measurementVariance,
+          initialization: const ExactDiffuse(),
+        ).run(timeline, keepHistory: true);
+        RtsSmoother(components)
+          ..smoothInPlace(timeline, forward)
+          ..combineDiffuse(forward);
 
-      for (var i = 0; i < 2; i++) {
-        for (var j = 0; j < 2; j++) {
-          expect(forward.stateCovariance![i * 2 + j],
+        for (var i = 0; i < 2; i++) {
+          for (var j = 0; j < 2; j++) {
+            expect(
+              forward.stateCovariance![i * 2 + j],
               closeTo(dense.spread[i][j], 1e-12),
-              reason: 'P^s[0][$i][$j]');
+              reason: 'P^s[0][$i][$j]',
+            );
+          }
         }
-      }
-    });
+      });
 
-    test('and the log determinant it subtracts is the one REML subtracts', () {
-      // Pinning the pieces separately, not only the total. A sign error in
-      // log|M| and a compensating one in the residual sum would cancel in the
-      // likelihood and survive the test above; they cannot survive this one.
-      const processVariance = 2e-3;
-      const measurementVariance = 0.09;
-      final data = _irregularSeries(60, seed: 12);
+      test('and the log determinant it subtracts is the one REML subtracts', () {
+        // Pinning the pieces separately, not only the total. A sign error in
+        // log|M| and a compensating one in the residual sum would cancel in the
+        // likelihood and survive the test above; they cannot survive this one.
+        const processVariance = 2e-3;
+        const measurementVariance = 0.09;
+        final data = _irregularSeries(60, seed: 12);
 
-      final dense = _restrictedLikelihood(data,
+        final dense = _restrictedLikelihood(
+          data,
           processVariance: processVariance,
-          measurementVariance: measurementVariance);
-      final forward = KalmanFilter(
-        [LocalLinearTrend(processVariance: processVariance)],
-        measurementVariance: measurementVariance,
-        initialization: const ExactDiffuse(),
-      ).run(Timeline.merge(data, null));
+          measurementVariance: measurementVariance,
+        );
+        final forward = KalmanFilter(
+          [LocalLinearTrend(processVariance: processVariance)],
+          measurementVariance: measurementVariance,
+          initialization: const ExactDiffuse(),
+        ).run(Timeline.merge(data, null));
 
-      expect(forward.diffuseLogDeterminant,
-          closeTo(dense.logDeterminant, 1e-9 * dense.logDeterminant.abs()));
-      expect(forward.logLikelihood, closeTo(dense.logLikelihood, 1e-9));
-    });
-  });
+        expect(
+          forward.diffuseLogDeterminant,
+          closeTo(dense.logDeterminant, 1e-9 * dense.logDeterminant.abs()),
+        );
+        expect(forward.logLikelihood, closeTo(dense.logLikelihood, 1e-9));
+      });
+    },
+  );
 
   group('the linear-time recursion computes the cubic-time posterior', () {
     // A modest diffuse variance keeps the dense covariance well conditioned,
@@ -337,10 +362,16 @@ void main() {
       );
 
       for (var i = 0; i < data.length; i++) {
-        expect(fast.mean[i], closeTo(slow.mean[i], 1e-9),
-            reason: 'mean at index $i');
-        expect(fast.variance[i], closeTo(slow.variance[i], 1e-9),
-            reason: 'variance at index $i');
+        expect(
+          fast.mean[i],
+          closeTo(slow.mean[i], 1e-9),
+          reason: 'mean at index $i',
+        );
+        expect(
+          fast.variance[i],
+          closeTo(slow.variance[i], 1e-9),
+          reason: 'variance at index $i',
+        );
       }
     });
 
@@ -367,10 +398,16 @@ void main() {
       );
 
       for (var i = 0; i < grid.length; i++) {
-        expect(fast.mean[i], closeTo(slow.mean[i], 1e-9),
-            reason: 'mean at grid point $i');
-        expect(fast.variance[i], closeTo(slow.variance[i], 1e-9),
-            reason: 'variance at grid point $i');
+        expect(
+          fast.mean[i],
+          closeTo(slow.mean[i], 1e-9),
+          reason: 'mean at grid point $i',
+        );
+        expect(
+          fast.variance[i],
+          closeTo(slow.variance[i], 1e-9),
+          reason: 'variance at grid point $i',
+        );
       }
     });
 

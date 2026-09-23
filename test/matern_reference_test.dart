@@ -14,8 +14,13 @@ List<Observation> _series(int n, {int seed = 41}) {
   var time = 0.0;
   for (var i = 0; i < n; i++) {
     time += 0.4 + 1.2 * random.nextDouble();
-    data.add(Observation(time, 0.9 * math.sin(time / 6) + 0.3 * math.cos(time),
-        relativeVariance: 0.6 + random.nextDouble()));
+    data.add(
+      Observation(
+        time,
+        0.9 * math.sin(time / 6) + 0.3 * math.cos(time),
+        relativeVariance: 0.6 + random.nextDouble(),
+      ),
+    );
   }
   return data;
 }
@@ -35,10 +40,14 @@ void main() {
 
     for (final order in MaternOrder.values) {
       test('${order.name}: likelihood, posterior mean and variance', () {
-        final component =
-            Matern(order: order, variance: variance, lengthScale: lengthScale);
-        final model = StructuralModel([component],
-            measurementVariance: measurementVariance);
+        final component = Matern(
+          order: order,
+          variance: variance,
+          lengthScale: lengthScale,
+        );
+        final model = StructuralModel([
+          component,
+        ], measurementVariance: measurementVariance);
         final posterior = model.smooth(data);
 
         final dense = densePosterior(
@@ -48,13 +57,21 @@ void main() {
           measurementVariance: measurementVariance,
         );
 
-        expect(posterior.logMarginalLikelihood,
-            closeTo(dense.logLikelihood, 1e-9));
+        expect(
+          posterior.logMarginalLikelihood,
+          closeTo(dense.logLikelihood, 1e-9),
+        );
         for (var i = 0; i < data.length; i++) {
-          expect(posterior.mean[i], closeTo(dense.mean[0][i], 1e-10),
-              reason: 'mean at $i');
-          expect(posterior.variance[i], closeTo(dense.variance[0][i], 1e-11),
-              reason: 'variance at $i');
+          expect(
+            posterior.mean[i],
+            closeTo(dense.mean[0][i], 1e-10),
+            reason: 'mean at $i',
+          );
+          expect(
+            posterior.variance[i],
+            closeTo(dense.variance[0][i], 1e-11),
+            reason: 'variance at $i',
+          );
         }
       });
     }
@@ -63,24 +80,30 @@ void main() {
       // A grid point between two readings is where a wrong stationary prior
       // would show up first: the filter has to fill the gap from the kernel
       // rather than from an observation.
-      final component =
-          Matern.fiveHalves(variance: variance, lengthScale: lengthScale);
-      final grid =
-          Float64List.fromList([for (var i = 0; i <= 40; i++) 3.17 + i * 1.83]);
-      final posterior =
-          StructuralModel([component], measurementVariance: measurementVariance)
-              .smooth(data, grid: grid);
-      final dense = densePosterior(
-        data,
-        grid,
-        [maternKernel(MaternOrder.fiveHalves, variance, lengthScale)],
-        measurementVariance: measurementVariance,
+      final component = Matern.fiveHalves(
+        variance: variance,
+        lengthScale: lengthScale,
       );
+      final grid = Float64List.fromList([
+        for (var i = 0; i <= 40; i++) 3.17 + i * 1.83,
+      ]);
+      final posterior = StructuralModel([
+        component,
+      ], measurementVariance: measurementVariance).smooth(data, grid: grid);
+      final dense = densePosterior(data, grid, [
+        maternKernel(MaternOrder.fiveHalves, variance, lengthScale),
+      ], measurementVariance: measurementVariance);
       for (var i = 0; i < grid.length; i++) {
-        expect(posterior.mean[i], closeTo(dense.mean[0][i], 1e-10),
-            reason: 'mean at ${grid[i]}');
-        expect(posterior.variance[i], closeTo(dense.variance[0][i], 1e-11),
-            reason: 'variance at ${grid[i]}');
+        expect(
+          posterior.mean[i],
+          closeTo(dense.mean[0][i], 1e-10),
+          reason: 'mean at ${grid[i]}',
+        );
+        expect(
+          posterior.variance[i],
+          closeTo(dense.variance[0][i], 1e-11),
+          reason: 'variance at ${grid[i]}',
+        );
       }
     });
   });
@@ -109,8 +132,10 @@ void main() {
         measurementVariance: measurementVariance,
       );
 
-      expect(model.smooth(data).logMarginalLikelihood,
-          closeTo(dense.logLikelihood, 1e-9));
+      expect(
+        model.smooth(data).logMarginalLikelihood,
+        closeTo(dense.logLikelihood, 1e-9),
+      );
     });
 
     test('and each component gets its own share', () {
@@ -142,13 +167,21 @@ void main() {
       );
 
       for (var i = 0; i < data.length; i++) {
-        expect(posterior.componentMean(0)[i], closeTo(dense.mean[0][i], 1e-9),
-            reason: 'trend at $i');
-        expect(posterior.componentMean(1)[i], closeTo(dense.mean[1][i], 1e-9),
-            reason: 'wobble at $i');
-        expect(posterior.componentVariance(1)[i],
-            closeTo(dense.variance[1][i], 1e-10),
-            reason: 'wobble variance at $i');
+        expect(
+          posterior.componentMean(0)[i],
+          closeTo(dense.mean[0][i], 1e-9),
+          reason: 'trend at $i',
+        );
+        expect(
+          posterior.componentMean(1)[i],
+          closeTo(dense.mean[1][i], 1e-9),
+          reason: 'wobble at $i',
+        );
+        expect(
+          posterior.componentVariance(1)[i],
+          closeTo(dense.variance[1][i], 1e-10),
+          reason: 'wobble variance at $i',
+        );
       }
     });
   });

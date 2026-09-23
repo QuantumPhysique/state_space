@@ -40,8 +40,11 @@ void main() {
         // Relative, because the far tail values span thirteen decades and an
         // absolute tolerance would be vacuous there.
         final actual = chiSquareUpperTail(statistic, df);
-        expect((actual - expected).abs() / expected, lessThan(1e-12),
-            reason: 'df $df at $statistic: got $actual, want $expected');
+        expect(
+          (actual - expected).abs() / expected,
+          lessThan(1e-12),
+          reason: 'df $df at $statistic: got $actual, want $expected',
+        );
       }
     });
 

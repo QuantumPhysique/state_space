@@ -15,9 +15,11 @@ List<Observation> _diary(int days, {int seed = 1}) {
       () {
         slope += 0.003 * gaussian();
         level += slope;
-        return Observation(d.toDouble(),
-            level + 0.3 * math.sin(2 * math.pi * d / 7) + 0.2 * gaussian());
-      }()
+        return Observation(
+          d.toDouble(),
+          level + 0.3 * math.sin(2 * math.pi * d / 7) + 0.2 * gaussian(),
+        );
+      }(),
   ];
 }
 
@@ -153,21 +155,25 @@ void main() {
       expect(() => posterior.variance[0] = 0, throwsUnsupportedError);
       expect(() => posterior.componentMean(0)[0] = 0, throwsUnsupportedError);
       expect(() => posterior.trendSlope![0] = 0, throwsUnsupportedError);
-      final fitted = fit(StructuralModel.localLinearTrend(processVariance: 1),
-          data.take(40).toList());
+      final fitted = fit(
+        StructuralModel.localLinearTrend(processVariance: 1),
+        data.take(40).toList(),
+      );
       expect(() => fitted.varianceRatios[0] = 42, throwsUnsupportedError);
       final step = StepRegressor('dose', [1, 2], [3, 4]);
       expect(() => step.knots[0] = 30, throwsUnsupportedError);
     });
 
-    test('report the trend slope even beside a component with its own rate',
-        () {
-      // The Matérn 3/2 carries a derivative state as well.
-      expect(posterior.trendIndex, 0);
-      expect(posterior.trendSlope, posterior.componentSlope(0));
-      expect(posterior.componentSlope(1), isNull);
-      expect(posterior.componentSlope(2), isNotNull);
-    });
+    test(
+      'report the trend slope even beside a component with its own rate',
+      () {
+        // The Matérn 3/2 carries a derivative state as well.
+        expect(posterior.trendIndex, 0);
+        expect(posterior.trendSlope, posterior.componentSlope(0));
+        expect(posterior.componentSlope(1), isNull);
+        expect(posterior.componentSlope(2), isNotNull);
+      },
+    );
 
     test('draw a band that matches the pointwise interval', () {
       final band = posterior.predictiveBand();
@@ -181,16 +187,20 @@ void main() {
 
   group('configuration types compare by value', () {
     test('models and their parts', () {
-      StructuralModel build() => StructuralModel([
-            LocalLinearTrend(processVariance: 1e-4),
-            TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
-            Matern.oneHalf(variance: 0.1, lengthScale: 3),
-            StochasticCycle(period: 30, damping: 0.9, stationaryVariance: 1),
-            RegressionComponent([
-              IndicatorRegressor('trip', [(from: 3.0, to: 9.0)]),
-              StepRegressor('dose', [1, 5], [2, 3]),
-            ]),
-          ], measurementVariance: 0.5, initialization: ApproximateDiffuse());
+      StructuralModel build() => StructuralModel(
+        [
+          LocalLinearTrend(processVariance: 1e-4),
+          TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
+          Matern.oneHalf(variance: 0.1, lengthScale: 3),
+          StochasticCycle(period: 30, damping: 0.9, stationaryVariance: 1),
+          RegressionComponent([
+            IndicatorRegressor('trip', [(from: 3.0, to: 9.0)]),
+            StepRegressor('dose', [1, 5], [2, 3]),
+          ]),
+        ],
+        measurementVariance: 0.5,
+        initialization: ApproximateDiffuse(),
+      );
       expect(build(), build());
       expect(build().hashCode, build().hashCode);
       expect(build(), isNot(build().withMeasurementVariance(0.4)));
@@ -203,7 +213,9 @@ void main() {
   group('the model checks its components', () {
     test('once, at construction', () {
       expect(
-          () => StructuralModel([const _Inconsistent()]), throwsArgumentError);
+        () => StructuralModel([const _Inconsistent()]),
+        throwsArgumentError,
+      );
     });
 
     test('and checkComponent passes every shipped one', () {
@@ -216,7 +228,7 @@ void main() {
         Matern.fiveHalves(variance: 1, lengthScale: 2),
         StochasticCycle(period: 12, damping: 0.95, stationaryVariance: 1),
         RegressionComponent([
-          IndicatorRegressor('x', [(from: 0.0, to: 1.0)])
+          IndicatorRegressor('x', [(from: 0.0, to: 1.0)]),
         ]),
         const _Offset(),
       ]) {
@@ -225,10 +237,14 @@ void main() {
     });
 
     test('and names what a broken one gets wrong', () {
-      expect(checkComponent(const _LyingLevel()),
-          contains(contains('claims isStatic')));
-      expect(checkComponent(const _Inconsistent()),
-          contains(contains('diffuseStates has 2 entries')));
+      expect(
+        checkComponent(const _LyingLevel()),
+        contains(contains('claims isStatic')),
+      );
+      expect(
+        checkComponent(const _Inconsistent()),
+        contains(contains('diffuseStates has 2 entries')),
+      );
     });
   });
 
@@ -245,41 +261,57 @@ void main() {
     for (var i = 0; i < inside.length; i++) {
       expect(far.mean[i], closeTo(near.mean[i], 1e-9));
       expect(
-          far.variance[i], closeTo(near.variance[i], 1e-9 * near.variance[i]));
+        far.variance[i],
+        closeTo(near.variance[i], 1e-9 * near.variance[i]),
+      );
     }
   });
 
   test('a process noise that is not a covariance fails loudly', () {
-    final model =
-        StructuralModel([const _Indefinite(-1)], measurementVariance: 0.04);
-    expect(checkComponent(const _Indefinite(-1)),
-        contains(contains('not symmetric positive semi-definite')));
+    final model = StructuralModel([
+      const _Indefinite(-1),
+    ], measurementVariance: 0.04);
     expect(
-        () => model.smooth(data), throwsA(isA<NumericalBreakdownException>()));
+      checkComponent(const _Indefinite(-1)),
+      contains(contains('not symmetric positive semi-definite')),
+    );
+    expect(
+      () => model.smooth(data),
+      throwsA(isA<NumericalBreakdownException>()),
+    );
   });
 
   group('withEstimatedScale', () {
     test('keeps the ratios and estimates the noise level', () {
       final trend = StructuralModel.localLinearTrend(
-          processVariance: math.pow(4, -4).toDouble());
+        processVariance: math.pow(4, -4).toDouble(),
+      );
       final scaled = trend.withEstimatedScale(data);
       final ratio =
           (scaled.components.single as LocalLinearTrend).processVariance /
-              scaled.measurementVariance;
+          scaled.measurementVariance;
       expect(ratio, closeTo(math.pow(4, -4), 1e-12));
       // The same number fit reaches with its bracket shut around the ratio.
       final q = math.log(math.pow(4, -4));
-      final pinned =
-          fit(trend, data, lowerLogRatio: q - 1e-9, upperLogRatio: q + 1e-9);
-      expect(scaled.measurementVariance,
-          closeTo(pinned.measurementVariance, 1e-9));
+      final pinned = fit(
+        trend,
+        data,
+        lowerLogRatio: q - 1e-9,
+        upperLogRatio: q + 1e-9,
+      );
+      expect(
+        scaled.measurementVariance,
+        closeTo(pinned.measurementVariance, 1e-9),
+      );
     });
 
     test('refuses data with nothing left over', () {
       expect(
-          () => StructuralModel.localLinearTrend(processVariance: 1)
-              .withEstimatedScale(data.take(2).toList()),
-          throwsA(isA<UnderdeterminedModelException>()));
+        () => StructuralModel.localLinearTrend(
+          processVariance: 1,
+        ).withEstimatedScale(data.take(2).toList()),
+        throwsA(isA<UnderdeterminedModelException>()),
+      );
     });
   });
 
