@@ -39,6 +39,7 @@ final class Observation implements Comparable<Observation> {
   int get hashCode => Object.hash(time, value, relativeVariance);
 
   @override
-  String toString() => 'Observation($time, $value, '
+  String toString() =>
+      'Observation($time, $value, '
       'relativeVariance: $relativeVariance)';
 }

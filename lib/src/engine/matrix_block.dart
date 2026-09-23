@@ -16,7 +16,7 @@ final class MatrixBlock {
 
   /// A standalone [rows] x [cols] matrix with its own backing store.
   MatrixBlock.dense(int rows, int cols)
-      : this(Float64List(rows * cols), 0, cols, rows, cols);
+    : this(Float64List(rows * cols), 0, cols, rows, cols);
 
   /// The buffer the view reads and writes.
   final Float64List storage;

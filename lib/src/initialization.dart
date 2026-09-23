@@ -40,7 +40,10 @@ final class ApproximateDiffuse extends Initialization {
   ApproximateDiffuse({this.variance = 1e6}) {
     if (!(variance > 0) || !variance.isFinite) {
       throw ArgumentError.value(
-          variance, 'variance', 'must be finite and positive');
+        variance,
+        'variance',
+        'must be finite and positive',
+      );
     }
   }
 

@@ -37,7 +37,10 @@ final class LocalLinearTrend extends Component {
   LocalLinearTrend({required this.processVariance}) {
     if (!(processVariance > 0) || !processVariance.isFinite) {
       throw ArgumentError.value(
-          processVariance, 'processVariance', 'must be finite and positive');
+        processVariance,
+        'processVariance',
+        'must be finite and positive',
+      );
     }
   }
 

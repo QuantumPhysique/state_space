@@ -35,8 +35,8 @@ final class InnovationDiagnostics {
   InnovationDiagnostics({
     required Float64List times,
     required Float64List residuals,
-  })  : times = Float64List.fromList(times).asUnmodifiableView(),
-        residuals = Float64List.fromList(residuals).asUnmodifiableView() {
+  }) : times = Float64List.fromList(times).asUnmodifiableView(),
+       residuals = Float64List.fromList(residuals).asUnmodifiableView() {
     if (times.length != residuals.length) {
       throw ArgumentError('times and residuals must have the same length');
     }
@@ -110,7 +110,10 @@ final class InnovationDiagnostics {
   double autocorrelation(int lag) {
     if (lag < 1 || lag >= count) {
       throw ArgumentError.value(
-          lag, 'lag', 'must be between 1 and ${count - 1}');
+        lag,
+        'lag',
+        'must be between 1 and ${count - 1}',
+      );
     }
     final centre = mean;
     var cross = 0.0;
@@ -148,18 +151,26 @@ final class InnovationDiagnostics {
       throw ArgumentError.value(lags, 'lags', 'must be at least 1');
     }
     if (lags >= count) {
-      throw ArgumentError.value(lags, 'lags',
-          'must be fewer than the $count residuals there are to test');
+      throw ArgumentError.value(
+        lags,
+        'lags',
+        'must be fewer than the $count residuals there are to test',
+      );
     }
     if (fittedParameters < 0) {
       throw ArgumentError.value(
-          fittedParameters, 'fittedParameters', 'cannot be negative');
+        fittedParameters,
+        'fittedParameters',
+        'cannot be negative',
+      );
     }
     final degreesOfFreedom = lags - fittedParameters;
     if (degreesOfFreedom < 1) {
-      throw ArgumentError('$lags lags cannot absorb $fittedParameters fitted '
-          'parameters; ask for more lags than parameters, or the test has '
-          'nothing left to measure');
+      throw ArgumentError(
+        '$lags lags cannot absorb $fittedParameters fitted '
+        'parameters; ask for more lags than parameters, or the test has '
+        'nothing left to measure',
+      );
     }
 
     final centre = mean;

@@ -40,22 +40,30 @@ final class IndicatorRegressor extends Regressor {
   /// [spans] must be sorted by start time and must not overlap; both are
   /// checked.
   IndicatorRegressor(this.name, List<Span> spans)
-      : spans = List.unmodifiable(spans) {
+    : spans = List.unmodifiable(spans) {
     for (var i = 0; i < spans.length; i++) {
       final span = spans[i];
       if (!span.from.isFinite || !span.to.isFinite) {
         throw ArgumentError.value(
-            span, 'spans[$i]', 'endpoints must be finite');
+          span,
+          'spans[$i]',
+          'endpoints must be finite',
+        );
       }
       if (!(span.to > span.from)) {
-        throw ArgumentError.value(span, 'spans[$i]',
-            'must end after it starts; an empty span contributes nothing');
+        throw ArgumentError.value(
+          span,
+          'spans[$i]',
+          'must end after it starts; an empty span contributes nothing',
+        );
       }
       if (i > 0 && span.from < spans[i - 1].to) {
-        throw ArgumentError('spans must be sorted and disjoint, but '
-            'spans[$i] starts at ${span.from}, before spans[${i - 1}] ends at '
-            '${spans[i - 1].to}. Merge them rather than letting the column '
-            'count that stretch twice.');
+        throw ArgumentError(
+          'spans must be sorted and disjoint, but '
+          'spans[$i] starts at ${span.from}, before spans[${i - 1}] ends at '
+          '${spans[i - 1].to}. Merge them rather than letting the column '
+          'count that stretch twice.',
+        );
       }
     }
   }
@@ -115,13 +123,18 @@ final class StepRegressor extends Regressor {
   ///
   /// [knots] must be sorted ascending and the same length as [values], and
   /// both finite. Both lists are copied.
-  StepRegressor(this.name, List<double> knots, List<double> values,
-      {this.before = 0})
-      : _knots = Float64List.fromList(knots),
-        _values = Float64List.fromList(values) {
+  StepRegressor(
+    this.name,
+    List<double> knots,
+    List<double> values, {
+    this.before = 0,
+  }) : _knots = Float64List.fromList(knots),
+       _values = Float64List.fromList(values) {
     if (knots.length != values.length) {
-      throw ArgumentError('there are ${knots.length} knots and '
-          '${values.length} values; they must correspond one to one');
+      throw ArgumentError(
+        'there are ${knots.length} knots and '
+        '${values.length} values; they must correspond one to one',
+      );
     }
     for (var i = 0; i < knots.length; i++) {
       if (!knots[i].isFinite) {
@@ -131,8 +144,10 @@ final class StepRegressor extends Regressor {
         throw ArgumentError.value(values[i], 'values[$i]', 'not finite');
       }
       if (i > 0 && knots[i] < knots[i - 1]) {
-        throw ArgumentError('knots must be sorted ascending, but knots[$i] '
-            '(${knots[i]}) precedes knots[${i - 1}] (${knots[i - 1]})');
+        throw ArgumentError(
+          'knots must be sorted ascending, but knots[$i] '
+          '(${knots[i]}) precedes knots[${i - 1}] (${knots[i - 1]})',
+        );
       }
     }
   }
@@ -189,8 +204,13 @@ final class StepRegressor extends Regressor {
       _listEquals(other._values, _values);
 
   @override
-  int get hashCode => Object.hash(StepRegressor, name, before,
-      Object.hashAll(_knots), Object.hashAll(_values));
+  int get hashCode => Object.hash(
+    StepRegressor,
+    name,
+    before,
+    Object.hashAll(_knots),
+    Object.hashAll(_values),
+  );
 
   @override
   String toString() => 'StepRegressor($name, ${_knots.length} knots)';
@@ -217,10 +237,13 @@ final class StepRegressor extends Regressor {
 final class RegressionComponent extends Component {
   /// Coefficients on [regressors], which must not be empty.
   RegressionComponent(List<Regressor> regressors)
-      : regressors = List.unmodifiable(regressors) {
+    : regressors = List.unmodifiable(regressors) {
     if (regressors.isEmpty) {
-      throw ArgumentError.value(regressors, 'regressors',
-          'a regression component needs at least one column');
+      throw ArgumentError.value(
+        regressors,
+        'regressors',
+        'a regression component needs at least one column',
+      );
     }
   }
 
@@ -266,7 +289,7 @@ final class RegressionComponent extends Component {
   String? identifiabilityHint(double from, double to, {double resolution = 0}) {
     final silent = [
       for (final regressor in regressors)
-        if (regressor.isSilentOver(from, to)) regressor.name
+        if (regressor.isSilentOver(from, to)) regressor.name,
     ];
     if (silent.isEmpty) return null;
     return 'the regressor${silent.length == 1 ? '' : 's'} '

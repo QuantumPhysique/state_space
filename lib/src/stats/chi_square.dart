@@ -86,15 +86,19 @@ double _upperByContinuedFraction(double a, double x) {
 double chiSquareUpperTail(double statistic, int degreesOfFreedom) {
   if (degreesOfFreedom < 1) {
     throw ArgumentError.value(
-        degreesOfFreedom, 'degreesOfFreedom', 'must be at least 1');
+      degreesOfFreedom,
+      'degreesOfFreedom',
+      'must be at least 1',
+    );
   }
   if (statistic <= 0) return 1;
   if (!statistic.isFinite) return 0;
 
   final a = degreesOfFreedom / 2;
   final x = statistic / 2;
-  final tail =
-      x < a + 1 ? 1 - _lowerBySeries(a, x) : _upperByContinuedFraction(a, x);
+  final tail = x < a + 1
+      ? 1 - _lowerBySeries(a, x)
+      : _upperByContinuedFraction(a, x);
   // Rounding can push either branch a hair outside [0, 1] deep in a tail.
   return tail.clamp(0.0, 1.0);
 }

@@ -13,7 +13,7 @@ place.
 | a pattern on a calendar you know: a week, a year | `TrigonometricSeasonal(period: 7, harmonics: 2, ...)`, or `period: 365.25` |
 | named, dated events: a holiday, a course of medication | `RegressionComponent` with `IndicatorRegressor`s |
 | a covariate that changes at known instants | `RegressionComponent` with a `StepRegressor` |
-| correlated wobble the trend should not be chasing | `Matern.oneHalf(...)` alongside the trend |
+| correlated wobble the trend should not be chasing | `Matern.oneHalf(...)` alongside the trend, with a noise floor |
 | a rhythm that is approximate, or whose period you do not know | `StochasticCycle` |
 
 `LocalLinearTrend` against `LocalLevel` is a claim about whether the thing has a
@@ -93,10 +93,10 @@ Three things can be compared across anything:
 The first two answer cleanly on two years of daily readings built from a trend, a
 weekly sinusoid and noise of standard deviation 0.3:
 
-| model | fitted noise sd | Ljung–Box p (14 lags) |
+| model | fitted noise sd | Ljung–Box, 14 lags |
 |---|---|---|
-| trend only | 0.472 | 3e-49 |
-| trend + weekly | **0.302** | **0.31** |
+| trend only | 0.472 | statistic 1794 on 13 df, p below 1e-300 |
+| trend + weekly | **0.302** | statistic 13.9 on 12 df, p = **0.31** |
 
 The noise level recovers the truth to three decimal places and the portmanteau
 test goes from certain rejection to unremarkable. The two likelihoods differ by
@@ -110,23 +110,25 @@ for (final warning in fitted.warnings) print(warning);
 ```
 
 `atBracketEdge` is the one-line version and the first thing worth checking.
-`warnings` is empty when there is nothing to say, and reports three things:
+`warnings` is empty when there is nothing to say, and reports:
 
-* a parameter that finished on a bound — its estimate is a boundary rather than
-  an interior optimum, and the width beside it is one-sided;
-* a parameter the data barely constrains, meaning a plateau over two decades
-  wide;
-* **a width that was measured while another parameter of the same component sat
-  on a bound**, which is the one that is easy to miss.
-
-That third case is worth understanding. Every width in
-`plateauDecadesByParameter` is conditional on the other parameters, so when one
-of them has finished on a bound the slice is taken *at* that bound. A
-`StochasticCycle` fitted to a series with no cycle in it drives the damping to
-the top of its bracket, where the component is a rigid sinusoid whose likelihood
-in frequency is as sharp as a periodogram spike — and then reports the period as
-pinned to a thousandth of a decade. Nothing about that is wrong arithmetically
-and all of it is misleading.
+* **a reading far from what the rest of the data predicts**, more than six
+  typical errors away; see
+  [Bad readings](https://github.com/QuantumPhysique/state_space/blob/main/doc/getting-started.md#bad-readings);
+* **a parameter that finished on a bound.** Its estimate is a boundary rather
+  than an interior optimum, and the width beside it is one-sided. At the bottom,
+  the variance of a trend or seasonal means the component is fitted as fixed
+  over time, and the variance of a stationary component means it contributes
+  nothing;
+* **a stationary component's variance at the top of its bracket**, which means
+  it has taken over the measurement noise: pass `minimumMeasurementVariance`;
+* **a parameter the data barely constrains**, meaning a plateau over two
+  decades wide;
+* **a width measured while another parameter of the same component sat on a
+  bound.** Every width in `plateauDecadesByParameter` is conditional on the
+  other parameters, so it is then taken *at* that bound. The common case is a
+  `StochasticCycle` on a series with no cycle in it; its documentation works it
+  through.
 
 `plateauDecadesByParameter` is `NaN` for a parameter that is not searched on a
 log scale; a damping factor is a logit, and a width in logits over `ln 10` is not
@@ -144,16 +146,21 @@ the fit will not always tell you which it chose.
   the place worth looking: that component's own posterior standard deviation
   comes back *larger than the amplitude it drew*. Check `componentVariance`
   alongside `componentMean`. Shrinking the variance to zero does not remove the
-  component — it only stops the pattern evolving.
+  component; it only stops the pattern evolving.
 * **A trend and a Matérn.** Both are slow. Leaving both free is measurably worse
   than adding neither: the two compete for the same slow variation and the
   trend's variance ends up undetermined over five decades. If you add a Matérn
   deviation, consider fixing the trend's smoothing rather than fitting it.
   Whitening the residuals is not free.
 * **A Matérn and the measurement noise.** A length scale below the sampling
-  interval *is* white noise. `fit` floors it at the median gap between readings
-  for that reason; without the floor the likelihood prefers the corner where the
-  Matérn takes the noise and the reported precision becomes fiction.
+  interval *is* white noise, so `fit` floors it at the typical gap between
+  visits. Above the floor the two can still trade: when readings carry
+  correlated day-to-day variation, the likelihood can prefer a large Matérn
+  and a noise level near zero. `fit` searches again from a larger noise share
+  when a Matérn's variance ends at the top of its bracket and keeps the better
+  optimum, and `warnings` says when the variance is still there; a
+  `minimumMeasurementVariance` at the instrument's resolution rules the corner
+  out.
 * **A cycle and a free level.** A random walk whose variance is free can draw any
   wiggle, so a `StochasticCycle` beside an unconstrained `LocalLevel` often
   loses. It fails in two directions and `warnings` names both: on a series with a
@@ -181,7 +188,6 @@ dart run tool/calibration/calibrate.dart --all
 dart run tool/calibration/calibrate.dart --all my-export.txt
 ```
 
-Nothing leaves the machine. It is how the advice on this page was arrived at, and
-[its own README](https://github.com/QuantumPhysique/state_space/blob/main/tool/calibration/README.md) is worth reading for how to read
-the tables — in particular why the likelihood column may only be compared down a
-run of equal diffuse dimension.
+Nothing leaves the machine. [Its own README](https://github.com/QuantumPhysique/state_space/blob/main/tool/calibration/README.md)
+explains how to read the tables, in particular why the likelihood column may
+only be compared down a run of equal diffuse dimension.

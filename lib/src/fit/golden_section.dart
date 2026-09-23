@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 /// Outcome of a one-dimensional golden-section search.
 class GoldenSectionResult {
+  /// The outcome of [maximise].
   const GoldenSectionResult({
     required this.argument,
     required this.value,
@@ -15,6 +16,7 @@ class GoldenSectionResult {
   /// The objective there.
   final double value;
 
+  /// How many times the objective was called.
   final int evaluations;
 
   /// Whether the bracket shrank below the tolerance rather than the search

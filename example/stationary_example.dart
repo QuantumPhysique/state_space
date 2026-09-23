@@ -112,9 +112,8 @@ void main() {
       'the fit found '
       '${math.sqrt(withWobble.measurementVariance).toStringAsFixed(3)} kg on '
       'its own.');
-  print('It costs one extra fit when it does not bind, which is the argument '
-      'for asking');
-  print('for one even when you expect it not to.');
+  print('A floor that does not bind costs nothing; one that binds costs one '
+      'more fit.');
 }
 
 String _pad(double value, int digits) =>

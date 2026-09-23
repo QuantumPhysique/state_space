@@ -5,29 +5,47 @@ on:
     branches: [main]
   pull_request:
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        # The declared minimum and the current release.
+        sdk: ['3.9.0', stable]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: ${{ matrix.sdk }}
+
+      - run: dart pub get
+      - run: dart format --output=none --set-exit-if-changed .
+        if: matrix.sdk == 'stable'
+      - run: dart analyze --fatal-infos
+      - run: dart test
+
+      # The statsmodels fixtures are committed; regenerate them with
+      # tool/generate_fixtures.py.
+
+      - name: Run the examples
+        run: for f in example/*.dart; do dart run "$f" > /dev/null; done
+      - name: Compile the benchmarks
+        run: for f in benchmark/*.dart; do dart compile exe "$f" -o /tmp/bench > /dev/null; done
+
+  publish:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: stable
-
-      - run: dart pub get
-      - run: dart format --output=none --set-exit-if-changed .
-      - run: dart analyze --fatal-infos
-      - run: dart test
-
-      # The statsmodels fixtures are committed on purpose, so CI needs no
-      # Python. Regenerating them is a deliberate act -- see the header of
-      # tool/generate_fixtures.py -- because a change there means the model
-      # changed, and the changelog should say so.
-
-  publish-dry-run:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dart-lang/setup-dart@v1
       - run: dart pub get
       - run: dart pub publish --dry-run
+      - name: pana
+        run: |
+          dart pub global activate pana
+          dart pub global run pana --no-warning --exit-code-threshold 0 .

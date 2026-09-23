@@ -29,18 +29,19 @@ import 'penalty.dart';
 /// likelihood. The search still moves in log ratios, so the bracket means the
 /// same thing either way and the search has the same number of dimensions.
 class ProfileLikelihood {
+  /// The profile likelihood of [template]'s parameters on [observations].
   ProfileLikelihood(
     this.template,
     List<Observation> observations, {
     this.penalty = const NoPenalty(),
     this.fixedMeasurementVariance,
-  })  : _timeline = Timeline.merge(observations, null),
-        _specs = template.parameterSpecs,
-        span = observations.isEmpty
-            ? 0
-            : observations.last.time - observations.first.time,
-        _dataSpread = _standardDeviation(observations),
-        _floor = scaleFloor(observations);
+  }) : _timeline = Timeline.merge(observations, null),
+       _specs = template.parameterSpecs,
+       span = observations.isEmpty
+           ? 0
+           : observations.last.time - observations.first.time,
+       _dataSpread = _standardDeviation(observations),
+       _floor = scaleFloor(observations);
 
   /// The model whose parameters are being searched over. Its measurement
   /// variance is ignored.

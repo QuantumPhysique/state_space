@@ -67,14 +67,20 @@ final class TrigonometricSeasonal extends Component {
   }) {
     if (!(period > 0) || !period.isFinite) {
       throw ArgumentError.value(
-          period, 'period', 'must be finite and positive');
+        period,
+        'period',
+        'must be finite and positive',
+      );
     }
     if (harmonics < 1) {
       throw ArgumentError.value(harmonics, 'harmonics', 'must be at least 1');
     }
     if (!(processVariance > 0) || !processVariance.isFinite) {
       throw ArgumentError.value(
-          processVariance, 'processVariance', 'must be finite and positive');
+        processVariance,
+        'processVariance',
+        'must be finite and positive',
+      );
     }
   }
 
@@ -134,22 +140,15 @@ final class TrigonometricSeasonal extends Component {
     }
   }
 
-  /// The kernel at equal times is `processVariance * span * sum_j cos(0)`, so
-  /// the harmonics add rather than average: a pattern resolved by three
-  /// sinusoids drifts faster than one resolved by a single sinusoid at the
-  /// same noise intensity. Averaged over the path that halves, giving
-  /// `processVariance * span * harmonics / 2`.
+  /// `processVariance * span * harmonics / 2`: the harmonics add, so a
+  /// pattern resolved by three sinusoids drifts faster than one resolved by a
+  /// single sinusoid at the same noise intensity.
   ///
   /// The exact figure subtracts a further
   /// `2 sigma^2 sum_j (T - sin(lambda_j T) / lambda_j) / (lambda_j^2 T^2)`,
-  /// which the oscillation drives down like `1 / (lambda_j^2 T)`. Measured
-  /// against a dense double integral, that term is 5.5 per cent of the total
-  /// over exactly one period at one harmonic, 2.4 per cent at three, and 3.3
-  /// per cent for an annual pattern at two; by two periods it is under 1.3 per
-  /// cent and by five under 0.2. It is dropped because the penalty this feeds
-  /// compares components against each other on a scale the modeller sets by
-  /// eye, and because a component observed over less than one period is
-  /// refused anyway by the time anything reads this.
+  /// which is 5.5 per cent of the total over one period at one harmonic, under
+  /// 1.3 per cent by two periods and under 0.2 per cent by five; it is left
+  /// out.
   @override
   double wanderOver(double span) =>
       math.sqrt(processVariance * span * harmonics / 2);
@@ -198,10 +197,10 @@ final class TrigonometricSeasonal extends Component {
 
   @override
   Component withParameters(Float64List theta) => TrigonometricSeasonal(
-        period: period,
-        harmonics: harmonics,
-        processVariance: math.exp(theta[0]),
-      );
+    period: period,
+    harmonics: harmonics,
+    processVariance: math.exp(theta[0]),
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -215,6 +214,7 @@ final class TrigonometricSeasonal extends Component {
       Object.hash(TrigonometricSeasonal, period, harmonics, processVariance);
 
   @override
-  String toString() => 'TrigonometricSeasonal(period: $period, harmonics: '
+  String toString() =>
+      'TrigonometricSeasonal(period: $period, harmonics: '
       '$harmonics, processVariance: $processVariance)';
 }

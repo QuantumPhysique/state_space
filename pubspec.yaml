@@ -1,26 +1,28 @@
 name: state_space
 description: >-
-  Exact Gaussian process regression for irregular time series in linear time.
-  Kalman filtering, RTS smoothing, and marginal-likelihood hyperparameter
-  estimation. Pure Dart, no dependencies.
-version: 0.5.0
+  Gaussian process regression for irregular time series: smoothed trends with
+  uncertainty bands, forecasts and learned hyperparameters, in linear time.
+  Pure Dart.
+version: 0.1.0
 repository: https://github.com/QuantumPhysique/state_space
 issue_tracker: https://github.com/QuantumPhysique/state_space/issues
 
-# pub.dev allows five. These are the browse axes; "gaussian process" and
-# "regression" are in the description, which its full-text search does read.
+screenshots:
+  - description: Smoothed trend with its 95% credible band across a gap, and a forecast
+    path: doc/images/trend.png
+
 topics:
-  - statistics
+  - machine-learning
+  - gaussian-process
   - time-series
+  - statistics
   - kalman-filter
-  - forecasting
-  - smoothing
 
 environment:
-  sdk: ^3.5.0
+  sdk: ^3.9.0
 
 dev_dependencies:
-  benchmark_harness: ^2.3.0
-  lints: ^5.0.0
-  matrices: ^2.0.0        # dense reference implementation, tests only
-  test: ^1.25.0
+  benchmark_harness: ^2.4.0
+  lints: ^5.1.0
+  matrices: ^2.0.0 # dense reference implementation for the tests
+  test: ^1.26.0

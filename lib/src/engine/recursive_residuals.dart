@@ -13,13 +13,17 @@ import 'cholesky.dart';
 /// be rebuilt honestly, one observation at a time, at the cost of `2 + d`
 /// doubles per observation and only when they are asked for.
 class ResidualPieces {
+  /// Room for [count] observations under [diffuseDim] flat directions.
   ResidualPieces(this.count, this.diffuseDim)
-      : times = Float64List(count),
-        constant = Float64List(count),
-        variance = Float64List(count),
-        loading = Float64List(count * diffuseDim);
+    : times = Float64List(count),
+      constant = Float64List(count),
+      variance = Float64List(count),
+      loading = Float64List(count * diffuseDim);
 
+  /// Observations the pieces have room for.
   final int count;
+
+  /// Flat directions in the model.
   final int diffuseDim;
 
   /// Time of each observation.
@@ -38,6 +42,8 @@ class ResidualPieces {
 
   var _filled = 0;
 
+  /// Records one observation's innovation [va], its variance [s] and its
+  /// loading [vb] on the flat directions.
   void add(double time, double va, double s, Float64List vb) {
     final at = _filled;
     times[at] = time;

@@ -35,9 +35,11 @@ final class TimeAxis {
   /// adding the difference in wall-clock time of day.
   double timeOf(DateTime date) {
     final at = origin.isUtc ? date.toUtc() : date.toLocal();
-    final days = DateTime.utc(at.year, at.month, at.day)
-        .difference(DateTime.utc(origin.year, origin.month, origin.day))
-        .inDays;
+    final days = DateTime.utc(
+      at.year,
+      at.month,
+      at.day,
+    ).difference(DateTime.utc(origin.year, origin.month, origin.day)).inDays;
     return days + (_clock(at) - _clock(origin)) / _microsecondsPerDay;
   }
 
@@ -49,15 +51,33 @@ final class TimeAxis {
     final clock = (total - days * _microsecondsPerDay).round();
     return origin.isUtc
         ? DateTime.utc(
-            origin.year, origin.month, origin.day + days, 0, 0, 0, 0, clock)
+            origin.year,
+            origin.month,
+            origin.day + days,
+            0,
+            0,
+            0,
+            0,
+            clock,
+          )
         : DateTime(
-            origin.year, origin.month, origin.day + days, 0, 0, 0, 0, clock);
+            origin.year,
+            origin.month,
+            origin.day + days,
+            0,
+            0,
+            0,
+            0,
+            clock,
+          );
   }
 
   /// An [Observation] of [value] at [date].
-  Observation observation(DateTime date, double value,
-          {double relativeVariance = 1}) =>
-      Observation(timeOf(date), value, relativeVariance: relativeVariance);
+  Observation observation(
+    DateTime date,
+    double value, {
+    double relativeVariance = 1,
+  }) => Observation(timeOf(date), value, relativeVariance: relativeVariance);
 
   static int _clock(DateTime t) =>
       ((t.hour * 60 + t.minute) * 60 + t.second) * 1000000 +

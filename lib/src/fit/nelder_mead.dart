@@ -2,6 +2,7 @@ import 'dart:typed_data';
 
 /// Outcome of a simplex search.
 class SimplexResult {
+  /// The outcome of [maximiseSimplex].
   const SimplexResult({
     required this.argument,
     required this.value,
@@ -15,6 +16,7 @@ class SimplexResult {
   /// The objective there.
   final double value;
 
+  /// How many times the objective was called.
   final int evaluations;
 
   /// Whether the simplex collapsed to within the tolerance rather than the
@@ -72,12 +74,13 @@ SimplexResult maximiseSimplex(
   }
   if (steps != null && steps.length != k) {
     throw ArgumentError.value(
-        steps, 'steps', 'expected one per dimension, got ${steps.length}');
+      steps,
+      'steps',
+      'expected one per dimension, got ${steps.length}',
+    );
   }
 
-  final vertices = [
-    for (var i = 0; i <= k; i++) Float64List.fromList(start),
-  ];
+  final vertices = [for (var i = 0; i <= k; i++) Float64List.fromList(start)];
   for (var i = 1; i <= k; i++) {
     vertices[i][i - 1] += steps?[i - 1] ?? step;
   }

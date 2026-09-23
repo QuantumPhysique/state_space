@@ -59,9 +59,7 @@ void main() {
       'replications');
   print('of this simulation it covers eighteen times, and the mean estimate '
       'is 1.282 against');
-  print('a true 1.300 -- one draw behaving the way one draw in twenty is '
-      'supposed to. It');
-  print('is left in rather than replaced with a luckier seed.');
+  print('a true 1.300.');
   print('');
   print(
       'fitted noise  ${math.sqrt(fitted.measurementVariance).toStringAsFixed(3)} kg '

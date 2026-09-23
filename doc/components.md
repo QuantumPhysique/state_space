@@ -19,24 +19,18 @@ component costs what that component costs and nothing more.
 | `Matern` | Matérn, ν = 1/2, 3/2, 5/2 | 1, 2, 3 | stationary | 2 |
 | `StochasticCycle` | `ρ^\|τ\| cos(2πτ/p)`, period estimated | 2 | stationary | 3 |
 
-The last column is what each costs the optimiser, and `fit` concentrates the
-measurement variance out on top of that. A trend plus twenty holiday indicators
-is a one-dimensional search.
+The last column is the number of search dimensions each adds to `fit`, which
+concentrates the measurement variance out on top of that. A trend plus twenty
+holiday indicators is a one-dimensional search.
 
-## Why you cannot hand it a covariance function
+## Supported kernels
 
-You implement `Component`; you do not pass `k(s, t)`. That is the whole premise
-rather than a limitation of the API: linear time comes from the Markov property,
-and only kernels with a finite-dimensional state-space form have it. A general
-`k(s, t)` puts you back at `O(N³)`, which is the thing being replaced.
+Only kernels with a finite-dimensional state-space form are supported, because
+linear time comes from the Markov property; the table above is the list. A new
+one is added by writing a `Component`, not by passing `k(s, t)`, which would
+cost `O(N³)`.
 
-So the useful question is not "can I supply a kernel" but **is my kernel
-reachable**, and the table above is the answer.
-
-**The squared exponential is not on it.** It has no exact finite-state form —
-only a Padé approximation of its spectral density costing about six states for a
-few digits, which is a lot of machinery for a kernel whose infinite smoothness is
-rarely what anyone actually believes.
+The squared exponential is not supported: it has no exact finite-state form.
 
 ## The non-stationary ones
 
@@ -62,8 +56,9 @@ d(mu) = nu dt,   d(nu) = sigma dB
 ```
 
 The implied kernel is the cubic spline kernel, so **the posterior mean is a
-natural cubic smoothing spline** — as a Bayesian posterior, with honest
-uncertainty, in linear time (Wahba 1978). [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md#as-a-kalman-filter-and-rts-smoother)
+natural cubic smoothing spline**, computed as the exact posterior of a Gaussian
+process with a credible band, in linear time (Wahba 1978).
+[How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md#as-a-kalman-filter-and-rts-smoother)
 has the kernel and the smoothing parameter.
 
 Choosing this over `LocalLevel` is a claim that "still going down" is a
@@ -79,11 +74,12 @@ sum.
 TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3)
 ```
 
-Two or three harmonics resolve a weekly shape. The fourth is resolving detail
-finer than seven daily readings support, and `harmonics` must in any case stay
-under half the period — at and past the Nyquist frequency a harmonic either
-aliases onto a lower one or leaves a state the data can never see, so the
-constructor refuses it.
+Two or three harmonics resolve a weekly shape on daily readings. At and past
+the Nyquist frequency, `2 · harmonics · gap ≥ period`, a harmonic aliases onto
+a lower one or leaves a state the data can never see, so `fit` and `smooth`
+refuse it with an `UnderdeterminedModelException`. The check uses the typical
+gap between readings, so the period can be in any time unit: `period: 1` with
+time in years and monthly readings is fine.
 
 `processVariance` is the rate at which the pattern is allowed to change shape,
 not its amplitude. All harmonics share it, which is Harvey's specification and
@@ -128,7 +124,7 @@ from.
 
 Each coefficient is one state with `A = I` and `Q = 0` under a flat prior, so
 **`parameterCount` is zero**: the exact diffuse machinery already integrates out
-flat directions, and a coefficient is one. They cost the optimiser nothing and
+flat directions, and a coefficient is one. They add no search dimension and
 arrive with posterior standard errors from the same recursion that produced the
 trend:
 
@@ -136,8 +132,13 @@ trend:
 posterior.coefficients.first;   // christmas: 1.121 +/- 0.091
 ```
 
-Because such a state never moves, the backward pass skips it too — see
+Because such a state never moves, the backward pass skips it; see
 [`Component.isStatic`](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md#the-smoother).
+The forward pass still carries every column as a flat direction, and its cost
+grows roughly with the square of their number: on two years of daily readings
+a likelihood evaluation of a trend and a weekly seasonal takes 0.4 ms, with one
+indicator 0.5 ms, and with twenty 20 ms, so a fit with twenty indicators costs
+about fifty times one without.
 
 ## The stationary ones
 
@@ -151,19 +152,26 @@ The standard Gaussian process kernel, in state-space form, at ν = 1/2, 3/2 and
 5/2 — one, two and three states, exactly rather than approximately.
 
 ```dart
-StructuralModel([
-  const LocalLinearTrend(processVariance: 1e-4),
+final model = StructuralModel([
+  LocalLinearTrend(processVariance: 1e-4),
   Matern.oneHalf(variance: 0.1, lengthScale: 3),
 ]);
+fit(model, data, minimumMeasurementVariance: 0.029 * 0.029);
 ```
 
 Reach for it when a series has structure the trend should not be chasing. `ν = 1/2`
 is an Ornstein–Uhlenbeck process, the exact continuous-time AR(1), and it absorbs
 the correlated wobble a trend-only model has nowhere to put but the noise.
 
-The order also decides how rough the path may be, which is the modelling choice
-worth making deliberately: the cubic spline of `LocalLinearTrend` assumes a trend
-with a continuous derivative, and `ν = 1/2` assumes nothing of the sort.
+The order also decides how rough the path may be: the cubic spline of
+`LocalLinearTrend` assumes a trend with a continuous derivative, and `ν = 1/2`
+allows corners.
+
+Give `fit` a `minimumMeasurementVariance` whenever a Matérn is in the model.
+With correlated day-to-day variation in the data, the likelihood can prefer a
+large Matérn and a noise level near zero; `fit` searches for the alternative
+and `warnings` reports it, but a floor at the instrument's resolution rules the
+corner out.
 
 ### `StochasticCycle`
 
@@ -181,38 +189,46 @@ It needs a lot of data. Below about four complete cycles the period is not
 estimable at all and below eight it is very noisy, and the fit will still return
 a number.
 
-**Check `atBracketEdge` first, and specifically the damping.** A cycle fitted to
-a series with no cycle pushes the damping to the top of its bracket, where the
-component chases noise and the width reported for the *period* becomes tiny and
-meaningless. The width is conditional on the damping, so it is worth reading only
-once the damping is interior — see
-[Read the warnings](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#read-the-warnings), which works the case through.
+**Read the damping before the period.** On a series with no cycle the damping
+goes to the top of its bracket, and the width reported for the period becomes
+tiny and meaningless. The `StochasticCycle` API documentation has the details,
+and `warnings` reports both.
 
 ## Both stationary components have a floor you did not set
 
 A shape parameter measured in time units stops being a different model below the
 sampling interval. A Matérn with `ν = 1/2` and a length scale shorter than the gap
 between readings *is* white noise, so it competes with the measurement error
-rather than with the trend — and the likelihood mildly prefers it that way. Left
-free on daily readings with a true noise level of 0.3, it will report the noise as
-**0.002**, draw a band covering every point, and hand back a trend interpolating
-the noise.
+rather than with the trend, and the likelihood mildly prefers it that way.
+Allowed down to a length scale of 0.01 on daily readings with a true noise level
+of 0.3, it reports the noise as **0.002**, draws a band covering every point,
+and hands back a trend interpolating the noise.
 
-So `fit` raises the bottom of `lengthScaleBounds` to the median gap between
-readings, and a cycle's `periodBounds` to twice it, which is the Nyquist limit.
-It is the same refusal `TrigonometricSeasonal` already makes about harmonics,
-moved to where the limit depends on the data rather than on the component alone.
-Your own lower bound is respected when it is higher, and the upper bound is
-honoured as given.
+So `fit` raises the bottom of `lengthScaleBounds` to the typical gap between
+visits, and a cycle's `periodBounds` to twice it, which is the Nyquist limit.
+Readings much closer together than the typical gap, such as two weighings on one
+morning, count as one visit. Your own lower bound is respected when it is
+higher, and the upper bound is honoured as given.
 
 ## Writing your own
 
-Implement `Component`. You supply the state dimension, `A(dt)` and `Q(dt)` —
-which must be exact for *any* non-negative gap, including zero — an observation
-row, which of your states are diffuse, and a proper prior for the ones that are
-not. Everything else has a default.
+Import `package:state_space/authoring.dart` and extend `Component`. Nine members
+have no default: `stateDim`, `parameterCount`, `transition` and `processNoise`
+(`A(dt)` and `Q(dt)`, exact for *any* non-negative gap including zero),
+`observationAt`, `diffuseStates`, `properPrior` for the states that are not
+diffuse, `parameters` and `withParameters`. Override `name` with a literal, and
+`parameterSpecs` if any parameter is not a variance.
 
-`MatrixBlock` is the one matrix type in the API and appears only here: it is a
-view onto the engine's buffer, so your component fills its own block in place
-without knowing where that block sits. It is the one place the engine's internals are
-visible.
+`MatrixBlock` is the matrix type components write into: a view onto the
+engine's buffer, so a component fills its own block in place without knowing
+where that block sits.
+
+`checkComponent` tests what the engine relies on and the type system cannot: the
+declared lengths, `A(0) = I` and `Q(0) = 0`, a symmetric positive semi-definite
+`Q`, consistency across gaps (`Q(s + t) = A(t) Q(s) A(t)' + Q(t)`), the
+`withParameters` round trip, and an honest `isStatic`. It returns one sentence
+per problem:
+
+```dart
+test('my component', () => expect(checkComponent(MyComponent()), isEmpty));
+```

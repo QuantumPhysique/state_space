@@ -80,16 +80,25 @@ final class Matern extends Component {
   }) {
     if (!(variance > 0) || !variance.isFinite) {
       throw ArgumentError.value(
-          variance, 'variance', 'must be finite and positive');
+        variance,
+        'variance',
+        'must be finite and positive',
+      );
     }
     if (!(lengthScale > 0) || !lengthScale.isFinite) {
       throw ArgumentError.value(
-          lengthScale, 'lengthScale', 'must be finite and positive');
+        lengthScale,
+        'lengthScale',
+        'must be finite and positive',
+      );
     }
     final (:lower, :upper) = lengthScaleBounds;
     if (!(lower > 0) || !(lower < upper) || !upper.isFinite) {
-      throw ArgumentError.value(lengthScaleBounds, 'lengthScaleBounds',
-          'must be a positive increasing range');
+      throw ArgumentError.value(
+        lengthScaleBounds,
+        'lengthScaleBounds',
+        'must be a positive increasing range',
+      );
     }
   }
 
@@ -97,49 +106,46 @@ final class Matern extends Component {
   factory Matern.oneHalf({
     required double variance,
     required double lengthScale,
-    ({
-      double lower,
-      double upper
-    }) lengthScaleBounds = const (lower: 1e-2, upper: 1e4),
-  }) =>
-      Matern(
-        order: MaternOrder.oneHalf,
-        variance: variance,
-        lengthScale: lengthScale,
-        lengthScaleBounds: lengthScaleBounds,
-      );
+    ({double lower, double upper}) lengthScaleBounds = const (
+      lower: 1e-2,
+      upper: 1e4,
+    ),
+  }) => Matern(
+    order: MaternOrder.oneHalf,
+    variance: variance,
+    lengthScale: lengthScale,
+    lengthScaleBounds: lengthScaleBounds,
+  );
 
   /// `nu = 3/2`, two states: once differentiable, and the usual default.
   factory Matern.threeHalves({
     required double variance,
     required double lengthScale,
-    ({
-      double lower,
-      double upper
-    }) lengthScaleBounds = const (lower: 1e-2, upper: 1e4),
-  }) =>
-      Matern(
-        order: MaternOrder.threeHalves,
-        variance: variance,
-        lengthScale: lengthScale,
-        lengthScaleBounds: lengthScaleBounds,
-      );
+    ({double lower, double upper}) lengthScaleBounds = const (
+      lower: 1e-2,
+      upper: 1e4,
+    ),
+  }) => Matern(
+    order: MaternOrder.threeHalves,
+    variance: variance,
+    lengthScale: lengthScale,
+    lengthScaleBounds: lengthScaleBounds,
+  );
 
   /// `nu = 5/2`, three states: twice differentiable.
   factory Matern.fiveHalves({
     required double variance,
     required double lengthScale,
-    ({
-      double lower,
-      double upper
-    }) lengthScaleBounds = const (lower: 1e-2, upper: 1e4),
-  }) =>
-      Matern(
-        order: MaternOrder.fiveHalves,
-        variance: variance,
-        lengthScale: lengthScale,
-        lengthScaleBounds: lengthScaleBounds,
-      );
+    ({double lower, double upper}) lengthScaleBounds = const (
+      lower: 1e-2,
+      upper: 1e4,
+    ),
+  }) => Matern(
+    order: MaternOrder.fiveHalves,
+    variance: variance,
+    lengthScale: lengthScale,
+    lengthScaleBounds: lengthScaleBounds,
+  );
 
   /// Which half-integer smoothness this is.
   final MaternOrder order;
@@ -153,7 +159,7 @@ final class Matern extends Component {
   /// Not a correlation *time* in the half-life sense: the convention
   /// `a = sqrt(2 nu) |tau| / lengthScale` makes the three orders comparable, so
   /// a length scale of ten days means about the same amount of memory whichever
-  /// order is used, which is the point of the convention.
+  /// order is used.
   final double lengthScale;
 
   /// Range the fit searches [lengthScale] over, in the caller's time unit.
@@ -198,13 +204,13 @@ final class Matern extends Component {
 
   @override
   List<ParameterSpec> get parameterSpecs => [
-        const VarianceParameter(),
-        ShapeParameter(
-          label: 'length scale',
-          lower: math.log(lengthScaleBounds.lower),
-          upper: math.log(lengthScaleBounds.upper),
-        ),
-      ];
+    const VarianceParameter(),
+    ShapeParameter(
+      label: 'length scale',
+      lower: math.log(lengthScaleBounds.lower),
+      upper: math.log(lengthScaleBounds.upper),
+    ),
+  ];
 
   /// Raises the length-scale bracket to the sampling interval.
   ///
@@ -219,18 +225,20 @@ final class Matern extends Component {
     final upper = lengthScaleBounds.upper;
     if (!(floor < upper)) {
       throw UnderdeterminedModelException(
-          'a Matern length scale is bracketed at '
-          '[${lengthScaleBounds.lower}, $upper], but the readings are '
-          '$resolution apart, and a length scale below one sampling interval '
-          'is measurement noise rather than a separate component. Widen '
-          'lengthScaleBounds or drop the component.');
+        'a Matern length scale is bracketed at '
+        '[${lengthScaleBounds.lower}, $upper], but the readings are '
+        '$resolution apart, and a length scale below one sampling interval '
+        'is measurement noise rather than a separate component. Widen '
+        'lengthScaleBounds or drop the component.',
+      );
     }
     return [
       const VarianceParameter(),
       ShapeParameter(
-          label: 'length scale',
-          lower: math.log(floor),
-          upper: math.log(upper)),
+        label: 'length scale',
+        lower: math.log(floor),
+        upper: math.log(upper),
+      ),
     ];
   }
 
@@ -281,13 +289,10 @@ final class Matern extends Component {
   /// Over a very short gap the two terms very nearly cancel — `Q(0,0)` is
   /// `O(dt^3)` for `nu = 3/2` and `O(dt^5)` for `nu = 5/2`, while the terms it
   /// is built from are `O(1)` — so below [_seriesBelow] the integral form is
-  /// summed directly instead. That is not a refinement: computed the other way
-  /// `Q(0,0)` has no correct digits at all once `rate * dt` falls under about
-  /// `6e-6` for `nu = 3/2` or `6e-4` for `nu = 5/2`, and it comes out
-  /// *negative* not much further down, which costs `Q` its positive
-  /// semi-definiteness. The absolute error is only a few units in the last
-  /// place of `variance`, which is why this went unnoticed; the sign is the
-  /// part that matters.
+  /// summed directly instead. Computed the other way `Q(0,0)` has no correct
+  /// digits once `rate * dt` falls under about `6e-6` for `nu = 3/2` or `6e-4`
+  /// for `nu = 5/2`, and it comes out *negative* not much further down, which
+  /// costs `Q` its positive semi-definiteness.
   ///
   /// Which gaps are small enough to reach depends on the caller's time unit
   /// and not on anything the component can see — `rate * dt` is `1.7e-5` for a
@@ -322,9 +327,14 @@ final class Matern extends Component {
         // [-1/3, 0, 1]]: the derivative has variance rate^2 / 3, and a value
         // and its second derivative are negatively correlated, which is what
         // stops a twice-differentiable path from curving away forever.
-        double form(double x0, double x1, double x2, double y0, double y1,
-                double y2) =>
-            x0 * y0 + x1 * y1 / 3 + x2 * y2 - (x0 * y2 + x2 * y0) / 3;
+        double form(
+          double x0,
+          double x1,
+          double x2,
+          double y0,
+          double y1,
+          double y2,
+        ) => x0 * y0 + x1 * y1 / 3 + x2 * y2 - (x0 * y2 + x2 * y0) / 3;
         final g00 = 1 - decay * form(a0, a1, a2, a0, a1, a2);
         final g01 = -decay * form(a0, a1, a2, b0, b1, b2);
         final g02 = -1 / 3 - decay * form(a0, a1, a2, c0, c1, c2);
@@ -452,11 +462,11 @@ final class Matern extends Component {
 
   @override
   Component withParameters(Float64List theta) => Matern(
-        order: order,
-        variance: math.exp(theta[0]),
-        lengthScale: math.exp(theta[1]),
-        lengthScaleBounds: lengthScaleBounds,
-      );
+    order: order,
+    variance: math.exp(theta[0]),
+    lengthScale: math.exp(theta[1]),
+    lengthScaleBounds: lengthScaleBounds,
+  );
 
   @override
   String get name => 'Matern';
@@ -474,7 +484,8 @@ final class Matern extends Component {
       Object.hash(Matern, order, variance, lengthScale, lengthScaleBounds);
 
   @override
-  String toString() => 'Matern(order: ${order.name}, variance: $variance, '
+  String toString() =>
+      'Matern(order: ${order.name}, variance: $variance, '
       'lengthScale: $lengthScale)';
 }
 

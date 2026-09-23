@@ -6,12 +6,10 @@ import 'series.dart';
 
 /// Reads a weight diary off disk.
 ///
-/// The native format is trale's own export — a couple of `#` comment lines and
-/// then one reading per line as an ISO 8601 timestamp, a space, and a weight
-/// in kilograms:
+/// The format is `#` comment lines, then one reading per line as an ISO 8601
+/// timestamp, a space, and a weight in kilograms:
 ///
 /// ```text
-/// # This file was created with trale.
 /// #Date weight[kg]
 /// 2026-02-14T06:51:00.000 81.4000000000
 /// ```
@@ -55,23 +53,22 @@ Series readExport(String path) {
 
   if (readings.length < 2) {
     throw FormatException(
-        'read $lineNumber lines from $path and found ${readings.length} '
-        'usable readings. Expected "<ISO 8601 date> <weight>" per line.');
+      'read $lineNumber lines from $path and found ${readings.length} '
+      'usable readings. Expected "<ISO 8601 date> <weight>" per line.',
+    );
   }
   if (skipped > 0) {
-    stderr.writeln('note: skipped $skipped unparseable line'
-        '${skipped == 1 ? '' : 's'} in $path');
+    stderr.writeln(
+      'note: skipped $skipped unparseable line'
+      '${skipped == 1 ? '' : 's'} in $path',
+    );
   }
 
   readings.sort((a, b) => a.at.compareTo(b.at));
-  final origin = readings.first.at;
-  return Series(
-    _nameFor(path),
-    [
-      for (final r in readings)
-        Observation(r.at.difference(origin).inMinutes / (60 * 24), r.weight)
-    ],
-  );
+  final axis = TimeAxis.days(readings.first.at);
+  return Series(_nameFor(path), [
+    for (final r in readings) axis.observation(r.at, r.weight),
+  ]);
 }
 
 String _nameFor(String path) {

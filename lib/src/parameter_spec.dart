@@ -126,10 +126,18 @@ final class ShapeParameter extends ParameterSpec {
       other.isLogarithmic == isLogarithmic;
 
   @override
-  int get hashCode => Object.hash(ShapeParameter, label, lower, upper,
-      scanPoints, searchStep, isLogarithmic);
+  int get hashCode => Object.hash(
+    ShapeParameter,
+    label,
+    lower,
+    upper,
+    scanPoints,
+    searchStep,
+    isLogarithmic,
+  );
 
   @override
-  String toString() => 'ShapeParameter($label, lower: $lower, upper: $upper'
+  String toString() =>
+      'ShapeParameter($label, lower: $lower, upper: $upper'
       '${scanPoints == null ? '' : ', scanPoints: $scanPoints'})';
 }

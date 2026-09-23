@@ -126,9 +126,11 @@ abstract base class Component {
   /// Called only to explain an [UnderdeterminedModelException]: the engine
   /// adds whatever each component returns to the message. [resolution] is
   /// zero when the series is too short to have one.
-  String? identifiabilityHint(double from, double to,
-          {double resolution = 0}) =>
-      null;
+  String? identifiabilityHint(
+    double from,
+    double to, {
+    double resolution = 0,
+  }) => null;
 
   /// Whether this component's states never move: `A(dt) = I` and `Q(dt) = 0`
   /// for every gap, and every state diffuse.

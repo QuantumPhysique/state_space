@@ -1,21 +1,5 @@
-// Synthetic weight diaries, for when there is no real one to hand.
-//
-// Deliberately written from scratch rather than ported from trale's screenshot
-// generator, which does the same job for the same reasons. Two of them.
-//
-// The first is licensing. trale is AGPLv3+ and has many contributors; that
-// file is one person's work and not ours to relicense. This package is MIT and
-// this repository will be public, so code copied in here would be
-// redistributed under the wrong licence. The phenomena below are not anyone's
-// property -- that hydration swings persist for days, that the weekend shows
-// on the scale on Monday, that people miss mornings in clumps -- but an
-// implementation of them is.
-//
-// The second is that a synthetic diary is the fallback and not the point. What
-// this tool is for is pointing at a real export. Everything here exists so
-// that the tables have something to print before you have one, and so that a
-// change to the package can be checked against a fixed series that does not
-// leave the machine it was generated on.
+// Synthetic weight diaries, for when there is no real one to hand, and so that
+// a change to the package can be checked against a fixed series.
 //
 // The constants are set out with where they came from. Where a number is a
 // guess it says so.
@@ -175,7 +159,8 @@ class SyntheticDiary {
     for (var day = 0; day <= historyDays; day++) {
       // Advanced on every day including the unrecorded ones, so that the swing
       // stays continuous across a gap rather than restarting after it.
-      water = _waterPersistence * water +
+      water =
+          _waterPersistence * water +
           _waterSpread *
               sqrt(1 - _waterPersistence * _waterPersistence) *
               scale *
@@ -187,7 +172,8 @@ class SyntheticDiary {
       final weighed = away
           ? false
           : firstDayBack ||
-              rng.nextDouble() < (weighedYesterday ? _keepGoing : _pickUpAgain);
+                rng.nextDouble() <
+                    (weighedYesterday ? _keepGoing : _pickUpAgain);
       weighedYesterday = weighed;
       if (!weighed) continue;
 
@@ -197,10 +183,16 @@ class SyntheticDiary {
       final date = DateTime(now.year, now.month, now.day - historyDays + day);
       final lateStart =
           date.weekday == DateTime.saturday || date.weekday == DateTime.sunday;
-      final at = DateTime(date.year, date.month, date.day, lateStart ? 8 : 6,
-          (lateStart ? 5 : 30) + rng.nextInt(60));
+      final at = DateTime(
+        date.year,
+        date.month,
+        date.day,
+        lateStart ? 8 : 6,
+        (lateStart ? 5 : 30) + rng.nextInt(60),
+      );
 
-      var weight = _courseAt(day) +
+      var weight =
+          _courseAt(day) +
           _weekdayOffset[date.weekday]! * scale +
           water +
           _readingError * scale * _gauss(rng);
@@ -221,7 +213,7 @@ class SyntheticDiary {
       '$name, ${corners.last.weight.toStringAsFixed(0)} kg ($story)',
       [
         for (final r in readings)
-          Observation(r.at.difference(origin).inMinutes / (60 * 24), r.weight)
+          Observation(r.at.difference(origin).inMinutes / (60 * 24), r.weight),
       ],
     );
   }
@@ -283,5 +275,6 @@ const List<SyntheticDiary> diaries = [
 ];
 
 /// Every diary, built against the same calendar.
-List<Series> syntheticSeries({DateTime? today}) =>
-    [for (final d in diaries) d.build(today: today)];
+List<Series> syntheticSeries({DateTime? today}) => [
+  for (final d in diaries) d.build(today: today),
+];

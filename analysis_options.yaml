@@ -9,9 +9,6 @@ analyzer:
     missing_required_param: error
     missing_return: error
 
-# public_member_api_docs is deliberately absent: it fires on every field of
-# every internal engine class, and documentation written to satisfy a linter
-# reads like it. The exported API is documented by hand instead.
 linter:
   rules:
     - avoid_print
@@ -19,6 +16,7 @@ linter:
     - directives_ordering
     - prefer_final_locals
     - prefer_relative_imports
+    - public_member_api_docs
     - sort_pub_dependencies
     - throw_in_finally
     - unnecessary_lambdas

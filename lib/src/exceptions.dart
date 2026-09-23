@@ -27,6 +27,7 @@ sealed class StateSpaceException implements Exception {
 /// throwing, but only makes sense when the time unit keeps rates of change
 /// near order one.
 final class UnderdeterminedModelException extends StateSpaceException {
+  /// An exception explaining what the data does not determine.
   const UnderdeterminedModelException(super.message);
 
   @override
@@ -40,6 +41,7 @@ final class UnderdeterminedModelException extends StateSpaceException {
 /// or at an observation with zero [Observation.relativeVariance] that measures
 /// a direction the model is already certain about.
 final class NumericalBreakdownException extends StateSpaceException {
+  /// An exception explaining where the recursion broke down.
   const NumericalBreakdownException(super.message);
 
   @override

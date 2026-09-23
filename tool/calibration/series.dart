@@ -33,6 +33,7 @@ class Series {
   }
 
   @override
-  String toString() => '$name: $length readings over '
+  String toString() =>
+      '$name: $length readings over '
       '${span.toStringAsFixed(0)} days';
 }

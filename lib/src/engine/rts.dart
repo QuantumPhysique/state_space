@@ -51,9 +51,9 @@ class RtsSmoother {
   /// sound only under a flat prior, since with a proper one a static state has
   /// real variance and a real gain like anything else.
   RtsSmoother(this.components, {Initialization? initialization})
-      : stateDim = components.fold(0, (n, c) => n + c.stateDim),
-        _offsets = _blockOffsets(components),
-        _active = _activeStates(components, initialization) {
+    : stateDim = components.fold(0, (n, c) => n + c.stateDim),
+      _offsets = _blockOffsets(components),
+      _active = _activeStates(components, initialization) {
     final n = _active.length;
     _a = Float64List(n * n);
     _gain = Float64List(n * n);
@@ -76,6 +76,7 @@ class RtsSmoother {
     }
   }
 
+  /// The model's components, in state order.
   final List<Component> components;
 
   /// States in the full model, which is what the caller's arrays are laid out
@@ -136,7 +137,9 @@ class RtsSmoother {
   /// anything else, so nothing is dropped — and neither is anything when the
   /// caller did not say which prior is in force.
   static Int32List _activeStates(
-      List<Component> components, Initialization? initialization) {
+    List<Component> components,
+    Initialization? initialization,
+  ) {
     final all = components.fold(0, (int n, c) => n + c.stateDim);
     if (initialization is! ExactDiffuse) {
       return Int32List.fromList([for (var i = 0; i < all; i++) i]);
@@ -160,8 +163,10 @@ class RtsSmoother {
     final predMean = filtered.predictedMean;
     final predCov = filtered.predictedCovariance;
     if (mean == null || cov == null || predMean == null || predCov == null) {
-      throw ArgumentError('the forward pass was run without a history; '
-          'call KalmanFilter.run(..., keepHistory: true)');
+      throw ArgumentError(
+        'the forward pass was run without a history; '
+        'call KalmanFilter.run(..., keepHistory: true)',
+      );
     }
 
     final n = stateDim;
@@ -176,8 +181,10 @@ class RtsSmoother {
     final predictedSensitivity = filtered.predictedSensitivity;
     if (diffuseDim > 0 &&
         (sensitivity == null || predictedSensitivity == null)) {
-      throw ArgumentError('the forward pass tracked diffuse directions but '
-          'kept no sensitivity history');
+      throw ArgumentError(
+        'the forward pass tracked diffuse directions but '
+        'kept no sensitivity history',
+      );
     }
     // Every state is static: nothing the backward pass could change. The
     // filtered moments already are the smoothed ones, and what the
@@ -213,7 +220,12 @@ class RtsSmoother {
 
       if (diffuseDim > 0) {
         _smoothSensitivity(
-            sensitivity!, predictedSensitivity!, diffuseDim, t, gain);
+          sensitivity!,
+          predictedSensitivity!,
+          diffuseDim,
+          t,
+          gain,
+        );
       }
 
       for (var i = 0; i < m; i++) {
@@ -255,8 +267,13 @@ class RtsSmoother {
   /// mean, so smoothing `xa` and each column of `dx/dd` separately and
   /// recombining afterwards gives the same answer as smoothing the combined
   /// state would have.
-  void _smoothSensitivity(Float64List sensitivity,
-      Float64List predictedSensitivity, int d, int t, Float64List gain) {
+  void _smoothSensitivity(
+    Float64List sensitivity,
+    Float64List predictedSensitivity,
+    int d,
+    int t,
+    Float64List gain,
+  ) {
     final n = stateDim;
     final active = _active;
     final m = active.length;
@@ -366,7 +383,10 @@ class RtsSmoother {
   /// `out = P A'` for block-diagonal `A`, reading `P` from `source[offset...]`
   /// in the caller's layout and writing the compact active block.
   void _blockRightMultiplyTranspose(
-      Float64List source, int offset, Float64List out) {
+    Float64List source,
+    int offset,
+    Float64List out,
+  ) {
     final n = stateDim;
     final active = _active;
     final m = active.length;
@@ -435,9 +455,11 @@ class RtsSmoother {
       }
       ratio *= 100;
     }
-    throw const NumericalBreakdownException('the predicted covariance is not '
-        'positive definite and could not be recovered by jittering: a '
-        'component\'s process noise is not a valid covariance');
+    throw const NumericalBreakdownException(
+      'the predicted covariance is not '
+      'positive definite and could not be recovered by jittering: a '
+      'component\'s process noise is not a valid covariance',
+    );
   }
 
   /// Copies the active rows and columns of a caller-layout matrix into a

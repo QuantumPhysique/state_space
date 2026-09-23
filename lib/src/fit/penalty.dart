@@ -74,8 +74,11 @@ final class ComplexityPenalty extends Penalty {
       throw ArgumentError.value(scale, 'scale', 'must be finite and positive');
     }
     if (!(tailProbability > 0) || !(tailProbability < 1)) {
-      throw ArgumentError.value(tailProbability, 'tailProbability',
-          'must lie strictly between 0 and 1');
+      throw ArgumentError.value(
+        tailProbability,
+        'tailProbability',
+        'must lie strictly between 0 and 1',
+      );
     }
   }
 
@@ -110,6 +113,7 @@ final class ComplexityPenalty extends Penalty {
   int get hashCode => Object.hash(ComplexityPenalty, scale, tailProbability);
 
   @override
-  String toString() => 'ComplexityPenalty(scale: $scale, tailProbability: '
+  String toString() =>
+      'ComplexityPenalty(scale: $scale, tailProbability: '
       '$tailProbability)';
 }

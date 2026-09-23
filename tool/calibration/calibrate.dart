@@ -21,9 +21,9 @@ import 'dart:math' as math;
 
 import 'package:state_space/state_space.dart';
 
+import 'diary_export.dart';
 import 'series.dart';
 import 'synthetic.dart';
-import 'trale_export.dart';
 
 /// A domestic scale reading in 100 g steps rounds with a standard deviation of
 /// 0.1 / sqrt(12) kg, and that error is in the data whatever else is. Used as
@@ -33,25 +33,25 @@ double roundingFloor = math.pow(0.1 / math.sqrt(12), 2).toDouble();
 
 /// The candidate models, cheapest first.
 ///
-/// The trend alone is what trale computes today. Each of the others adds one
-/// thing the demo data is known to contain, so the table below reads as a
+/// The trend alone is the baseline. Each of the others adds one thing the demo
+/// data is known to contain, so the table below reads as a
 /// series of questions: does the weekly pattern matter, does the water
 /// retention matter, do they matter together.
 final Map<String, StructuralModel Function()> models = {
   'trend': () => StructuralModel.localLinearTrend(processVariance: 1e-3),
   'trend + weekly': () => StructuralModel([
-        LocalLinearTrend(processVariance: 1e-3),
-        TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
-      ]),
+    LocalLinearTrend(processVariance: 1e-3),
+    TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
+  ]),
   'trend + water': () => StructuralModel([
-        LocalLinearTrend(processVariance: 1e-3),
-        Matern.oneHalf(variance: 0.05, lengthScale: 3),
-      ]),
+    LocalLinearTrend(processVariance: 1e-3),
+    Matern.oneHalf(variance: 0.05, lengthScale: 3),
+  ]),
   'trend + both': () => StructuralModel([
-        LocalLinearTrend(processVariance: 1e-3),
-        TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
-        Matern.oneHalf(variance: 0.05, lengthScale: 3),
-      ]),
+    LocalLinearTrend(processVariance: 1e-3),
+    TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
+    Matern.oneHalf(variance: 0.05, lengthScale: 3),
+  ]),
 };
 
 void main(List<String> arguments) {
@@ -90,10 +90,14 @@ void main(List<String> arguments) {
   final List<Series> series;
   if (files.isEmpty) {
     series = syntheticSeries(today: today);
-    print('Four synthetic diaries, built against '
-        '${_day(today ?? DateTime.now())}.');
-    print('These are a stand-in. Pass a trale export on the command line to '
-        'use real data,');
+    print(
+      'Four synthetic diaries, built against '
+      '${_day(today ?? DateTime.now())}.',
+    );
+    print(
+      'These are a stand-in. Pass a diary export on the command line to '
+      'use real data,',
+    );
     print('which is the only thing that settles anything.');
   } else {
     series = [for (final path in files) readExport(path)];
@@ -108,17 +112,21 @@ void main(List<String> arguments) {
 
   if (!stability && !floor) {
     print('');
-    print('Run again with --stability to see how the fit behaves as a diary '
-        'grows,');
-    print('or --floor to see when a noise floor would change the answer. '
-        '--all does both.');
+    print(
+      'Run again with --stability to see how the fit behaves as a diary '
+      'grows,',
+    );
+    print(
+      'or --floor to see when a noise floor would change the answer. '
+      '--all does both.',
+    );
   }
 }
 
 void _usage() {
   print('usage: dart run tool/calibration/calibrate.dart [options] [files]');
   print('');
-  print('  files            trale exports, or any file of "<date> <weight>"');
+  print('  files            diary exports: any file of "<date> <weight>"');
   print('                   lines. With none, four demo diaries are used.');
   print('  --stability      refit at growing history lengths');
   print('  --floor[=SD]     show where a noise floor would bind, for a scale');
@@ -130,32 +138,46 @@ void _usage() {
 
 /// Fits every candidate model to one diary and prints what each says.
 void _describe(Series series) {
-  print('${series.name} -- ${series.length} readings over '
-      '${series.span.toStringAsFixed(0)} days');
-  print('  model            par  diff   log L    noise    bandwidth  plateau  '
-      'Ljung-Box');
+  print(
+    '${series.name} -- ${series.length} readings over '
+    '${series.span.toStringAsFixed(0)} days',
+  );
+  print(
+    '  model            par  diff   log L    noise    bandwidth  plateau  '
+    'Ljung-Box',
+  );
   for (final entry in models.entries) {
     final model = entry.value();
     final fitted = fit(model, series.observations);
     final diagnostics = fitted.model.diagnose(series.observations);
     final portmanteau = diagnostics.ljungBox(
-        lags: 14, fittedParameters: model.parameterCount + 1);
-    print('  ${entry.key.padRight(15)}'
-        '  ${model.parameterCount.toString().padLeft(2)}'
-        '  ${_diffuseDim(model).toString().padLeft(4)}'
-        '  ${fitted.logMarginalLikelihood.toStringAsFixed(1).padLeft(7)}'
-        '  ${math.sqrt(fitted.measurementVariance).toStringAsFixed(3)} kg'
-        '  ${_bandwidth(fitted).padLeft(7)} d'
-        '  ${fitted.plateauDecadesByParameter[0].toStringAsFixed(2).padLeft(6)}'
-        '  ${_pValue(portmanteau.pValue)}');
+      lags: 14,
+      fittedParameters: model.parameterCount,
+    );
+    print(
+      '  ${entry.key.padRight(15)}'
+      '  ${model.parameterCount.toString().padLeft(2)}'
+      '  ${_diffuseDim(model).toString().padLeft(4)}'
+      '  ${fitted.logMarginalLikelihood.toStringAsFixed(1).padLeft(7)}'
+      '  ${math.sqrt(fitted.measurementVariance).toStringAsFixed(3)} kg'
+      '  ${_bandwidth(fitted).padLeft(7)} d'
+      '  ${fitted.plateauDecadesByParameter[0].toStringAsFixed(2).padLeft(6)}'
+      '  ${_pValue(portmanteau.pValue)}',
+    );
   }
   print('');
-  print('  Log likelihoods compare only down a run of equal "diff": a model '
-      'with more');
-  print('  flat directions has integrated more of them away, and the two '
-      'numbers are');
-  print('  not on the same scale. The noise level and the Ljung-Box p compare '
-      'across');
+  print(
+    '  Log likelihoods compare only down a run of equal "diff": a model '
+    'with more',
+  );
+  print(
+    '  flat directions has integrated more of them away, and the two '
+    'numbers are',
+  );
+  print(
+    '  not on the same scale. The noise level and the Ljung-Box p compare '
+    'across',
+  );
   print('  everything, and are the honest way to choose here.');
   print('');
 }
@@ -188,22 +210,30 @@ void _stability(List<Series> series) {
           // starring every row on that account would hide the thing this
           // table is for.
           final plateau = fitted.plateauDecadesByParameter[0];
-          cells.add('${_bandwidth(fitted)}${plateau > 2 ? '*' : ' '} '
-                  '(${plateau.toStringAsFixed(2)})'
-              .padLeft(18));
-        } on ArgumentError {
+          cells.add(
+            '${_bandwidth(fitted)}${plateau > 2 ? '*' : ' '} '
+                    '(${plateau.toStringAsFixed(2)})'
+                .padLeft(18),
+          );
+        } on StateSpaceException {
           cells.add('--'.padLeft(18));
         }
       }
       print('  ${days.toString().padLeft(4)}  ${cells.join()}');
     }
     print('');
-    print('  Bandwidth in days, and in brackets how many decades the trend\'s '
-        'own');
-    print('  variance can move before the fit is half a nat worse. A star '
-        'marks more');
-    print('  than two decades, where the bandwidth printed is a convention '
-        'rather');
+    print(
+      '  Bandwidth in days, and in brackets how many decades the trend\'s '
+      'own',
+    );
+    print(
+      '  variance can move before the fit is half a nat worse. A star '
+      'marks more',
+    );
+    print(
+      '  than two decades, where the bandwidth printed is a convention '
+      'rather',
+    );
     print('  than an estimate.');
     print('');
   }
@@ -213,8 +243,10 @@ void _stability(List<Series> series) {
 void _floor(List<Series> series) {
   const lengths = [14, 21, 30, 45, 60, 90, 120, 186];
   for (final name in ['trend + weekly', 'trend + both']) {
-    print('WHERE A NOISE FLOOR BINDS -- '
-        '${math.sqrt(roundingFloor).toStringAsFixed(3)} kg, $name');
+    print(
+      'WHERE A NOISE FLOOR BINDS -- '
+      '${math.sqrt(roundingFloor).toStringAsFixed(3)} kg, $name',
+    );
     print('  days  ${[for (final s in series) _short(s).padLeft(20)].join()}');
     for (final days in lengths) {
       final cells = <String>[];
@@ -226,28 +258,41 @@ void _floor(List<Series> series) {
         }
         try {
           final free = fit(models[name]!(), cut.observations);
-          final floored = fit(models[name]!(), cut.observations,
-              minimumMeasurementVariance: roundingFloor);
-          cells.add((floored.measurementVariancePinned
-                  ? '${_bandwidth(free)} -> ${_bandwidth(floored)}'
-                  : '.  '
-                      '(${math.sqrt(free.measurementVariance).toStringAsFixed(3)})')
-              .padLeft(20));
-        } on ArgumentError {
+          final floored = fit(
+            models[name]!(),
+            cut.observations,
+            minimumMeasurementVariance: roundingFloor,
+          );
+          cells.add(
+            (floored.measurementVariancePinned
+                    ? '${_bandwidth(free)} -> ${_bandwidth(floored)}'
+                    : '.  '
+                          '(${math.sqrt(free.measurementVariance).toStringAsFixed(3)})')
+                .padLeft(20),
+          );
+        } on StateSpaceException {
           cells.add('--'.padLeft(20));
         }
       }
       print('  ${days.toString().padLeft(4)}  ${cells.join()}');
     }
     print('');
-    print('  A dot means the data was noisier than the floor and the fit was '
-        'left');
-    print('  alone, with the estimated noise in brackets. Otherwise the two '
-        'figures');
-    print('  are the bandwidth before and after the floor was applied. A '
-        'floor that');
-    print('  never binds costs one extra fit and nothing else, which is the '
-        'argument');
+    print(
+      '  A dot means the data was noisier than the floor and the fit was '
+      'left',
+    );
+    print(
+      '  alone, with the estimated noise in brackets. Otherwise the two '
+      'figures',
+    );
+    print(
+      '  are the bandwidth before and after the floor was applied. A '
+      'floor that',
+    );
+    print(
+      '  never binds costs one extra fit and nothing else, which is the '
+      'argument',
+    );
     print('  for asking for one even when you expect it not to.');
     print('');
   }
@@ -287,6 +332,7 @@ String _short(Series series) {
   return comma > 0 ? series.name.substring(0, comma) : series.name;
 }
 
-String _day(DateTime when) => '${when.year}-'
+String _day(DateTime when) =>
+    '${when.year}-'
     '${when.month.toString().padLeft(2, '0')}-'
     '${when.day.toString().padLeft(2, '0')}';

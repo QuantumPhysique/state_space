@@ -57,34 +57,50 @@ final class StochasticCycle extends Component {
   }) {
     if (!(period > 0) || !period.isFinite) {
       throw ArgumentError.value(
-          period, 'period', 'must be finite and positive');
+        period,
+        'period',
+        'must be finite and positive',
+      );
     }
     if (!(damping > 0) || !(damping < 1)) {
       throw ArgumentError.value(
-          damping,
-          'damping',
-          'must lie strictly between 0 and 1: at 1 the cycle never fades and '
-              'is not stationary, and at 0 it has no memory to oscillate with');
+        damping,
+        'damping',
+        'must lie strictly between 0 and 1: at 1 the cycle never fades and '
+            'is not stationary, and at 0 it has no memory to oscillate with',
+      );
     }
     if (!(stationaryVariance > 0) || !stationaryVariance.isFinite) {
-      throw ArgumentError.value(stationaryVariance, 'stationaryVariance',
-          'must be finite and positive');
+      throw ArgumentError.value(
+        stationaryVariance,
+        'stationaryVariance',
+        'must be finite and positive',
+      );
     }
     if (!(periodBounds.lower > 0) ||
         !(periodBounds.lower < periodBounds.upper) ||
         !periodBounds.upper.isFinite) {
-      throw ArgumentError.value(periodBounds, 'periodBounds',
-          'must be a finite positive increasing range');
+      throw ArgumentError.value(
+        periodBounds,
+        'periodBounds',
+        'must be a finite positive increasing range',
+      );
     }
     if (!(dampingBounds.lower > 0) ||
         !(dampingBounds.lower < dampingBounds.upper) ||
         !(dampingBounds.upper < 1)) {
-      throw ArgumentError.value(dampingBounds, 'dampingBounds',
-          'must be an increasing range strictly inside (0, 1)');
+      throw ArgumentError.value(
+        dampingBounds,
+        'dampingBounds',
+        'must be an increasing range strictly inside (0, 1)',
+      );
     }
     if (periodScanPoints < 3) {
       throw ArgumentError.value(
-          periodScanPoints, 'periodScanPoints', 'must be at least 3');
+        periodScanPoints,
+        'periodScanPoints',
+        'must be at least 3',
+      );
     }
   }
 
@@ -144,25 +160,25 @@ final class StochasticCycle extends Component {
 
   @override
   List<ParameterSpec> get parameterSpecs => [
-        const VarianceParameter(),
-        ShapeParameter(
-          label: 'damping',
-          // A logit, so a width in it is not a width in decades.
-          isLogarithmic: false,
-          lower: _logit(dampingBounds.lower),
-          upper: _logit(dampingBounds.upper),
-        ),
-        ShapeParameter(
-          label: 'period',
-          lower: math.log(periodBounds.lower),
-          upper: math.log(periodBounds.upper),
-          scanPoints: periodScanPoints,
-          // The fine scan is about multimodality, not about scale; without
-          // this the simplex would step thirty times less far along the period
-          // axis than along the variance ones.
-          searchStep: 0.5,
-        ),
-      ];
+    const VarianceParameter(),
+    ShapeParameter(
+      label: 'damping',
+      // A logit, so a width in it is not a width in decades.
+      isLogarithmic: false,
+      lower: _logit(dampingBounds.lower),
+      upper: _logit(dampingBounds.upper),
+    ),
+    ShapeParameter(
+      label: 'period',
+      lower: math.log(periodBounds.lower),
+      upper: math.log(periodBounds.upper),
+      scanPoints: periodScanPoints,
+      // The fine scan is about multimodality, not about scale; without
+      // this the simplex would step thirty times less far along the period
+      // axis than along the variance ones.
+      searchStep: 0.5,
+    ),
+  ];
 
   /// Raises the period bracket to the Nyquist limit of the sampling: a cycle
   /// shorter than twice the gap between readings aliases onto a longer one.
@@ -173,10 +189,11 @@ final class StochasticCycle extends Component {
     final upper = periodBounds.upper;
     if (!(floor < upper)) {
       throw UnderdeterminedModelException(
-          'a StochasticCycle period is bracketed at '
-          '[${periodBounds.lower}, $upper], but the readings are $resolution '
-          'apart, so nothing shorter than ${2 * resolution} is above the '
-          'Nyquist limit. Widen periodBounds or drop the component.');
+        'a StochasticCycle period is bracketed at '
+        '[${periodBounds.lower}, $upper], but the readings are $resolution '
+        'apart, so nothing shorter than ${2 * resolution} is above the '
+        'Nyquist limit. Widen periodBounds or drop the component.',
+      );
     }
     final specs = parameterSpecs;
     return [
@@ -240,20 +257,20 @@ final class StochasticCycle extends Component {
 
   @override
   Float64List get parameters => Float64List.fromList([
-        math.log(stationaryVariance),
-        _logit(damping),
-        math.log(period),
-      ]);
+    math.log(stationaryVariance),
+    _logit(damping),
+    math.log(period),
+  ]);
 
   @override
   Component withParameters(Float64List theta) => StochasticCycle(
-        stationaryVariance: math.exp(theta[0]),
-        damping: _logistic(theta[1]),
-        period: math.exp(theta[2]),
-        periodBounds: periodBounds,
-        dampingBounds: dampingBounds,
-        periodScanPoints: periodScanPoints,
-      );
+    stationaryVariance: math.exp(theta[0]),
+    damping: _logistic(theta[1]),
+    period: math.exp(theta[2]),
+    periodBounds: periodBounds,
+    dampingBounds: dampingBounds,
+    periodScanPoints: periodScanPoints,
+  );
 
   @override
   bool operator ==(Object other) =>
@@ -266,11 +283,19 @@ final class StochasticCycle extends Component {
       other.periodScanPoints == periodScanPoints;
 
   @override
-  int get hashCode => Object.hash(StochasticCycle, period, damping,
-      stationaryVariance, periodBounds, dampingBounds, periodScanPoints);
+  int get hashCode => Object.hash(
+    StochasticCycle,
+    period,
+    damping,
+    stationaryVariance,
+    periodBounds,
+    dampingBounds,
+    periodScanPoints,
+  );
 
   @override
-  String toString() => 'StochasticCycle(period: $period, damping: $damping, '
+  String toString() =>
+      'StochasticCycle(period: $period, damping: $damping, '
       'stationaryVariance: $stationaryVariance)';
 }
 

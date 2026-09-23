@@ -10,8 +10,14 @@ import '../observation.dart';
 /// skipped, which is how the filter handles gaps, output grids and missing
 /// data with the same code path.
 class Timeline {
-  Timeline._(this.times, this.values, this.variances, this.gaps,
-      this.outputIndices, this.observationCount);
+  Timeline._(
+    this.times,
+    this.values,
+    this.variances,
+    this.gaps,
+    this.outputIndices,
+    this.observationCount,
+  );
 
   /// Time of each step, non-decreasing.
   final Float64List times;
@@ -32,8 +38,10 @@ class Timeline {
   /// How many steps carry an observation.
   final int observationCount;
 
+  /// Number of steps.
   int get length => times.length;
 
+  /// Whether [step] carries an observation rather than only an output time.
   bool hasObservation(int step) => !values[step].isNaN;
 
   /// Merges [observations] with an optional output [grid].
@@ -121,23 +129,33 @@ class Timeline {
       final o = observations[i];
       if (!o.time.isFinite) {
         throw ArgumentError.value(
-            o.time, 'observations[$i].time', 'not finite');
+          o.time,
+          'observations[$i].time',
+          'not finite',
+        );
       }
       if (!o.value.isFinite) {
         throw ArgumentError.value(
-            o.value, 'observations[$i].value', 'not finite');
+          o.value,
+          'observations[$i].value',
+          'not finite',
+        );
       }
       if (!(o.relativeVariance >= 0) || !o.relativeVariance.isFinite) {
-        throw ArgumentError.value(o.relativeVariance,
-            'observations[$i].relativeVariance', 'must be finite and >= 0');
+        throw ArgumentError.value(
+          o.relativeVariance,
+          'observations[$i].relativeVariance',
+          'must be finite and >= 0',
+        );
       }
       if (i > 0 && o.time < observations[i - 1].time) {
         throw ArgumentError(
-            'observations must be sorted by time, but observations[$i] at '
-            '${o.time} precedes observations[${i - 1}] at '
-            '${observations[i - 1].time}. Sort the list before calling; the '
-            'package deliberately does not reorder it, because results are '
-            'reported in input order.');
+          'observations must be sorted by time, but observations[$i] at '
+          '${o.time} precedes observations[${i - 1}] at '
+          '${observations[i - 1].time}. Sort the list before calling; the '
+          'package deliberately does not reorder it, because results are '
+          'reported in input order.',
+        );
       }
     }
   }
@@ -148,8 +166,10 @@ class Timeline {
         throw ArgumentError.value(grid[i], 'grid[$i]', 'not finite');
       }
       if (i > 0 && grid[i] < grid[i - 1]) {
-        throw ArgumentError('grid must be sorted by time, but grid[$i] '
-            '(${grid[i]}) precedes grid[${i - 1}] (${grid[i - 1]})');
+        throw ArgumentError(
+          'grid must be sorted by time, but grid[$i] '
+          '(${grid[i]}) precedes grid[${i - 1}] (${grid[i - 1]})',
+        );
       }
     }
   }

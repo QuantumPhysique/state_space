@@ -35,25 +35,33 @@ List<String> checkComponent(
 
   final theta = component.parameters;
   if (theta.length != component.parameterCount) {
-    problems.add('$name.parameters has ${theta.length} entries but '
-        'parameterCount is ${component.parameterCount}');
+    problems.add(
+      '$name.parameters has ${theta.length} entries but '
+      'parameterCount is ${component.parameterCount}',
+    );
   }
   if (component.parameterSpecs.length != component.parameterCount) {
-    problems.add('$name.parameterSpecs has '
-        '${component.parameterSpecs.length} entries but parameterCount is '
-        '${component.parameterCount}');
+    problems.add(
+      '$name.parameterSpecs has '
+      '${component.parameterSpecs.length} entries but parameterCount is '
+      '${component.parameterCount}',
+    );
   }
   if (component.diffuseStates.length != n) {
-    problems.add('$name.diffuseStates has ${component.diffuseStates.length} '
-        'entries but stateDim is $n');
+    problems.add(
+      '$name.diffuseStates has ${component.diffuseStates.length} '
+      'entries but stateDim is $n',
+    );
     return problems;
   }
   if (theta.length == component.parameterCount) {
     final again = component.withParameters(theta).parameters;
     for (var i = 0; i < theta.length; i++) {
       if (!_close(again[i], theta[i], tolerance)) {
-        problems.add('$name.withParameters(parameters) does not round-trip: '
-            'parameter $i went from ${theta[i]} to ${again[i]}');
+        problems.add(
+          '$name.withParameters(parameters) does not round-trip: '
+          'parameter $i went from ${theta[i]} to ${again[i]}',
+        );
         break;
       }
     }
@@ -85,8 +93,10 @@ List<String> checkComponent(
   for (final dt in gaps) {
     final noise = q(dt);
     if (!_isCovariance(noise, n, tolerance)) {
-      problems.add('$name.processNoise($dt) is not symmetric positive '
-          'semi-definite');
+      problems.add(
+        '$name.processNoise($dt) is not symmetric positive '
+        'semi-definite',
+      );
     }
   }
   for (var k = 1; k < gaps.length; k++) {
@@ -94,8 +104,10 @@ List<String> checkComponent(
     final t = gaps[k];
     final as = a(s), at = a(t), ast = a(s + t);
     if (!_allClose(ast, _multiply(at, as, n), tolerance)) {
-      problems.add('$name.transition($s + $t) is not '
-          'transition($t) * transition($s)');
+      problems.add(
+        '$name.transition($s + $t) is not '
+        'transition($t) * transition($s)',
+      );
     }
     final propagated = _multiply(_multiply(at, q(s), n), _transpose(at, n), n);
     final qst = q(s + t);
@@ -104,8 +116,10 @@ List<String> checkComponent(
       propagated[i] += qt[i];
     }
     if (!_allClose(qst, propagated, tolerance)) {
-      problems.add('$name.processNoise($s + $t) is not '
-          'A($t) Q($s) A($t)\' + Q($t)');
+      problems.add(
+        '$name.processNoise($s + $t) is not '
+        'A($t) Q($s) A($t)\' + Q($t)',
+      );
     }
   }
 
@@ -114,7 +128,7 @@ List<String> checkComponent(
   component.properPrior(mean, prior);
   final proper = [
     for (var i = 0; i < n; i++)
-      if (!component.diffuseStates[i]) i
+      if (!component.diffuseStates[i]) i,
   ];
   if (proper.isNotEmpty) {
     final m = proper.length;
@@ -125,18 +139,24 @@ List<String> checkComponent(
       }
     }
     if (!_isCovariance(block, m, tolerance)) {
-      problems.add('$name.properPrior writes a covariance that is not '
-          'symmetric positive semi-definite');
+      problems.add(
+        '$name.properPrior writes a covariance that is not '
+        'symmetric positive semi-definite',
+      );
     }
   }
 
   if (component.isStatic) {
-    final moves = gaps.any((dt) =>
-        !_allClose(a(dt), identity, tolerance) ||
-        !_allClose(q(dt), Float64List(n * n), tolerance));
+    final moves = gaps.any(
+      (dt) =>
+          !_allClose(a(dt), identity, tolerance) ||
+          !_allClose(q(dt), Float64List(n * n), tolerance),
+    );
     if (moves || component.diffuseStates.contains(false)) {
-      problems.add('$name claims isStatic, but its states move or are not '
-          'all diffuse, so it would be smoothed wrongly');
+      problems.add(
+        '$name claims isStatic, but its states move or are not '
+        'all diffuse, so it would be smoothed wrongly',
+      );
     }
   }
 

@@ -74,11 +74,26 @@ comparable across models only when the diffuse structure matches — see
 [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#how-to-tell-whether-it-earned-its-place--and-how-not-to).
 
 Because it is exact, the data has to actually determine those directions. A
-two-state trend needs readings at two distinct times; given one, the package says
-so rather than returning a variance whose size is an artefact of a prior, and the
-message names whichever component can explain itself. `ApproximateDiffuse`
-remains available for callers who would rather have the large number; its error
-falls as `1/kappa` until rounding takes over around `1e7`.
+two-state trend needs readings at two distinct times; given one, the package
+throws an `UnderdeterminedModelException` rather than returning a variance whose
+size is an artefact of a prior, and the message names whichever component can
+explain itself. The same goes for two components that produce the same signal,
+such as a trend beside a level, or one event entered twice.
+
+Whether `M` is singular is decided after scaling it to unit diagonal, so the
+decision does not depend on the units of each direction: a direction is refused
+when less than one part in `1e10` of its information is not already carried by
+the others. A matrix that is singular in exact arithmetic leaves a pivot of
+rounding size, about `1e-16`, whose sign is an accident; the most
+ill-conditioned determined models in the test suite stay above `1e-8`.
+
+`ApproximateDiffuse` answers instead with a very wide proper prior. It gives
+every flat direction the same prior variance whatever its units, so it is sound
+only when time is measured in a unit that keeps rates of change near order one,
+such as days for a daily series. With time in seconds or milliseconds a slope's
+prior is many orders of magnitude too wide next to a level's, and the curve can
+be off by a sizeable fraction of the noise with a band of zero width, whatever
+`kappa` is. Exact initialisation does not depend on the time unit at all.
 
 ## The filter
 
@@ -93,15 +108,20 @@ expression and numerically worse.
 rank-one update spanning every state — but the transition is not.
 
 **A two-state single-component model has a scalar fast path**, with the loops
-unrolled and the state in local doubles. It is about four times faster than the
-generic engine on a forward pass and it is never load-bearing: the generic
-engine is what the reference tests validate and remains the definition of the
-answer. `fast_path_equivalence_test.dart` holds the two together to 1e-12.
+unrolled and the state in local doubles. It is a little over three times faster
+than the generic engine on a forward pass, and it is never load-bearing: the
+generic engine is what the reference tests validate and remains the definition
+of the answer. `fast_path_equivalence_test.dart` holds the two together to
+1e-12.
 
 ## The smoother
 
-**It solves `P⁻G' = A P` by Cholesky** rather than forming an inverse, and jitters
-the diagonal before giving up.
+**It solves `P⁻G' = A P` by Cholesky** rather than forming an inverse. When a
+predicted covariance is not quite positive definite it adds a small multiple of
+its own mean diagonal and tries again, and after six escalations it throws a
+`NumericalBreakdownException`. The multiple that worked is tried first at the
+following steps, as a fraction of each step's scale, so a grid point far past
+the data does not change the answer inside it.
 
 **It runs only over the states that can move.** A coefficient with `A = I` and
 `Q = 0` under a flat prior has covariance identically zero conditional on the flat
@@ -133,7 +153,18 @@ Finally each parameter is probed along its own axis to see how far it can move
 before the objective falls half a nat.
 
 **`SearchStart.previousParameters`** skips the scan and starts from the model you
-passed in, for refitting as data arrives.
+passed in, for refitting as data arrives. With one parameter the golden-section
+window moves along for as long as the optimum lands on its edge.
+
+**A stationary component can take over the measurement noise.** When a Matérn's
+or a cycle's variance finishes at the top of its bracket, `fit` searches again
+from starts that hand the noise a larger share, and keeps whichever optimum is
+higher.
+
+**Data a model explains exactly**, such as identical readings under a trend,
+profiles to a noise level of zero. The concentrated noise variance is floored at
+one part in a billion of the largest reading, squared, so the fit returns
+instead of building a model with no noise.
 
 **Shape parameters measured in time get a floor from the data**, because below
 the sampling interval they stop being a different model. See
@@ -167,8 +198,9 @@ charges for.
 
 ## The penalty that is off by default
 
-`ComplexityPenalty` puts a penalised-complexity prior on the variances and is
+`ComplexityPenalty` puts a penalised-complexity penalty on the variances and is
 off. It makes no measurable difference to the trend/seasonal decomposition at any
 sample size and is worse at recovering the variances themselves; what it does
 reliably is drive a component's drift parameter to the floor when there is no
-drift to find. The measurements are in its own documentation.
+drift to find. The measurements are in
+[Validation](https://github.com/QuantumPhysique/state_space/blob/main/doc/validation.md#the-complexity-penalty).

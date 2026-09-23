@@ -62,6 +62,7 @@ FilterResult forwardPass(
 /// only to a few parts in a million in the log-likelihood, which is the
 /// rounding that prior costs either engine.
 class FastPath2x2 {
+  /// A forward pass for [component], which [handles] must accept.
   FastPath2x2(
     this.component, {
     required this.measurementVariance,
@@ -76,7 +77,9 @@ class FastPath2x2 {
   /// one-column sensitivity in unrolled scalars would double this file to
   /// serve a case nothing yet produces.
   static bool handles(
-      List<Component> components, Initialization initialization) {
+    List<Component> components,
+    Initialization initialization,
+  ) {
     if (components.length != 1) return false;
     final component = components.single;
     if (component.stateDim != 2) return false;
@@ -85,8 +88,13 @@ class FastPath2x2 {
     return diffuse[0] && diffuse[1];
   }
 
+  /// The model's single component.
   final Component component;
+
+  /// Noise variance of an observation of unit relative variance.
   final double measurementVariance;
+
+  /// The prior on the first step's state.
   final Initialization initialization;
   final bool _exact;
 
@@ -120,22 +128,28 @@ class FastPath2x2 {
   }
 
   /// The same contract as [KalmanFilter.run].
-  FilterResult run(Timeline timeline,
-      {bool keepHistory = false, bool keepResiduals = false}) {
+  FilterResult run(
+    Timeline timeline, {
+    bool keepHistory = false,
+    bool keepResiduals = false,
+  }) {
     final steps = timeline.length;
     final dim = _exact ? 2 : 0;
-    final pieces =
-        keepResiduals ? ResidualPieces(timeline.observationCount, dim) : null;
+    final pieces = keepResiduals
+        ? ResidualPieces(timeline.observationCount, dim)
+        : null;
     final loading = Float64List(dim);
 
     final stateMean = keepHistory ? Float64List(steps * 2) : null;
     final filteredCov = keepHistory ? Float64List(steps * 4) : null;
     final predictedMean = keepHistory ? Float64List(steps * 2) : null;
     final predictedCov = keepHistory ? Float64List(steps * 4) : null;
-    final stateSensitivity =
-        keepHistory && _exact ? Float64List(steps * 4) : null;
-    final predictedSensitivity =
-        keepHistory && _exact ? Float64List(steps * 4) : null;
+    final stateSensitivity = keepHistory && _exact
+        ? Float64List(steps * 4)
+        : null;
+    final predictedSensitivity = keepHistory && _exact
+        ? Float64List(steps * 4)
+        : null;
 
     // Prior. Under exact initialisation the flat directions carry no variance
     // at all; under the approximate one they carry a wide proper prior.
@@ -174,7 +188,7 @@ class FastPath2x2 {
     final burn = _exact
         ? 0
         : (component.diffuseStates[0] ? 1 : 0) +
-            (component.diffuseStates[1] ? 1 : 0);
+              (component.diffuseStates[1] ? 1 : 0);
     var seen = 0;
     var used = 0;
     var sumLogS = 0.0;
@@ -236,7 +250,8 @@ class FastPath2x2 {
         final s = h0 * ph0 + h1 * ph1 + r;
         if (!(s > 0) || !s.isFinite) {
           throw NumericalBreakdownException(
-              innovationVarianceMessage(s, r, timeline.times[t]));
+            innovationVarianceMessage(s, r, timeline.times[t]),
+          );
         }
         final k0 = ph0 / s;
         final k1 = ph1 / s;
@@ -309,7 +324,8 @@ class FastPath2x2 {
       final information = Float64List.fromList([m00, m01, m01, m11]);
       if (timeline.observationCount < 2 || !factorInformation(information, 2)) {
         throw UnderdeterminedModelException(
-            singularDiffuseMessage([component], 2, timeline));
+          singularDiffuseMessage([component], 2, timeline),
+        );
       }
       diffuseLogDeterminant =
           2 * (math.log(information[0]) + math.log(information[3]));
@@ -327,13 +343,15 @@ class FastPath2x2 {
       used = timeline.observationCount - 2;
     }
 
-    final residuals =
-        pieces == null ? null : recursiveResiduals(pieces, burnIn: burn);
+    final residuals = pieces == null
+        ? null
+        : recursiveResiduals(pieces, burnIn: burn);
 
     return FilterResult(
       stateDim: 2,
       stepCount: steps,
-      logLikelihood: -0.5 *
+      logLikelihood:
+          -0.5 *
           (used * _log2pi + sumLogS + sumWeighted + diffuseLogDeterminant),
       sumLogInnovationVariance: sumLogS,
       sumWeightedSquares: sumWeighted,

@@ -124,9 +124,11 @@ FitResult fit(
   SearchStart start = SearchStart.bracketScan,
 }) {
   if (fixedMeasurementVariance != null && minimumMeasurementVariance != null) {
-    throw ArgumentError('pass fixedMeasurementVariance or '
-        'minimumMeasurementVariance, not both: a noise level pinned to a value '
-        'cannot also be given a floor to clear');
+    throw ArgumentError(
+      'pass fixedMeasurementVariance or '
+      'minimumMeasurementVariance, not both: a noise level pinned to a value '
+      'cannot also be given a floor to clear',
+    );
   }
   for (final (name, value) in [
     ('fixedMeasurementVariance', fixedMeasurementVariance),
@@ -144,16 +146,16 @@ FitResult fit(
   }
 
   FitResult run(double? fixed) => _search(
-        initial,
-        observations,
-        lowerLogRatio: lowerLogRatio,
-        upperLogRatio: upperLogRatio,
-        scanPoints: scanPoints,
-        tolerance: tolerance,
-        penalty: penalty ?? const NoPenalty(),
-        fixedMeasurementVariance: fixed,
-        start: start,
-      );
+    initial,
+    observations,
+    lowerLogRatio: lowerLogRatio,
+    upperLogRatio: upperLogRatio,
+    scanPoints: scanPoints,
+    tolerance: tolerance,
+    penalty: penalty ?? const NoPenalty(),
+    fixedMeasurementVariance: fixed,
+    start: start,
+  );
 
   final FitResult result;
   if (minimumMeasurementVariance != null) {
@@ -190,14 +192,23 @@ FitResult _search(
   required SearchStart start,
 }) {
   final k = initial.parameterCount;
-  final specs =
-      initial.parameterSpecsAt(resolution: samplingResolution(observations));
-  final brackets =
-      _brackets(specs, lowerLogRatio, upperLogRatio, scanPoints: scanPoints);
+  final specs = initial.parameterSpecsAt(
+    resolution: samplingResolution(observations),
+  );
+  final brackets = _brackets(
+    specs,
+    lowerLogRatio,
+    upperLogRatio,
+    scanPoints: scanPoints,
+  );
   final (:lower, :upper, :points, :step) = brackets;
 
-  final profile = ProfileLikelihood(initial, observations,
-      penalty: penalty, fixedMeasurementVariance: fixedMeasurementVariance);
+  final profile = ProfileLikelihood(
+    initial,
+    observations,
+    penalty: penalty,
+    fixedMeasurementVariance: fixedMeasurementVariance,
+  );
 
   final origin = Float64List(k);
   for (var i = 0; i < k; i++) {
@@ -205,12 +216,14 @@ FitResult _search(
   }
   if (profile.evaluate(origin).usedObservations < 1) {
     final flat = [
-      for (final component in initial.components) ...component.diffuseStates
+      for (final component in initial.components) ...component.diffuseStates,
     ].where((flag) => flag).length;
-    throw UnderdeterminedModelException('too few observations to estimate '
-        'anything: the model has $flat flat directions, which use up one '
-        'observation each, and ${observations.length} observations leave none '
-        'over to estimate a noise level from.');
+    throw UnderdeterminedModelException(
+      'too few observations to estimate '
+      'anything: the model has $flat flat directions, which use up one '
+      'observation each, and ${observations.length} observations leave none '
+      'over to estimate a noise level from.',
+    );
   }
 
   // Anything outside the bracket, or not a number, is refused without running
@@ -236,8 +249,13 @@ FitResult _search(
   var best = _maximise(objective, current, specs, brackets, tolerance);
   final absorbed = _noiseAbsorbed(initial, specs, best.argument, brackets);
   if (absorbed) {
-    final alternative =
-        _restartWithMoreNoise(objective, best, specs, brackets, tolerance);
+    final alternative = _restartWithMoreNoise(
+      objective,
+      best,
+      specs,
+      brackets,
+      tolerance,
+    );
     if (alternative != null && alternative.value > best.value) {
       best = alternative;
     }
@@ -248,11 +266,18 @@ FitResult _search(
   final decades = Float64List(k);
   for (var axis = 0; axis < k; axis++) {
     widths[axis] = _halfNatWidth(
-        objective, optimum, axis, best.value, lower[axis], upper[axis]);
+      objective,
+      optimum,
+      axis,
+      best.value,
+      lower[axis],
+      upper[axis],
+    );
     // A width in a logit coordinate divided by ln 10 is not decades of
     // anything, so the decade view reports NaN there.
-    decades[axis] =
-        specs[axis].isLogarithmic ? widths[axis] / _ln10 : double.nan;
+    decades[axis] = specs[axis].isLogarithmic
+        ? widths[axis] / _ln10
+        : double.nan;
   }
 
   final atOptimum = profile.evaluate(optimum);
@@ -288,8 +313,11 @@ FitResult _search(
 /// The caller's bracket for a variance ratio, and the owning component's for
 /// a shape parameter.
 _Brackets _brackets(
-    List<ParameterSpec> specs, double lowerLogRatio, double upperLogRatio,
-    {required int scanPoints}) {
+  List<ParameterSpec> specs,
+  double lowerLogRatio,
+  double upperLogRatio, {
+  required int scanPoints,
+}) {
   final k = specs.length;
   final lower = Float64List(k);
   final upper = Float64List(k);
@@ -315,14 +343,20 @@ _Brackets _brackets(
 /// The model's own parameters in search coordinates, clamped into the
 /// bracket: variances as ratios to the model's measurement variance, shape
 /// parameters as they stand.
-Float64List _previous(StructuralModel initial, List<ParameterSpec> specs,
-    Float64List lower, Float64List upper) {
+Float64List _previous(
+  StructuralModel initial,
+  List<ParameterSpec> specs,
+  Float64List lower,
+  Float64List upper,
+) {
   final theta = initial.parameters;
   final shift = math.log(initial.measurementVariance);
   return Float64List.fromList([
     for (var i = 0; i < theta.length; i++)
-      (specs[i] is VarianceParameter ? theta[i] - shift : theta[i])
-          .clamp(lower[i], upper[i])
+      (specs[i] is VarianceParameter ? theta[i] - shift : theta[i]).clamp(
+        lower[i],
+        upper[i],
+      ),
   ]);
 }
 
@@ -333,8 +367,11 @@ Float64List _previous(StructuralModel initial, List<ParameterSpec> specs,
 /// parameter against arbitrary values of the ones not yet reached: a cycle's
 /// period scanned against the midpoint of its own variance bracket is scanned
 /// against a cycle that is not there.
-Float64List _scan(double Function(Float64List) objective, Float64List origin,
-    _Brackets brackets) {
+Float64List _scan(
+  double Function(Float64List) objective,
+  Float64List origin,
+  _Brackets brackets,
+) {
   final (:lower, upper: _, :points, :step) = brackets;
   final k = origin.length;
   final current = Float64List.fromList(origin);
@@ -387,10 +424,18 @@ _Optimum _maximise(
     wide[i] = chosen ?? 2 * brackets.step[i];
     narrow[i] = (chosen ?? brackets.step[i]) / 4;
   }
-  var simplex =
-      maximiseSimplex(objective, start, steps: wide, tolerance: tolerance);
-  simplex = maximiseSimplex(objective, simplex.argument,
-      steps: narrow, tolerance: tolerance);
+  var simplex = maximiseSimplex(
+    objective,
+    start,
+    steps: wide,
+    tolerance: tolerance,
+  );
+  simplex = maximiseSimplex(
+    objective,
+    simplex.argument,
+    steps: narrow,
+    tolerance: tolerance,
+  );
   return (
     argument: simplex.argument,
     value: simplex.value,
@@ -404,8 +449,12 @@ _Optimum _maximise(
 /// After a scan the neighbouring cells are already known to be worse, so the
 /// window never moves. From a warm start it has to: a diary that grew by a
 /// month can move its optimum several cells.
-_Optimum _goldenSection(double Function(Float64List) objective, double from,
-    _Brackets brackets, double tolerance) {
+_Optimum _goldenSection(
+  double Function(Float64List) objective,
+  double from,
+  _Brackets brackets,
+  double tolerance,
+) {
   final lower = brackets.lower[0];
   final step = brackets.step[0];
   final last = brackets.points[0] - 1;
@@ -417,8 +466,12 @@ _Optimum _goldenSection(double Function(Float64List) objective, double from,
     visited.add(cell);
     final left = math.max(0, cell - 1);
     final right = math.min(last, cell + 1);
-    final refined = maximise(at, lower + left * step, lower + right * step,
-        tolerance: tolerance);
+    final refined = maximise(
+      at,
+      lower + left * step,
+      lower + right * step,
+      tolerance: tolerance,
+    );
     final offset = (refined.argument - lower) / step;
     final int next;
     if (offset - left < 0.05 && left > 0) {
@@ -442,8 +495,12 @@ _Optimum _goldenSection(double Function(Float64List) objective, double from,
 /// Whether a stationary component's variance ratio finished at the top of its
 /// bracket: the signature of a component that has taken over the measurement
 /// noise.
-bool _noiseAbsorbed(StructuralModel model, List<ParameterSpec> specs,
-    Float64List optimum, _Brackets brackets) {
+bool _noiseAbsorbed(
+  StructuralModel model,
+  List<ParameterSpec> specs,
+  Float64List optimum,
+  _Brackets brackets,
+) {
   var at = 0;
   for (final component in model.components) {
     final stationary = !component.diffuseStates.contains(true);
@@ -504,7 +561,10 @@ _Optimum? _restartWithMoreNoise(
 /// at the bottom has not been shrunk out of anything, and its bracket is in
 /// the wrong place, which is what beyondBracket means.
 List<ParameterStatus> _classify(
-    Float64List optimum, List<ParameterSpec> specs, _Brackets brackets) {
+  Float64List optimum,
+  List<ParameterSpec> specs,
+  _Brackets brackets,
+) {
   final (:lower, :upper, points: _, :step) = brackets;
   return [
     for (var i = 0; i < optimum.length; i++)
@@ -515,14 +575,16 @@ List<ParameterStatus> _classify(
             ? ParameterStatus.shrunkToNothing
             : ParameterStatus.beyondBracket
       else
-        ParameterStatus.determined
+        ParameterStatus.determined,
   ];
 }
 
 /// [result] with [FitResult.largestResidual] filled in from one more forward
 /// pass on the fitted model.
 FitResult _withLargestResidual(
-    FitResult result, List<Observation> observations) {
+  FitResult result,
+  List<Observation> observations,
+) {
   final diagnostics = result.model.diagnose(observations);
   final residuals = diagnostics.residuals;
   if (residuals.length < 8) return result;

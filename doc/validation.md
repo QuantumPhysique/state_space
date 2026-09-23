@@ -85,21 +85,31 @@ Two things worth knowing about the reference:
 * `UnobservedComponents(level='local linear trend')` is the *discrete* model and
   is not what this package implements, so comparing against it would be comparing
   against a different model.
-* statsmodels' exact diffuse smoother disagrees with a dense generalised
+* statsmodels' exact diffuse smoother (0.15.0) disagrees with a dense generalised
   least-squares computation about the smoothed slope at the very first step when
-  the transition matrix is genuinely time-varying. It agrees to 1e-14 whenever
-  the step is constant — at unit steps, at 2.5, at 0.5 — and diverges only once
-  the steps vary, while this package agrees with the dense form in every case.
-  Those four numbers are pinned against the dense form instead, which is a
-  sharper test anyway.
+  the transition matrix is time-varying. It agrees to 1e-14 whenever the step is
+  constant, at unit steps, at 2.5 and at 0.5. With unequal steps its first slope
+  is the dense one multiplied by the second gap over the first, exactly, and its
+  variance by that ratio squared, while the level agrees to every digit. This
+  package agrees with the dense form in every case, and those four fixture
+  numbers are pinned against the dense form instead.
+  `tool/statsmodels_diffuse_repro.py` reproduces it in under a hundred lines:
+
+  ```text
+  steps 1, 2, 1, 2, ...   slope  statsmodels 0.113392860740  dense 0.056696430370
+  irregular steps         slope  statsmodels 0.177785553235  dense 0.059261851078
+  ```
 
 ## The fast path is held to the engine it specialises
 
 A single two-state component runs its forward pass in unrolled scalars.
 `fast_path_equivalence_test.dart` asserts agreement with the generic engine to
 1e-12 across irregular gaps, a repeated timestamp, a two-month hole, missing
-observations, unequal weights and all three initialisations. If the two ever
-disagree, the fast path is wrong.
+observations, unequal weights and all three initialisations. Under a very wide
+approximate prior on a series with extreme gaps, 1e-9 and 1000 time units in the
+same series, the two agree only to a few parts in a million in the likelihood,
+which is the rounding that prior costs either engine; exact initialisation
+agrees to 1e-12 there too.
 
 ## The reduced backward pass is held to the full one
 
@@ -135,65 +145,118 @@ every digit if computed that way.
 Simulate from known variances using the exact discretisation, fit, and check both
 that the estimate is close and that it gets closer as the series grows.
 
+## Identifiability
+
+`identifiability_test.dart` builds models the data cannot determine: a trend
+beside a level, the same event entered twice, a step that switches on before
+the first reading, and one reading under a two-state trend with the output grid
+on either side of it. Each is refused, at integer days and at random times of
+day, over twenty seeds. Ill-conditioned but determined models, an annual
+seasonal on sixty days and time in milliseconds since the epoch, are not.
+
 ## Edge cases
 
 No observations, one observation, repeated timestamps, a five-year gap, constant
-data, zero-variance readings, a model with as many flat directions as
-observations, and rejection of NaN, infinities and unsorted input.
+data, data a trend fits exactly, zero-variance readings, a model with as many
+flat directions as observations, and rejection of NaN, infinities and unsorted
+input.
+
+## The complexity penalty
+
+`ComplexityPenalty` is off by default because of this measurement. Simulating a
+trend plus a weekly seasonal at known variances, fitting with and without the
+penalty, and comparing the fitted decomposition against the paths that generated
+it, over twelve replications:
+
+```text
+           seasonal RMSE              trend RMSE
+         penalised    plain       penalised    plain
+N =  60     0.0867   0.0870          0.0556   0.0545
+N = 120     0.0824   0.0826          0.0483   0.0464
+N = 500     0.0759   0.0759          0.0487   0.0480
+```
+
+The penalty makes no difference to the decomposition at any sample size and is
+slightly worse for the trend. On recovering the variances it is clearly worse:
+at N = 500 the root-mean-square error of the log variance ratio goes from 0.37
+to 0.59 for the trend, and at N = 60 from 6.06 to 7.42, and the spread of the
+estimates is larger too. What it does reliably is put a seasonal's drift
+variance at the bottom of its bracket, 1e-9, when the pattern is fixed, where
+plain maximum likelihood sometimes leaves it at 1e-4 or higher.
 
 ---
 
 # Performance
 
-`benchmark/scaling_benchmark.dart`, AOT-compiled, median of five samples, on an
-M-series Mac. `smooth` is filter plus smoother plus the reported posterior.
+Measured on an Apple M4 Pro with Dart 3.13.1, AOT-compiled, on an otherwise
+lightly loaded machine. Absolute times move by a fifth or so between machines
+and SDK releases; ratios move much less.
+
+`benchmark/scaling_benchmark.dart`, median of five samples. `smooth` is filter
+plus smoother plus the reported posterior, for a `LocalLinearTrend`.
 
 | N | `logLikelihood` | `smooth` | per observation | `O(N²)` kernel smoother |
 |---|---|---|---|---|
-| 100 | 0.00 ms | 0.02 ms | 206 ns | 0.04 ms |
-| 1 000 | 0.02 ms | 0.21 ms | 208 ns | 3.67 ms |
-| 10 000 | 0.23 ms | 2.21 ms | 221 ns | 368 ms |
-| 100 000 | 2.41 ms | 23.21 ms | 232 ns | — |
+| 100 | 0.00 ms | 0.02 ms | 173 ns | 0.04 ms |
+| 1 000 | 0.03 ms | 0.17 ms | 167 ns | 3.7 ms |
+| 10 000 | 0.28 ms | 1.75 ms | 175 ns | 371 ms |
+| 100 000 | 2.86 ms | 18.7 ms | 187 ns | — |
 
 Flat cost per observation across three orders of magnitude, which is what linear
-means. Ten years of daily readings smooth in about a millisecond.
+means. Ten years of daily readings smooth in under a millisecond.
 
-The `logLikelihood` column is where the two-state fast path shows up — about four
-times faster than the generic engine, steadily, from a thousand points to a
-hundred thousand:
+The `logLikelihood` column is where the two-state fast path shows up, a little
+over three times faster than the generic engine on the same forward pass:
 
 | N | generic engine | fast path | |
 |---|---|---|---|
-| 1 000 | 0.09 ms | 0.02 ms | 4.0x |
-| 10 000 | 0.93 ms | 0.23 ms | 4.1x |
-| 100 000 | 9.37 ms | 2.43 ms | 3.9x |
-
-That is the half worth specialising: `fit` runs a forward pass per likelihood
-evaluation, some fifty per call, while the backward pass runs once.
+| 1 000 | 0.10 ms | 0.03 ms | 3.4x |
+| 10 000 | 0.96 ms | 0.28 ms | 3.5x |
+| 100 000 | 9.5 ms | 2.9 ms | 3.3x |
 
 ## Models with many components
 
-The backward pass is cubic in the state dimension, so what it costs depends on how
-many states actually move. Smoothing 20 000 points:
+`benchmark/components_benchmark.dart`. The backward pass is cubic in the state
+dimension, so what it costs depends on how many states actually move. Smoothing
+20 000 daily points:
 
 | model | states | `smooth` |
 |---|---|---|
-| `LocalLevel` | 1 | 2.5 ms |
-| `LocalLinearTrend` | 2 | 4.4 ms |
-| trend + Matérn 5/2 | 5 | 19.3 ms |
-| trend + weekly seasonal | 6 | 38.5 ms |
-| trend + 1 indicator | 3 | 7.2 ms |
-| trend + 20 indicators | 22 | 663 ms |
+| `LocalLevel` | 1 | 3.4 ms |
+| `LocalLinearTrend` | 2 | 4.2 ms |
+| trend + Matérn 5/2 | 5 | 21 ms |
+| trend + weekly seasonal | 6 | 40 ms |
+| trend + 1 indicator | 3 | 7.5 ms |
+| trend + 20 indicators | 22 | 690 ms |
 
-The last two are cheaper than their state count suggests because a regression
-coefficient never moves and is skipped by the backward pass — see
+The indicators are cheaper than their state count suggests because a
+regression coefficient never moves and is skipped by the backward pass; see
 [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md#the-smoother).
+They are still flat directions in the forward pass: one likelihood evaluation of
+a trend and a weekly seasonal on 730 daily readings takes 0.41 ms, 0.53 ms with
+one indicator, and 20 ms with twenty.
+
+## What a fit costs
+
+`fit` runs one forward pass per likelihood evaluation, including the scan and
+the plateau probes, and the backward pass not at all. The same benchmark, on
+daily readings:
+
+| model | parameters | passes | 1 year | 3 years | 5 years |
+|---|---|---|---|---|---|
+| trend | 1 | 73–77 | 1 ms | 2 ms | 3 ms |
+| trend + weekly | 2 | 214–221 | 43 ms | 136 ms | 225 ms |
+| trend + weekly + Matérn | 4 | 526–706 | 132 ms | 494 ms | 887 ms |
+
+A warm refit after one more reading, `SearchStart.previousParameters`, on two
+years of trend + weekly + Matérn: 232 passes and 118 ms against 573 passes and
+289 ms cold, with the same likelihood to 1e-4.
 
 ## Why the linear algebra is hand-rolled
 
 `A` and `Q` are block diagonal, which a general matrix type has no way to express
 and would multiply the zeros of, and the Dart candidate offers no in-place or
-out-parameter path — a pass would allocate a result object per operation, some
+out-parameter path: a pass would allocate a result object per operation, some
 seventy thousand short-lived ones for a decade of daily data. On raw dense
 products it is the faster of the two from 6×6 upward;
 `benchmark/dependency_comparison.dart` has those numbers.

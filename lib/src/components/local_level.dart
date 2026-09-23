@@ -21,7 +21,10 @@ final class LocalLevel extends Component {
   LocalLevel({required this.processVariance}) {
     if (!(processVariance > 0) || !processVariance.isFinite) {
       throw ArgumentError.value(
-          processVariance, 'processVariance', 'must be finite and positive');
+        processVariance,
+        'processVariance',
+        'must be finite and positive',
+      );
     }
   }
 

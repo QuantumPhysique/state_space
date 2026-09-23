@@ -45,27 +45,35 @@ final class StructuralModel {
   }) : components = List.unmodifiable(components) {
     if (components.isEmpty) {
       throw ArgumentError.value(
-          components, 'components', 'a model needs at least one component');
+        components,
+        'components',
+        'a model needs at least one component',
+      );
     }
     if (!(measurementVariance > 0) || !measurementVariance.isFinite) {
-      throw ArgumentError.value(measurementVariance, 'measurementVariance',
-          'must be finite and positive');
+      throw ArgumentError.value(
+        measurementVariance,
+        'measurementVariance',
+        'must be finite and positive',
+      );
     }
     for (var i = 0; i < components.length; i++) {
       final c = components[i];
       if (c.parameters.length != c.parameterCount) {
         throw ArgumentError.value(
-            c,
-            'components[$i]',
-            'parameters has ${c.parameters.length} entries but parameterCount '
-                'is ${c.parameterCount}');
+          c,
+          'components[$i]',
+          'parameters has ${c.parameters.length} entries but parameterCount '
+              'is ${c.parameterCount}',
+        );
       }
       if (c.diffuseStates.length != c.stateDim) {
         throw ArgumentError.value(
-            c,
-            'components[$i]',
-            'diffuseStates has ${c.diffuseStates.length} entries but stateDim '
-                'is ${c.stateDim}');
+          c,
+          'components[$i]',
+          'diffuseStates has ${c.diffuseStates.length} entries but stateDim '
+              'is ${c.stateDim}',
+        );
       }
     }
   }
@@ -76,24 +84,22 @@ final class StructuralModel {
     required double processVariance,
     double measurementVariance = 1.0,
     Initialization initialization = const ExactDiffuse(),
-  }) =>
-      StructuralModel(
-        [LocalLinearTrend(processVariance: processVariance)],
-        measurementVariance: measurementVariance,
-        initialization: initialization,
-      );
+  }) => StructuralModel(
+    [LocalLinearTrend(processVariance: processVariance)],
+    measurementVariance: measurementVariance,
+    initialization: initialization,
+  );
 
   /// A single [LocalLevel]: a level with no persistent direction.
   factory StructuralModel.localLevel({
     required double processVariance,
     double measurementVariance = 1.0,
     Initialization initialization = const ExactDiffuse(),
-  }) =>
-      StructuralModel(
-        [LocalLevel(processVariance: processVariance)],
-        measurementVariance: measurementVariance,
-        initialization: initialization,
-      );
+  }) => StructuralModel(
+    [LocalLevel(processVariance: processVariance)],
+    measurementVariance: measurementVariance,
+    initialization: initialization,
+  );
 
   /// The additive blocks of the model, in state order.
   final List<Component> components;
@@ -137,15 +143,16 @@ final class StructuralModel {
   int get parameterCount => components.fold(0, (n, c) => n + c.parameterCount);
 
   /// What each entry of [parameters] is, concatenated in the same order.
-  List<ParameterSpec> get parameterSpecs =>
-      [for (final component in components) ...component.parameterSpecs];
+  List<ParameterSpec> get parameterSpecs => [
+    for (final component in components) ...component.parameterSpecs,
+  ];
 
   /// The same, narrowed by what a series sampled every [resolution] time units
   /// can resolve. See [Component.parameterSpecsAt].
   List<ParameterSpec> parameterSpecsAt({required double resolution}) => [
-        for (final component in components)
-          ...component.parameterSpecsAt(resolution: resolution)
-      ];
+    for (final component in components)
+      ...component.parameterSpecsAt(resolution: resolution),
+  ];
 
   /// The concatenated unconstrained parameter vectors of every component.
   Float64List get parameters {
@@ -161,14 +168,20 @@ final class StructuralModel {
   /// A copy with [theta] distributed over the components in order.
   StructuralModel withParameters(Float64List theta) {
     if (theta.length != parameterCount) {
-      throw ArgumentError.value(theta, 'theta',
-          'expected $parameterCount parameters, got ${theta.length}');
+      throw ArgumentError.value(
+        theta,
+        'theta',
+        'expected $parameterCount parameters, got ${theta.length}',
+      );
     }
     final rebuilt = <Component>[];
     var at = 0;
     for (final component in components) {
-      final slice =
-          Float64List.sublistView(theta, at, at + component.parameterCount);
+      final slice = Float64List.sublistView(
+        theta,
+        at,
+        at + component.parameterCount,
+      );
       rebuilt.add(component.withParameters(slice));
       at += component.parameterCount;
     }
@@ -181,10 +194,10 @@ final class StructuralModel {
 
   /// A copy with a different [measurementVariance].
   StructuralModel withMeasurementVariance(double variance) => StructuralModel(
-        components,
-        measurementVariance: variance,
-        initialization: initialization,
-      );
+    components,
+    measurementVariance: variance,
+    initialization: initialization,
+  );
 
   /// A copy whose ratios of every variance to the measurement variance are
   /// this model's, and whose scale is estimated from [observations].
@@ -202,12 +215,16 @@ final class StructuralModel {
   /// Throws [UnderdeterminedModelException] when nothing is left to estimate
   /// a scale from: fewer observations than [diffuseDimension] plus one.
   StructuralModel withEstimatedScale(List<Observation> observations) {
-    final pass =
-        _filter(Timeline.merge(observations, null), keepHistory: false);
+    final pass = _filter(
+      Timeline.merge(observations, null),
+      keepHistory: false,
+    );
     if (!pass.hasResidualDegreesOfFreedom) {
-      throw UnderdeterminedModelException('${observations.length} '
-          'observations leave nothing to estimate a noise level from once the '
-          'model\'s flat directions are located');
+      throw UnderdeterminedModelException(
+        '${observations.length} '
+        'observations leave nothing to estimate a noise level from once the '
+        'model\'s flat directions are located',
+      );
     }
     final estimated = pass.profileMeasurementVariance;
     final floor = scaleFloor(observations);
@@ -241,9 +258,10 @@ final class StructuralModel {
   /// Throws [UnderdeterminedModelException] when the data cannot determine the
   /// model's flat directions (see [initialization]), [ArgumentError] for
   /// unsorted or non-finite input.
-  double logLikelihood(List<Observation> observations) =>
-      _filter(Timeline.merge(observations, null), keepHistory: false)
-          .logLikelihood;
+  double logLikelihood(List<Observation> observations) => _filter(
+    Timeline.merge(observations, null),
+    keepHistory: false,
+  ).logLikelihood;
 
   /// What the one-step-ahead prediction errors say about this model on
   /// [observations].
@@ -310,7 +328,9 @@ final class StructuralModel {
   /// model's flat directions (see [initialization]), [ArgumentError] for
   /// unsorted or non-finite input.
   ForecastResult forecast(
-      List<Observation> observations, List<double> horizon) {
+    List<Observation> observations,
+    List<double> horizon,
+  ) {
     if (observations.isEmpty) {
       throw ArgumentError('nothing to forecast from: no observations');
     }
@@ -320,14 +340,18 @@ final class StructuralModel {
         throw ArgumentError.value(horizon[i], 'horizon[$i]', 'not finite');
       }
       if (i > 0 && horizon[i] < horizon[i - 1]) {
-        throw ArgumentError('horizon must be sorted ascending, but horizon[$i] '
-            '(${horizon[i]}) precedes horizon[${i - 1}] (${horizon[i - 1]})');
+        throw ArgumentError(
+          'horizon must be sorted ascending, but horizon[$i] '
+          '(${horizon[i]}) precedes horizon[${i - 1}] (${horizon[i - 1]})',
+        );
       }
       if (horizon[i] < last) {
-        throw ArgumentError('horizon[$i] (${horizon[i]}) is before the last '
-            'observation at $last. Use smooth(observations, grid: ...) for '
-            'times inside the data; it conditions on everything, not just on '
-            'what came before.');
+        throw ArgumentError(
+          'horizon[$i] (${horizon[i]}) is before the last '
+          'observation at $last. Use smooth(observations, grid: ...) for '
+          'times inside the data; it conditions on everything, not just on '
+          'what came before.',
+        );
       }
     }
 
@@ -396,26 +420,29 @@ final class StructuralModel {
     final slices = [
       for (var b = 0; b < components.length; b++)
         Float64List.sublistView(
-            h, offsets[b], offsets[b] + components[b].stateDim)
+          h,
+          offsets[b],
+          offsets[b] + components[b].stateDim,
+        ),
     ];
 
     final times = Float64List(count);
     final signal = Float64List(count);
     final signalVariance = Float64List(count);
     final componentMeans = [
-      for (var b = 0; b < components.length; b++) Float64List(count)
+      for (var b = 0; b < components.length; b++) Float64List(count),
     ];
     final componentVariances = [
-      for (var b = 0; b < components.length; b++) Float64List(count)
+      for (var b = 0; b < components.length; b++) Float64List(count),
     ];
     final rates = [
-      for (final component in components) component.rateStateIndex
+      for (final component in components) component.rateStateIndex,
     ];
     final slopes = [
-      for (final rate in rates) rate == null ? null : Float64List(count)
+      for (final rate in rates) rate == null ? null : Float64List(count),
     ];
     final slopeVariances = [
-      for (final rate in rates) rate == null ? null : Float64List(count)
+      for (final rate in rates) rate == null ? null : Float64List(count),
     ];
 
     for (var k = 0; k < count; k++) {
@@ -452,7 +479,8 @@ final class StructuralModel {
         for (var i = 0; i < dim; i++) {
           contribution += h[start + i] * mean[row + start + i];
           for (var j = 0; j < dim; j++) {
-            own += h[start + i] *
+            own +=
+                h[start + i] *
                 covariance[block + (start + i) * n + start + j] *
                 h[start + j];
           }
@@ -492,7 +520,10 @@ final class StructuralModel {
   /// has the same full-data posterior at every step, which is the whole reason
   /// a single number is the right thing to report.
   List<Coefficient> _coefficients(
-      Timeline timeline, FilterResult filtered, List<int> offsets) {
+    Timeline timeline,
+    FilterResult filtered,
+    List<int> offsets,
+  ) {
     final found = <Coefficient>[];
     final n = stateDim;
     final last = timeline.length - 1;
@@ -505,11 +536,13 @@ final class StructuralModel {
       if (component is! RegressionComponent) continue;
       for (var i = 0; i < component.regressors.length; i++) {
         final at = offsets[b] + i;
-        found.add(newCoefficient(
-          name: component.regressors[i].name,
-          estimate: mean[last * n + at],
-          variance: covariance[last * n * n + at * n + at],
-        ));
+        found.add(
+          newCoefficient(
+            name: component.regressors[i].name,
+            estimate: mean[last * n + at],
+            variance: covariance[last * n * n + at * n + at],
+          ),
+        );
       }
     }
     return found;
@@ -545,9 +578,13 @@ final class StructuralModel {
 
   @override
   int get hashCode => Object.hash(
-      measurementVariance, initialization, Object.hashAll(components));
+    measurementVariance,
+    initialization,
+    Object.hashAll(components),
+  );
 
   @override
-  String toString() => 'StructuralModel($components, measurementVariance: '
+  String toString() =>
+      'StructuralModel($components, measurementVariance: '
       '$measurementVariance)';
 }

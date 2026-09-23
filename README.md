@@ -1,66 +1,71 @@
 # state_space
 
-Exact Gaussian process regression for irregular time series, in linear time.
-Kalman filtering, RTS smoothing, and marginal-likelihood hyperparameter
-estimation. Pure Dart, no runtime dependencies.
+![Readings with a gap, the smoothed trend with its 95% credible band, and a forecast](https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/trend.png)
 
-You hand it observations at arbitrary times. It hands back the posterior as a
-time trace — a mean, a variance and an interval at every output time, at the
-observation times or on any grid you ask for, including between readings and
-beyond both ends of the data.
+Give it noisy readings taken whenever: a diary, a sensor, a price. It gives
+back a smooth trend, its slope, and an uncertainty band you can draw, across
+gaps and into the future. Pure Dart, so it runs in Flutter on every platform.
+
+Under the hood it is Gaussian process regression, computed exactly in linear
+time by a Kalman filter and smoother. The hyperparameters are learned from the
+data by maximising the marginal likelihood, and every output comes with its
+posterior uncertainty.
 
 ## Install
 
 ```yaml
 dependencies:
-  state_space: ^0.5.0
+  state_space: ^0.1.0
 ```
-
-Grids and horizons are `Float64List`s, so you will also want
-`import 'dart:typed_data';`.
 
 ## The shortest thing that works
 
 ```dart
+import 'package:state_space/state_space.dart';
+
 final data = [
-  Observation(0, 81.2),
-  Observation(1, 80.9),
-  Observation(9, 80.4),   // a gap is not a special case
-  Observation(9, 80.6),   // neither are two readings at the same instant
+  Observation(0, 81.3),
+  Observation(2, 81.0),   // a gap is not a special case
+  Observation(3, 80.5),
+  Observation(7, 80.0),
+  Observation(8, 80.0),
+  Observation(8, 79.8),   // neither are two readings at the same instant
+  // ... four weeks of readings in all
 ];
 
 final fitted = fit(StructuralModel.localLinearTrend(processVariance: 1), data);
+fitted.warnings;                 // empty: the data determined the smoothing
 
-final everyDay = Float64List.fromList([for (var d = 0; d <= 20; d++) d + 0.0]);
+final everyDay = [for (var d = 0; d <= 30; d++) d.toDouble()];
 final trend = fitted.model.smooth(data, grid: everyDay);
 
-trend.level;                  // the smoothed curve
-trend.slope;                  // its rate of change, for free
-trend.credibleInterval(12);   // and how sure it is, at output point 12
+trend.mean;                      // the smoothed curve
+trend.trendSlope;                // its rate of change
+trend.credibleBand();            // and how sure it is, as two arrays to draw
 
-final ahead = Float64List.fromList([for (var d = 21; d <= 50; d++) d + 0.0]);
-fitted.model.forecast(data, ahead);            // and where it is heading
+final ahead = [for (var d = 31; d <= 60; d++) d.toDouble()];
+fitted.model.forecast(data, ahead);   // and where it is heading
 ```
 
-Nothing is interpolated, nothing is resampled, and no gap is filled. Missing data
-is a step with no update, an irregular gap is a different `dt`, and a repeated
-timestamp is `dt = 0`. All three fall out of the recursion rather than being
-handled.
+Nothing is interpolated, resampled or filled: a missing day is a step with no
+update, an irregular gap is a different `dt`, and a repeated timestamp is
+`dt = 0`. [Getting started](https://github.com/QuantumPhysique/state_space/blob/main/doc/getting-started.md)
+has the full series and converts calendar dates with `TimeAxis`.
 
 ## Components add up, and the posterior comes apart
 
-Events that are not periodic — a fortnight over Christmas, a course of
-medication — go in as indicator columns and cost the optimiser nothing at all,
-because their coefficients are states rather than parameters:
+Events that are not periodic, such as a fortnight over Christmas or a course of
+medication, go in as indicator columns. Their coefficients are states rather
+than parameters, so they add no dimension to the fit:
 
 ```dart
 final model = StructuralModel([
-  const LocalLinearTrend(processVariance: 1e-4),
+  LocalLinearTrend(processVariance: 1e-4),
   TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
   RegressionComponent([
     IndicatorRegressor('christmas', [(from: 350, to: 364)]),
   ]),
-]);   // still a two-dimensional fit: the coefficient is a state
+]);   // a two-dimensional fit: the coefficient is a state
 
 final fitted = fit(model, diary);
 final posterior = fitted.model.smooth(diary);
@@ -77,63 +82,60 @@ fitted.model                     // and whether to believe any of it
 simulated year and prints the recovered effects beside the truth they were
 generated from.
 
-## Which kernels
+## Components
 
-Each component is a Gaussian process kernel written in the form that makes it
-fast, and they compose block-diagonally.
+| component | use it for | states |
+|---|---|---|
+| `LocalLinearTrend` | a smooth trend that keeps its direction; the default | 2 |
+| `LocalLevel` | a level with no persistent direction | 1 |
+| `TrigonometricSeasonal` | a pattern with a known period, such as a week or a year | 2 per harmonic |
+| `RegressionComponent` | dated events and known covariates | 1 per column |
+| `Matern` | short-lived correlated deviations beside a trend | 1, 2 or 3 |
+| `StochasticCycle` | an approximate rhythm whose period is estimated | 2 |
 
-| component | kernel | states | prior |
-|---|---|---|---|
-| `LocalLevel` | Brownian motion | 1 | diffuse |
-| `LocalLinearTrend` | cubic spline, `min(s,t)³/3 + min(s,t)²\|s−t\|/2` | 2 | diffuse |
-| `TrigonometricSeasonal` | `min(s,t) Σⱼ cos λⱼ(s−t)` | 2 per harmonic | diffuse |
-| `RegressionComponent` | a constant per column | 1 per column | diffuse |
-| `Matern` | Matérn, ν = 1/2, 3/2, 5/2 | 1, 2, 3 | stationary |
-| `StochasticCycle` | `ρ^\|τ\| cos(2πτ/p)`, period estimated | 2 | stationary |
-
-There is no `k(s, t)` to pass in. Linear time comes from the Markov property, so
-the reachable kernels are exactly those with a finite-dimensional state-space
-form, and the table is the list.
-
-For the default `LocalLinearTrend` the implied kernel is the cubic spline kernel,
-so the posterior mean is a natural cubic smoothing spline — as a Bayesian
-posterior, with honest uncertainty, in linear time.
+Each is a Gaussian process kernel with an exact state-space form, and they
+compose by adding. The default trend's posterior mean is a natural cubic
+smoothing spline. [Components](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md)
+has the kernels, and how to write your own.
 
 ## Documentation
 
 | | |
 |---|---|
-| [Getting started](https://github.com/QuantumPhysique/state_space/blob/main/doc/getting-started.md) | grids, slopes, forecasts, unequal readings, noise floors, isolates |
+| [Getting started](https://github.com/QuantumPhysique/state_space/blob/main/doc/getting-started.md) | dates, grids, slopes, forecasts, unequal and bad readings, noise floors, errors, isolates |
 | [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md) | which components, and how to tell whether one earned its place |
-| [Components](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md) | what each one is, when to reach for it, and which kernels are reachable |
+| [Components](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md) | what each one is, which kernels are reachable, and writing your own |
 | [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md) | the Gaussian process, the SDE, the filter, and the numerical choices |
-| [Validation](https://github.com/QuantumPhysique/state_space/blob/main/doc/validation.md) | what is checked, against what, and how closely — plus benchmarks |
-| [Roadmap](https://github.com/QuantumPhysique/state_space/blob/main/doc/roadmap.md) | what shipped when, what might come next, and the references |
-| [Calibration](https://github.com/QuantumPhysique/state_space/blob/main/tool/calibration/README.md) | does the right answer actually help, measured on weight diaries |
+| [Validation](https://github.com/QuantumPhysique/state_space/blob/main/doc/validation.md) | what is checked, against what, and how closely, plus benchmarks |
+| [Roadmap](https://github.com/QuantumPhysique/state_space/blob/main/doc/roadmap.md) | what might come next, and the references |
+| [Calibration](https://github.com/QuantumPhysique/state_space/blob/main/tool/calibration/README.md) | how the models behave on weight diaries |
 | [API reference](https://pub.dev/documentation/state_space/latest/) | every class and method |
 
 ## Performance
 
-Around 210–230 ns per observation for a full `smooth`, flat across three orders
-of magnitude on an M-series Mac; ten years of daily readings smooth in about a
-millisecond. The tables are in [Validation](https://github.com/QuantumPhysique/state_space/blob/main/doc/validation.md#performance).
+About 170–190 ns per observation for a full `smooth` with a trend, flat from a
+hundred readings to a hundred thousand; ten years of daily readings smooth in
+under a millisecond. The tables are in
+[Validation](https://github.com/QuantumPhysique/state_space/blob/main/doc/validation.md#performance).
 
 ## What it does not do
 
-It knows nothing about your domain: no dates, no units, no calendars, no locales.
-Time is a `double` in whatever unit you like, and the process variances are
-expressed per that unit. There is no configuration object and no strategy enum.
+It knows nothing about your domain: no units, no calendars, no locales. Time is
+a `double`, and the process variances are expressed per its unit; the default
+search brackets suit days, and `TimeAxis` turns dates into days.
 
-Nor is there a matrix type in anything a caller receives — every result is
-`Float64List`s and doubles, which is what lets a whole model and its posterior
-cross an isolate boundary unchanged.
+The fit is Gaussian, so a single mistyped reading distorts it.
+`FitResult.warnings` names such a reading, and
+[Getting started](https://github.com/QuantumPhysique/state_space/blob/main/doc/getting-started.md#bad-readings)
+shows how to set it aside.
+
+Results are plain data, `Float64List`s, doubles and small records, with no
+matrix type, so a model and its posterior can be sent between isolates.
 
 The API is pre-1.0 and may still move.
 
-## Used by
-
-[trale](https://github.com/QuantumPhysique/trale), a privacy-respecting body
-weight diary, for its trend curve and uncertainty band.
+Developed with Claude Code as a pair programmer; the model design, derivations,
+validation strategy and review decisions are mine.
 
 ## Licence
 

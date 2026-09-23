@@ -46,21 +46,26 @@ final class Coefficient {
   }
 
   @override
-  String toString() => '$name: ${estimate.toStringAsFixed(3)} '
+  String toString() =>
+      '$name: ${estimate.toStringAsFixed(3)} '
       '+/- ${standardError.toStringAsFixed(3)}';
 }
 
 /// Builds a [Coefficient]. Internal to the package.
-Coefficient newCoefficient(
-        {required String name,
-        required double estimate,
-        required double variance}) =>
-    Coefficient._(name: name, estimate: estimate, variance: variance);
+Coefficient newCoefficient({
+  required String name,
+  required double estimate,
+  required double variance,
+}) => Coefficient._(name: name, estimate: estimate, variance: variance);
 
 Float64List _view(Float64List list) => list.asUnmodifiableView();
 
 Bands _bands(
-    Float64List mean, Float64List variance, double extra, double coverage) {
+  Float64List mean,
+  Float64List variance,
+  double extra,
+  double coverage,
+) {
   final z = twoSidedZ(coverage);
   final lo = Float64List(mean.length);
   final hi = Float64List(mean.length);
@@ -91,18 +96,18 @@ final class SmoothingResult {
     required this.logMarginalLikelihood,
     required this.measurementVariance,
     required List<Coefficient> coefficients,
-  })  : times = _view(times),
-        mean = _view(mean),
-        variance = _view(variance),
-        _componentMeans = [for (final m in componentMeans) _view(m)],
-        _componentVariances = [for (final v in componentVariances) _view(v)],
-        _componentSlopes = [
-          for (final s in componentSlopes) s == null ? null : _view(s)
-        ],
-        _componentSlopeVariances = [
-          for (final s in componentSlopeVariances) s == null ? null : _view(s)
-        ],
-        coefficients = List.unmodifiable(coefficients);
+  }) : times = _view(times),
+       mean = _view(mean),
+       variance = _view(variance),
+       _componentMeans = [for (final m in componentMeans) _view(m)],
+       _componentVariances = [for (final v in componentVariances) _view(v)],
+       _componentSlopes = [
+         for (final s in componentSlopes) s == null ? null : _view(s),
+       ],
+       _componentSlopeVariances = [
+         for (final s in componentSlopeVariances) s == null ? null : _view(s),
+       ],
+       coefficients = List.unmodifiable(coefficients);
 
   /// Output times, ascending.
   final Float64List times;
@@ -221,20 +226,19 @@ SmoothingResult newSmoothingResult({
   List<Float64List?> componentSlopeVariances = const [],
   int? trendIndex,
   List<Coefficient> coefficients = const [],
-}) =>
-    SmoothingResult._(
-      times: times,
-      mean: mean,
-      variance: variance,
-      componentMeans: componentMeans,
-      componentVariances: componentVariances,
-      componentSlopes: componentSlopes,
-      componentSlopeVariances: componentSlopeVariances,
-      trendIndex: trendIndex,
-      logMarginalLikelihood: logMarginalLikelihood,
-      measurementVariance: measurementVariance,
-      coefficients: coefficients,
-    );
+}) => SmoothingResult._(
+  times: times,
+  mean: mean,
+  variance: variance,
+  componentMeans: componentMeans,
+  componentVariances: componentVariances,
+  componentSlopes: componentSlopes,
+  componentSlopeVariances: componentSlopeVariances,
+  trendIndex: trendIndex,
+  logMarginalLikelihood: logMarginalLikelihood,
+  measurementVariance: measurementVariance,
+  coefficients: coefficients,
+);
 
 /// The signal projected past the end of the data.
 ///
@@ -250,9 +254,9 @@ final class ForecastResult {
     required Float64List mean,
     required Float64List variance,
     required this.measurementVariance,
-  })  : times = _view(times),
-        mean = _view(mean),
-        variance = _view(variance);
+  }) : times = _view(times),
+       mean = _view(mean),
+       variance = _view(variance);
 
   /// The requested horizon, ascending.
   final Float64List times;
@@ -299,13 +303,12 @@ ForecastResult newForecastResult({
   required Float64List mean,
   required Float64List variance,
   required double measurementVariance,
-}) =>
-    ForecastResult._(
-      times: times,
-      mean: mean,
-      variance: variance,
-      measurementVariance: measurementVariance,
-    );
+}) => ForecastResult._(
+  times: times,
+  mean: mean,
+  variance: variance,
+  measurementVariance: measurementVariance,
+);
 
 /// What became of one parameter during a fit.
 enum ParameterStatus {
@@ -358,11 +361,11 @@ final class FitResult {
     required Float64List varianceRatios,
     required Float64List plateauDecadesByParameter,
     required Float64List plateauWidthByParameter,
-  })  : parameterStatus = List.unmodifiable(parameterStatus),
-        parameterSpecs = List.unmodifiable(parameterSpecs),
-        varianceRatios = _view(varianceRatios),
-        plateauDecadesByParameter = _view(plateauDecadesByParameter),
-        plateauWidthByParameter = _view(plateauWidthByParameter);
+  }) : parameterStatus = List.unmodifiable(parameterStatus),
+       parameterSpecs = List.unmodifiable(parameterSpecs),
+       varianceRatios = _view(varianceRatios),
+       plateauDecadesByParameter = _view(plateauDecadesByParameter),
+       plateauWidthByParameter = _view(plateauWidthByParameter);
 
   /// The fitted model: components at their estimated variances, and the
   /// analytically concentrated measurement variance.
@@ -490,7 +493,7 @@ final class FitResult {
   /// The observation that sits furthest from what the rest of the data
   /// predicts for it, or null when there are too few residuals to judge.
   ///
-  /// [score] is its one-step-ahead prediction error divided by a robust
+  /// `score` is its one-step-ahead prediction error divided by a robust
   /// estimate of the typical error (1.4826 times the median absolute
   /// residual), so the bad reading does not hide itself by inflating the
   /// scale it is measured against. Gaussian noise almost never exceeds 6.
@@ -511,12 +514,14 @@ final class FitResult {
   double get varianceRatio {
     final variances = [
       for (var i = 0; i < parameterSpecs.length; i++)
-        if (parameterSpecs[i] is VarianceParameter) varianceRatios[i]
+        if (parameterSpecs[i] is VarianceParameter) varianceRatios[i],
     ];
     if (variances.length != 1) {
-      throw StateError('this model has ${variances.length} variance ratios, so '
-          'there is no single one to report. Use varianceRatios, which is in '
-          'parameter order.');
+      throw StateError(
+        'this model has ${variances.length} variance ratios, so '
+        'there is no single one to report. Use varianceRatios, which is in '
+        'parameter order.',
+      );
     }
     return variances.first;
   }
@@ -562,11 +567,13 @@ final class FitResult {
     final found = <String>[];
     final outlier = largestResidual;
     if (outlier != null && outlier.score.abs() > outlierScore) {
-      found.add('the reading at time ${outlier.time} is '
-          '${outlier.score.abs().toStringAsFixed(1)} typical errors from what '
-          'the rest of the data predicts; if it is a mistake, remove it or give '
-          'it a large relativeVariance, because one bad reading inflates the '
-          'noise estimate and moves the whole curve');
+      found.add(
+        'the reading at time ${outlier.time} is '
+        '${outlier.score.abs().toStringAsFixed(1)} typical errors from what '
+        'the rest of the data predicts; if it is a mistake, remove it or give '
+        'it a large relativeVariance, because one bad reading inflates the '
+        'noise estimate and moves the whole curve',
+      );
     }
     var at = 0;
     for (final component in model.components) {
@@ -585,34 +592,42 @@ final class FitResult {
         final isVariance = parameterSpecs[i] is VarianceParameter;
         switch (parameterStatus[i]) {
           case ParameterStatus.shrunkToNothing:
-            found.add(stationary
-                ? 'the $label was shrunk to the bottom of its bracket: the '
-                    'component contributes nothing to this data, and the '
-                    'width reported for it is one-sided'
-                : 'the $label was shrunk to the bottom of its bracket: the '
-                    'data shows no sign of the component changing over time, '
-                    'so it is fitted as fixed, and the width reported for it '
-                    'is one-sided');
+            found.add(
+              stationary
+                  ? 'the $label was shrunk to the bottom of its bracket: the '
+                        'component contributes nothing to this data, and the '
+                        'width reported for it is one-sided'
+                  : 'the $label was shrunk to the bottom of its bracket: the '
+                        'data shows no sign of the component changing over time, '
+                        'so it is fitted as fixed, and the width reported for it '
+                        'is one-sided',
+            );
           case ParameterStatus.beyondBracket:
-            found.add(stationary && isVariance
-                ? 'the $label finished at the top of its bracket, which means '
-                    'the component has taken over the measurement noise and '
-                    'the fitted noise level is too small; pass '
-                    'minimumMeasurementVariance at what the instrument can '
-                    'resolve'
-                : 'the $label finished at the top of its bracket, so the real '
-                    'optimum may be outside it');
+            found.add(
+              stationary && isVariance
+                  ? 'the $label finished at the top of its bracket, which means '
+                        'the component has taken over the measurement noise and '
+                        'the fitted noise level is too small; pass '
+                        'minimumMeasurementVariance at what the instrument can '
+                        'resolve'
+                  : 'the $label finished at the top of its bracket, so the real '
+                        'optimum may be outside it',
+            );
           case ParameterStatus.determined:
             if (plateauDecadesByParameter[i] > 2) {
-              found.add('the $label can move '
-                  '${plateauDecadesByParameter[i].toStringAsFixed(1)} decades '
-                  'without the fit getting half a nat worse, so its value is a '
-                  'convention rather than a finding');
+              found.add(
+                'the $label can move '
+                '${plateauDecadesByParameter[i].toStringAsFixed(1)} decades '
+                'without the fit getting half a nat worse, so its value is a '
+                'convention rather than a finding',
+              );
             } else if (pinnedShape >= 0 && pinnedShape != i) {
-              found.add('the width reported for the $label was measured with '
-                  'the ${parameterSpecs[pinnedShape].label} held on its bound, '
-                  'so it says how sharp the likelihood is there and not how '
-                  'well the data determines it');
+              found.add(
+                'the width reported for the $label was measured with '
+                'the ${parameterSpecs[pinnedShape].label} held on its bound, '
+                'so it says how sharp the likelihood is there and not how '
+                'well the data determines it',
+              );
             }
         }
       }
@@ -632,8 +647,9 @@ final class FitResult {
 
   @override
   String toString() {
-    final ratios =
-        varianceRatios.map((r) => r.toStringAsPrecision(4)).join(', ');
+    final ratios = varianceRatios
+        .map((r) => r.toStringAsPrecision(4))
+        .join(', ');
     return 'FitResult(varianceRatios: [$ratios], measurementVariance: '
         '${measurementVariance.toStringAsPrecision(4)}, logLik: '
         '${logMarginalLikelihood.toStringAsFixed(3)}, evaluations: '
@@ -657,20 +673,19 @@ FitResult newFitResult({
   required int diffuseDimension,
   bool measurementVariancePinned = false,
   ({double time, double score})? largestResidual,
-}) =>
-    FitResult._(
-      model: model,
-      logMarginalLikelihood: logMarginalLikelihood,
-      logPenalty: logPenalty,
-      penalty: penalty,
-      varianceRatios: varianceRatios,
-      evaluations: evaluations,
-      converged: converged,
-      plateauDecadesByParameter: plateauDecadesByParameter,
-      plateauWidthByParameter: plateauWidthByParameter,
-      parameterStatus: parameterStatus,
-      parameterSpecs: parameterSpecs,
-      diffuseDimension: diffuseDimension,
-      measurementVariancePinned: measurementVariancePinned,
-      largestResidual: largestResidual,
-    );
+}) => FitResult._(
+  model: model,
+  logMarginalLikelihood: logMarginalLikelihood,
+  logPenalty: logPenalty,
+  penalty: penalty,
+  varianceRatios: varianceRatios,
+  evaluations: evaluations,
+  converged: converged,
+  plateauDecadesByParameter: plateauDecadesByParameter,
+  plateauWidthByParameter: plateauWidthByParameter,
+  parameterStatus: parameterStatus,
+  parameterSpecs: parameterSpecs,
+  diffuseDimension: diffuseDimension,
+  measurementVariancePinned: measurementVariancePinned,
+  largestResidual: largestResidual,
+);
