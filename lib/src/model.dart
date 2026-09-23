@@ -209,12 +209,27 @@ final class StructuralModel {
   /// [fit] with the same model and a bracket of zero width would return the
   /// same number, after a search.
   ///
+  /// [minimumMeasurementVariance], if given, is a floor on the estimate. On a
+  /// short series the estimate comes from a handful of residuals and can be
+  /// far too small; a floor at a realistic spread keeps the band honest.
+  ///
   /// Only the variances are rescaled; a shape parameter such as a length
   /// scale or a period is kept as it is.
   ///
   /// Throws [UnderdeterminedModelException] when nothing is left to estimate
   /// a scale from: fewer observations than [diffuseDimension] plus one.
-  StructuralModel withEstimatedScale(List<Observation> observations) {
+  StructuralModel withEstimatedScale(
+    List<Observation> observations, {
+    double? minimumMeasurementVariance,
+  }) {
+    final floor = minimumMeasurementVariance;
+    if (floor != null && (!(floor > 0) || !floor.isFinite)) {
+      throw ArgumentError.value(
+        floor,
+        'minimumMeasurementVariance',
+        'must be finite and positive',
+      );
+    }
     final pass = _filter(
       Timeline.merge(observations, null),
       keepHistory: false,
@@ -226,11 +241,11 @@ final class StructuralModel {
         'model\'s flat directions are located',
       );
     }
-    final estimated = pass.profileMeasurementVariance;
-    final floor = scaleFloor(observations);
-    final variance = estimated > floor ? estimated : floor;
-    final factor = variance / measurementVariance;
-    final shift = math.log(factor);
+    var variance = pass.profileMeasurementVariance;
+    final tiny = scaleFloor(observations);
+    if (!(variance > tiny)) variance = tiny;
+    if (floor != null && variance < floor) variance = floor;
+    final shift = math.log(variance / measurementVariance);
     final theta = parameters;
     final specs = parameterSpecs;
     for (var i = 0; i < theta.length; i++) {

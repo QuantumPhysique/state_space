@@ -236,7 +236,8 @@ final trend = chosen.smooth(data, grid: everyDay);
 
 `withEstimatedScale` keeps every variance ratio and sets the noise level to its
 restricted maximum likelihood estimate, in one forward pass. The curve is then
-the same whatever the noise level turns out to be; only the band changes.
+the same whatever the noise level turns out to be; only the band changes. Pass
+`minimumMeasurementVariance` to put a floor under the estimate.
 
 ## When there is not enough data
 
@@ -265,7 +266,8 @@ near order one, such as days.
 
 A band computed from a handful of readings treats the estimated noise level as
 known, so in the first week or two of a diary it is too narrow by the
-uncertainty in that estimate. A floor on the noise helps.
+uncertainty in that estimate. A floor on the noise at a realistic spread, rather
+than at the instrument's resolution, helps.
 
 ## Refitting as data arrives
 

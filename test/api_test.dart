@@ -305,6 +305,19 @@ void main() {
       );
     });
 
+    test('respects a floor on the noise and keeps the ratios under it', () {
+      final trend = StructuralModel.localLinearTrend(processVariance: 1e-3);
+      final floored = trend.withEstimatedScale(
+        data.take(10).toList(),
+        minimumMeasurementVariance: 4,
+      );
+      expect(floored.measurementVariance, 4);
+      expect(
+        (floored.components.single as LocalLinearTrend).processVariance / 4,
+        closeTo(1e-3, 1e-15),
+      );
+    });
+
     test('refuses data with nothing left over', () {
       expect(
         () => StructuralModel.localLinearTrend(
