@@ -37,8 +37,8 @@ void main() {
     expect(forecast.length, horizon.length);
     for (var i = 0; i < horizon.length; i++) {
       expect(forecast.times[i], horizon[i]);
-      expect(forecast.mean[i], closeTo(smoothed.level[i], 1e-9));
-      expect(forecast.variance[i], closeTo(smoothed.levelVariance[i], 1e-10));
+      expect(forecast.mean[i], closeTo(smoothed.mean[i], 1e-9));
+      expect(forecast.variance[i], closeTo(smoothed.variance[i], 1e-10));
     }
   });
 
@@ -48,7 +48,7 @@ void main() {
     final forecast = _model().forecast(data, Float64List.fromList([last]));
     final smoothed = _model().smooth(data);
 
-    expect(forecast.mean.single, closeTo(smoothed.level.last, 1e-9));
+    expect(forecast.mean.single, closeTo(smoothed.mean.last, 1e-9));
   });
 
   test('the band widens like the three-halves power of the horizon', () {

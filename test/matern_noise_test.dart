@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:state_space/state_space.dart';
+import 'package:state_space/authoring.dart';
 import 'package:test/test.dart';
 
 /// `Q(dt) = P_inf - A(dt) P_inf A(dt)'` is a difference of two quantities of
@@ -110,7 +110,7 @@ void main() {
       final posterior = model.smooth(data);
       expect(posterior.logMarginalLikelihood.isFinite, isTrue);
       for (var i = 0; i < posterior.length; i++) {
-        expect(posterior.levelVariance[i], greaterThanOrEqualTo(0.0));
+        expect(posterior.variance[i], greaterThanOrEqualTo(0.0));
       }
     });
   });

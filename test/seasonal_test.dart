@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:state_space/state_space.dart';
+import 'package:state_space/authoring.dart';
 import 'package:test/test.dart';
 
 MatrixBlock _transition(TrigonometricSeasonal component, double dt) {
@@ -100,21 +100,37 @@ void main() {
   });
 
   group('the seasonal specification', () {
-    test('refuses harmonics at or past the Nyquist frequency', () {
-      // Period 7 resolves three harmonics; a fourth sits above 2 pi / 2 and
-      // is an alias of one already present.
-      expect(
-          () => TrigonometricSeasonal(
-              period: 7, harmonics: 4, processVariance: 1e-3),
-          throwsArgumentError);
-      expect(
-          () => TrigonometricSeasonal(
-              period: 12, harmonics: 6, processVariance: 1e-3),
-          throwsArgumentError);
-      expect(
-          TrigonometricSeasonal(period: 12, harmonics: 5, processVariance: 1e-3)
-              .stateDim,
-          10);
+    test('refuses harmonics at or past the Nyquist frequency of the data', () {
+      // Daily readings resolve three harmonics of a weekly period; a fourth
+      // sits above pi per day and is an alias of one already present.
+      final daily = [
+        for (var i = 0; i < 60; i++)
+          Observation(i.toDouble(), 80 + math.sin(2 * math.pi * i / 7))
+      ];
+      StructuralModel model(int harmonics, double period) => StructuralModel([
+            LocalLinearTrend(processVariance: 1e-3),
+            TrigonometricSeasonal(
+                period: period, harmonics: harmonics, processVariance: 1e-3),
+          ]);
+      final refused = throwsA(isA<UnderdeterminedModelException>()
+          .having((e) => e.message, 'message', contains('Nyquist')));
+      expect(() => fit(model(4, 7), daily), refused);
+      expect(() => fit(model(6, 12), daily), refused);
+      expect(() => model(4, 7).smooth(daily), refused);
+      expect(fit(model(3, 7), daily).model.components, hasLength(2));
+    });
+
+    test('takes the time unit from the data, not from the period', () {
+      // An annual pattern with time in years and monthly readings.
+      final monthly = [
+        for (var i = 0; i < 48; i++)
+          Observation(i / 12, 80 + math.sin(2 * math.pi * i / 12))
+      ];
+      final annual = StructuralModel([
+        LocalLinearTrend(processVariance: 1e-3),
+        TrigonometricSeasonal(period: 1, harmonics: 2, processVariance: 1e-3),
+      ]);
+      expect(fit(annual, monthly).model.components, hasLength(2));
     });
 
     test('round-trips its parameter', () {
@@ -169,7 +185,7 @@ void main() {
         final t = result.times[i];
         final truth = 2 * math.cos(2 * math.pi * t / 7) +
             0.5 * math.sin(4 * math.pi * t / 7);
-        expect(result.level[i], closeTo(truth, 0.01));
+        expect(result.mean[i], closeTo(truth, 0.01));
       }
     });
 
@@ -207,7 +223,7 @@ void main() {
         () => StructuralModel([
           TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 1e-3)
         ]).smooth(short),
-        throwsA(isA<StateError>()
+        throwsA(isA<UnderdeterminedModelException>()
             .having((e) => e.message, 'message', contains('degree of freedom'))
             .having((e) => e.message, 'message',
                 contains('has not been round once'))),
@@ -220,10 +236,10 @@ void main() {
       ];
       expect(
         () => StructuralModel([
-          const LocalLinearTrend(processVariance: 1e-3),
-          const LocalLevel(processVariance: 1e-3),
+          LocalLinearTrend(processVariance: 1e-3),
+          LocalLevel(processVariance: 1e-3),
         ]).smooth(data),
-        throwsA(isA<StateError>()
+        throwsA(isA<UnderdeterminedModelException>()
             .having((e) => e.message, 'message', contains('the same signal'))),
       );
     });

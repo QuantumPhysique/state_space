@@ -31,7 +31,7 @@ void main() {
   // coefficients are states under a flat prior, so the Kalman recursion
   // estimates them along with everything else.
   final model = StructuralModel([
-    const LocalLinearTrend(processVariance: 1e-4),
+    LocalLinearTrend(processVariance: 1e-4),
     RegressionComponent([
       IndicatorRegressor('conference', [(from: 80, to: 87)]),
       IndicatorRegressor('christmas', [(from: 350, to: 364)]),

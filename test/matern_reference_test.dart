@@ -51,10 +51,9 @@ void main() {
         expect(posterior.logMarginalLikelihood,
             closeTo(dense.logLikelihood, 1e-9));
         for (var i = 0; i < data.length; i++) {
-          expect(posterior.level[i], closeTo(dense.mean[0][i], 1e-10),
+          expect(posterior.mean[i], closeTo(dense.mean[0][i], 1e-10),
               reason: 'mean at $i');
-          expect(
-              posterior.levelVariance[i], closeTo(dense.variance[0][i], 1e-11),
+          expect(posterior.variance[i], closeTo(dense.variance[0][i], 1e-11),
               reason: 'variance at $i');
         }
       });
@@ -79,9 +78,9 @@ void main() {
         measurementVariance: measurementVariance,
       );
       for (var i = 0; i < grid.length; i++) {
-        expect(posterior.level[i], closeTo(dense.mean[0][i], 1e-10),
+        expect(posterior.mean[i], closeTo(dense.mean[0][i], 1e-10),
             reason: 'mean at ${grid[i]}');
-        expect(posterior.levelVariance[i], closeTo(dense.variance[0][i], 1e-11),
+        expect(posterior.variance[i], closeTo(dense.variance[0][i], 1e-11),
             reason: 'variance at ${grid[i]}');
       }
     });
@@ -97,7 +96,7 @@ void main() {
 
     test('the restricted likelihood matches, with two flat directions', () {
       final model = StructuralModel([
-        const LocalLinearTrend(processVariance: processVariance),
+        LocalLinearTrend(processVariance: processVariance),
         Matern.threeHalves(variance: variance, lengthScale: lengthScale),
       ], measurementVariance: measurementVariance);
 
@@ -125,11 +124,11 @@ void main() {
       const kappa = diffuseVariance * measurementVariance;
       final model = StructuralModel(
         [
-          const LocalLinearTrend(processVariance: processVariance),
+          LocalLinearTrend(processVariance: processVariance),
           Matern.threeHalves(variance: variance, lengthScale: lengthScale),
         ],
         measurementVariance: measurementVariance,
-        initialization: const ApproximateDiffuse(variance: diffuseVariance),
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
       );
       final posterior = model.smooth(data);
 

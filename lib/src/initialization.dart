@@ -14,22 +14,46 @@ sealed class Initialization {
 /// A proper prior of [variance] times the model's measurement variance on
 /// every diffuse state.
 ///
-/// Simple, and wrong by about one part in [variance]. The error shows up as
+/// It never refuses: where the data cannot determine a flat direction the
+/// posterior is simply very wide. The price is accuracy. The error shows up as
 /// shrinkage of the fitted curve toward zero, and as lost precision in the
 /// smoothed covariance over the first few steps, where the answer is the
 /// difference of two numbers of order [variance].
 ///
-/// The prior is a multiple of the measurement variance rather than an absolute
-/// number so that scaling every variance in the model scales the prior too.
-/// That keeps the model scale-equivariant, which is what makes the profile
-/// likelihood used by fitting exact rather than merely close.
+/// **Use it only with a time unit that keeps rates of change near order one,
+/// such as days for a daily series.** Every diffuse state gets the same prior
+/// variance, whatever its units, so with time in seconds or milliseconds a
+/// slope's prior is many orders of magnitude too wide next to a level's, the
+/// covariance updates lose their precision, and the curve can be off by a
+/// sizeable fraction of the noise with a band of zero width. No choice of
+/// [variance] fixes that; [ExactDiffuse] does not have the problem.
+///
+/// The prior sits at the first step of the timeline, so output grid points
+/// before the first observation move it and change the answer slightly.
+///
+/// The prior is a multiple of the measurement variance so that scaling every
+/// variance in the model scales it too, which keeps the profile likelihood
+/// used by fitting exact.
 final class ApproximateDiffuse extends Initialization {
-  const ApproximateDiffuse({this.variance = 1e6})
-      : assert(variance > 0, 'variance must be positive');
+  /// A prior of [variance] times the measurement variance, which must be
+  /// finite and positive.
+  ApproximateDiffuse({this.variance = 1e6}) {
+    if (!(variance > 0) || !variance.isFinite) {
+      throw ArgumentError.value(
+          variance, 'variance', 'must be finite and positive');
+    }
+  }
 
   /// Prior variance on each diffuse state, as a multiple of the measurement
   /// variance.
   final double variance;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ApproximateDiffuse && other.variance == variance;
+
+  @override
+  int get hashCode => Object.hash(ApproximateDiffuse, variance);
 
   @override
   String toString() => 'ApproximateDiffuse(variance: $variance)';
@@ -49,13 +73,19 @@ final class ApproximateDiffuse extends Initialization {
 /// least squares problem of the size of the diffuse dimension, solved once at
 /// the end of the pass.
 ///
-/// This is exact, so the shrinkage and the lost digits of
-/// [ApproximateDiffuse] both disappear. The price is that the diffuse
-/// directions must actually be determined by the data — a two-state trend
-/// needs observations at two distinct times before it means anything, and the
-/// engine says so rather than returning a very large number.
+/// This is exact, and does not depend on the time unit or where time starts.
+/// The diffuse directions must be determined by the data: a two-state trend
+/// needs observations at two distinct times, and the engine throws
+/// [UnderdeterminedModelException] rather than returning a very large number.
 final class ExactDiffuse extends Initialization {
+  /// The default initialisation.
   const ExactDiffuse();
+
+  @override
+  bool operator ==(Object other) => other is ExactDiffuse;
+
+  @override
+  int get hashCode => (ExactDiffuse).hashCode;
 
   @override
   String toString() => 'ExactDiffuse()';

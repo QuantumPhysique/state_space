@@ -1,10 +1,10 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:state_space/authoring.dart';
 import 'package:state_space/src/engine/kalman.dart';
 import 'package:state_space/src/engine/rts.dart';
 import 'package:state_space/src/engine/timeline.dart';
-import 'package:state_space/state_space.dart';
 import 'package:test/test.dart';
 
 /// A local linear trend that starts from a known point instead of a flat
@@ -14,7 +14,7 @@ import 'package:test/test.dart';
 /// condition differs. This is the reference the sensitivity is checked
 /// against, and it is the only thing in the package that exercises
 /// [Component.properPrior].
-class AnchoredTrend extends Component {
+final class AnchoredTrend extends Component {
   const AnchoredTrend(this.inner, this.level, this.rate);
 
   final LocalLinearTrend inner;
@@ -74,7 +74,7 @@ FilterResult runFilter(List<Component> components, List<Observation> data,
         .run(Timeline.merge(data, null), keepHistory: true);
 
 void main() {
-  const trend = LocalLinearTrend(processVariance: processVariance);
+  final trend = LocalLinearTrend(processVariance: processVariance);
 
   test('the sensitivity really is the derivative of the state', () {
     // The augmentation claims x(t) = xa(t) + Xb(t) d, exactly, for any d. So
@@ -213,7 +213,7 @@ void main() {
       // two large numbers to lose them in.
       final data = series();
       final exact = posterior(data, const ExactDiffuse());
-      final wide = posterior(data, const ApproximateDiffuse(variance: 1e9));
+      final wide = posterior(data, ApproximateDiffuse(variance: 1e9));
 
       for (var t = 0; t < 2; t++) {
         for (var e = 0; e < 4; e++) {
@@ -237,9 +237,8 @@ void main() {
       final engine = posterior(data, const ExactDiffuse());
 
       for (var t = 0; t < data.length; t++) {
-        expect(result.level[t], closeTo(engine.mean[t * 2], 1e-12));
-        expect(
-            result.levelVariance[t], closeTo(engine.covariance[t * 4], 1e-12));
+        expect(result.mean[t], closeTo(engine.mean[t * 2], 1e-12));
+        expect(result.variance[t], closeTo(engine.covariance[t * 4], 1e-12));
       }
     });
   });
@@ -251,7 +250,7 @@ void main() {
     expect(
       () =>
           runFilter([trend], [const Observation(0, 80)], const ExactDiffuse()),
-      throwsA(isA<StateError>()
+      throwsA(isA<UnderdeterminedModelException>()
           .having((e) => e.message, 'message', contains('does not determine'))),
     );
   });

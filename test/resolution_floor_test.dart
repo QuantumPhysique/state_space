@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:state_space/state_space.dart';
+import 'package:state_space/authoring.dart';
 import 'package:test/test.dart';
 
 /// A shape parameter measured in time units has a floor below which it stops
@@ -48,6 +48,25 @@ void main() {
       expect(samplingResolution([Observation(4, 1), Observation(4, 2)]), 0);
     });
 
+    test('counts two readings on one morning as one visit', () {
+      // Every day weighed twice, five minutes apart: the readings are a day
+      // apart, not five minutes.
+      final doubled = [
+        for (var i = 0; i < 100; i++) ...[
+          Observation(i.toDouble(), 80),
+          Observation(i + 5 / 1440, 80.1),
+        ]
+      ];
+      expect(samplingResolution(doubled), closeTo(1, 0.01));
+      final someDoubled = [
+        for (var i = 0; i < 100; i++) ...[
+          Observation(i.toDouble(), 80),
+          if (i % 5 < 2) Observation(i + 5 / 1440, 80.1),
+        ]
+      ];
+      expect(samplingResolution(someDoubled), closeTo(1, 0.01));
+    });
+
     test('survives a diary with holidays in it', () {
       expect(
           samplingResolution([
@@ -66,13 +85,13 @@ void main() {
 
       final withoutMatern = fit(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
           ]),
           data);
       final withMatern = fit(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
             Matern.oneHalf(variance: 0.05, lengthScale: 5),
           ]),
@@ -90,7 +109,7 @@ void main() {
       final data = weekly(730);
       final fitted = fit(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
             Matern.oneHalf(variance: 0.05, lengthScale: 5),
           ]),
@@ -111,7 +130,7 @@ void main() {
       final data = weekly(730);
       final fitted = fit(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             Matern.oneHalf(variance: 0.05, lengthScale: 5),
           ]),
           data);
@@ -129,7 +148,7 @@ void main() {
       expect(samplingResolution(sparse), 10);
       final fitted = fit(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             Matern.oneHalf(variance: 0.05, lengthScale: 50),
           ]),
           sparse);
@@ -141,7 +160,7 @@ void main() {
       final data = weekly(365);
       final fitted = fit(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             Matern.oneHalf(
                 variance: 0.05,
                 lengthScale: 30,
@@ -159,14 +178,16 @@ void main() {
       expect(
           () => fit(
               StructuralModel([
-                const LocalLinearTrend(processVariance: 1e-4),
+                LocalLinearTrend(processVariance: 1e-4),
                 Matern.oneHalf(
                     variance: 0.05,
                     lengthScale: 5,
                     lengthScaleBounds: (lower: 0.1, upper: 10)),
               ]),
               sparse),
-          throwsA(isA<ArgumentError>().having((e) => e.toString(), 'message',
+          throwsA(isA<UnderdeterminedModelException>().having(
+              (e) => e.toString(),
+              'message',
               contains('is measurement noise rather than a separate'))));
     });
   });
@@ -179,7 +200,7 @@ void main() {
       ];
       final fitted = fit(
           StructuralModel([
-            const LocalLevel(processVariance: 1e-4),
+            LocalLevel(processVariance: 1e-4),
             StochasticCycle(period: 90, damping: 0.99, stationaryVariance: 0.5),
           ]),
           sparse);
@@ -194,7 +215,7 @@ void main() {
       expect(
           () => fit(
               StructuralModel([
-                const LocalLevel(processVariance: 1e-4),
+                LocalLevel(processVariance: 1e-4),
                 StochasticCycle(
                     period: 90,
                     damping: 0.99,
@@ -202,7 +223,7 @@ void main() {
                     periodBounds: (lower: 2, upper: 400)),
               ]),
               sparse),
-          throwsA(isA<ArgumentError>()
+          throwsA(isA<UnderdeterminedModelException>()
               .having((e) => e.toString(), 'message', contains('Nyquist'))));
     });
   });

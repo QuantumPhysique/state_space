@@ -51,9 +51,9 @@ void main() {
       expect(
           posterior.logMarginalLikelihood, closeTo(dense.logLikelihood, 1e-9));
       for (var i = 0; i < data.length; i++) {
-        expect(posterior.level[i], closeTo(dense.mean[0][i], 1e-10),
+        expect(posterior.mean[i], closeTo(dense.mean[0][i], 1e-10),
             reason: 'mean at $i');
-        expect(posterior.levelVariance[i], closeTo(dense.variance[0][i], 1e-11),
+        expect(posterior.variance[i], closeTo(dense.variance[0][i], 1e-11),
             reason: 'variance at $i');
       }
     });
@@ -74,9 +74,9 @@ void main() {
         measurementVariance: measurementVariance,
       );
       for (var i = 0; i < grid.length; i++) {
-        expect(posterior.level[i], closeTo(dense.mean[0][i], 1e-10),
+        expect(posterior.mean[i], closeTo(dense.mean[0][i], 1e-10),
             reason: 'mean at ${grid[i]}');
-        expect(posterior.levelVariance[i], closeTo(dense.variance[0][i], 1e-11),
+        expect(posterior.variance[i], closeTo(dense.variance[0][i], 1e-11),
             reason: 'variance at ${grid[i]}');
       }
     });
@@ -90,7 +90,7 @@ void main() {
       final data = _series(180, seed: 31);
       const processVariance = 2e-5;
       final model = StructuralModel([
-        const LocalLinearTrend(processVariance: processVariance),
+        LocalLinearTrend(processVariance: processVariance),
         StochasticCycle(
             period: period,
             damping: damping,

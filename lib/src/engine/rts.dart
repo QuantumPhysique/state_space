@@ -1,6 +1,7 @@
 import 'dart:typed_data';
 
 import '../component.dart';
+import '../exceptions.dart';
 import '../initialization.dart';
 import 'cholesky.dart';
 import 'kalman.dart';
@@ -41,11 +42,9 @@ import 'timeline.dart';
 /// actually move, gathering them into a compact block and writing the results
 /// back where they came from.
 ///
-/// This is worth doing because the backward pass is cubic in the state
-/// dimension while the forward pass is not. A trend plus twenty holiday
-/// indicators is twenty-two states, of which two move; smoothing twenty
-/// thousand points took 1.6 s and 341 MB before this and takes a small
-/// fraction of that now. See [Component.isStatic].
+/// The backward pass is cubic in the state dimension, so for a trend plus
+/// twenty holiday indicators this smooths two states rather than twenty-two.
+/// See [Component.isStatic].
 class RtsSmoother {
   /// [initialization] is what decides whether the reduction below applies, and
   /// omitting it declines the reduction rather than guessing at one: it is
@@ -110,8 +109,9 @@ class RtsSmoother {
 
   double _cachedGap = double.nan;
 
-  /// The diagonal nudge that last rescued a factorisation, or zero.
-  double _lastJitter = 0;
+  /// The diagonal nudge that last rescued a factorisation, as a fraction of
+  /// that step's mean diagonal, or zero.
+  double _lastJitterRatio = 0;
 
   static List<int> _blockOffsets(List<Component> components) {
     final offsets = <int>[];
@@ -392,47 +392,52 @@ class RtsSmoother {
   /// factor and decomposes it, nudging the diagonal if it is not quite
   /// positive definite.
   ///
-  /// The jitter that worked last time is tried first. That is not a
-  /// micro-optimisation: for any model carrying a state with no dynamics under
-  /// a proper prior, the plain factorisation fails at every single step, so the
-  /// recovery path stops being a recovery path and the promise that a singular
-  /// covariance fails loudly quietly evaporates. Trying the known-good jitter
-  /// first keeps the *unjittered* factorisation as the thing that normally
-  /// succeeds, and makes a genuine degeneracy cost escalating attempts again.
+  /// The nudge is a fraction of the step's own mean diagonal, and once one has
+  /// been needed the same fraction is tried first at the steps that follow. A
+  /// model carrying a state with no dynamics under a proper prior fails the
+  /// plain factorisation at every step, and without the reuse each of them
+  /// would pay for the escalation. Reusing a fraction rather than an amount
+  /// keeps a step with a large covariance, such as a grid point far past the
+  /// data, from imposing its nudge on steps with a small one.
   void _factorPredicted(Float64List predCov, int offset) {
     final m = _active.length;
-    if (_lastJitter > 0) {
+    var trace = 0.0;
+    for (var i = 0; i < m; i++) {
+      trace += predCov[offset + _active[i] * stateDim + _active[i]];
+    }
+    final scale = (trace / m).abs();
+    double jitterFor(double ratio) =>
+        scale > 0 ? ratio * scale : ratio * 1e-288;
+
+    if (_lastJitterRatio > 0) {
       _gatherActive(predCov, offset, _factor);
+      final jitter = jitterFor(_lastJitterRatio);
       for (var i = 0; i < m; i++) {
-        _factor[i * m + i] += _lastJitter;
+        _factor[i * m + i] += jitter;
       }
       if (choleskyFactor(_factor, m)) return;
-      _lastJitter = 0;
+      _lastJitterRatio = 0;
     }
 
     _gatherActive(predCov, offset, _factor);
     if (choleskyFactor(_factor, m)) return;
 
-    var trace = 0.0;
-    for (var i = 0; i < m; i++) {
-      trace += predCov[offset + _active[i] * stateDim + _active[i]];
-    }
-    var jitter = 1e-12 * (trace / m).abs();
-    if (jitter == 0) jitter = 1e-300;
+    var ratio = 1e-12;
     for (var attempt = 0; attempt < 6; attempt++) {
       _gatherActive(predCov, offset, _factor);
+      final jitter = jitterFor(ratio);
       for (var i = 0; i < m; i++) {
         _factor[i * m + i] += jitter;
       }
       if (choleskyFactor(_factor, m)) {
-        _lastJitter = jitter;
+        _lastJitterRatio = ratio;
         return;
       }
-      jitter *= 100;
+      ratio *= 100;
     }
-    throw StateError('the predicted covariance is not positive definite and '
-        'could not be recovered by jittering; the model is degenerate at this '
-        'step');
+    throw const NumericalBreakdownException('the predicted covariance is not '
+        'positive definite and could not be recovered by jittering: a '
+        'component\'s process noise is not a valid covariance');
   }
 
   /// Copies the active rows and columns of a caller-layout matrix into a

@@ -51,7 +51,7 @@ class Timeline {
   /// between two such steps is zero, so `A = I` and `Q = 0`, the smoother gain
   /// between them is the identity, and their smoothed moments are equal to the
   /// last bit.
-  factory Timeline.merge(List<Observation> observations, Float64List? grid) {
+  factory Timeline.merge(List<Observation> observations, List<double>? grid) {
     _checkObservations(observations);
     if (grid != null) {
       _checkGrid(grid);
@@ -142,7 +142,7 @@ class Timeline {
     }
   }
 
-  static void _checkGrid(Float64List grid) {
+  static void _checkGrid(List<double> grid) {
     for (var i = 0; i < grid.length; i++) {
       if (!grid[i].isFinite) {
         throw ArgumentError.value(grid[i], 'grid[$i]', 'not finite');

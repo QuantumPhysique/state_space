@@ -69,7 +69,7 @@ double _gaussian(math.Random random) =>
 }
 
 StructuralModel _start() => StructuralModel([
-      const LocalLinearTrend(processVariance: 1e-3),
+      LocalLinearTrend(processVariance: 1e-3),
       TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
     ]);
 

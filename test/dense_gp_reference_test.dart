@@ -227,7 +227,7 @@ void main() {
       final data = _irregularSeries(100);
 
       final forward = KalmanFilter(
-        [const LocalLinearTrend(processVariance: processVariance)],
+        [LocalLinearTrend(processVariance: processVariance)],
         measurementVariance: measurementVariance,
         initialization: const ExactDiffuse(),
       ).run(Timeline.merge(data, null));
@@ -259,14 +259,12 @@ void main() {
         measurementVariance: measurementVariance,
       ).smooth(data);
 
-      expect(smoothed.level[0], closeTo(dense.estimate[0], 1e-9));
-      expect(smoothed.slope![0], closeTo(dense.estimate[1], 1e-11));
+      expect(smoothed.mean[0], closeTo(dense.estimate[0], 1e-9));
+      expect(smoothed.trendSlope![0], closeTo(dense.estimate[1], 1e-11));
 
       // And its covariance is the estimate's covariance, all four entries.
       final timeline = Timeline.merge(data, null);
-      final components = [
-        const LocalLinearTrend(processVariance: processVariance)
-      ];
+      final components = [LocalLinearTrend(processVariance: processVariance)];
       final forward = KalmanFilter(components,
               measurementVariance: measurementVariance,
               initialization: const ExactDiffuse())
@@ -296,7 +294,7 @@ void main() {
           processVariance: processVariance,
           measurementVariance: measurementVariance);
       final forward = KalmanFilter(
-        [const LocalLinearTrend(processVariance: processVariance)],
+        [LocalLinearTrend(processVariance: processVariance)],
         measurementVariance: measurementVariance,
         initialization: const ExactDiffuse(),
       ).run(Timeline.merge(data, null));
@@ -339,9 +337,9 @@ void main() {
       );
 
       for (var i = 0; i < data.length; i++) {
-        expect(fast.level[i], closeTo(slow.mean[i], 1e-9),
+        expect(fast.mean[i], closeTo(slow.mean[i], 1e-9),
             reason: 'mean at index $i');
-        expect(fast.levelVariance[i], closeTo(slow.variance[i], 1e-9),
+        expect(fast.variance[i], closeTo(slow.variance[i], 1e-9),
             reason: 'variance at index $i');
       }
     });
@@ -369,9 +367,9 @@ void main() {
       );
 
       for (var i = 0; i < grid.length; i++) {
-        expect(fast.level[i], closeTo(slow.mean[i], 1e-9),
+        expect(fast.mean[i], closeTo(slow.mean[i], 1e-9),
             reason: 'mean at grid point $i');
-        expect(fast.levelVariance[i], closeTo(slow.variance[i], 1e-9),
+        expect(fast.variance[i], closeTo(slow.variance[i], 1e-9),
             reason: 'variance at grid point $i');
       }
     });
@@ -406,7 +404,7 @@ void main() {
 
     test('still agrees under the default, nearly diffuse prior', () {
       final data = _irregularSeries(60);
-      const defaultPrior = ApproximateDiffuse();
+      final defaultPrior = ApproximateDiffuse();
       final model = StructuralModel.localLinearTrend(
         processVariance: processVariance,
         measurementVariance: measurementVariance,
@@ -426,7 +424,7 @@ void main() {
       // a condition number around 1e10, so the reference itself is only good
       // to a few digits here. The filter is the better-conditioned of the two.
       for (var i = 0; i < data.length; i++) {
-        expect(fast.level[i], closeTo(slow.mean[i], 1e-6));
+        expect(fast.mean[i], closeTo(slow.mean[i], 1e-6));
       }
     });
   });

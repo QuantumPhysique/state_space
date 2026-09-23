@@ -1,11 +1,11 @@
 /// A single scalar measurement at a point in time.
 ///
-/// [time] is a plain double in whatever unit the caller finds natural — days
-/// since an epoch, seconds, fractional years. The package never converts it,
-/// and the process variances of the components are expressed per that unit.
+/// [time] is a plain double in the caller's own unit, and the components'
+/// process variances are expressed per that unit. The default search brackets
+/// in [fit] suit days; [TimeAxis] converts calendar dates to days.
 ///
 /// {@category Getting started}
-class Observation implements Comparable<Observation> {
+final class Observation implements Comparable<Observation> {
   /// A reading of [value] taken at [time].
   const Observation(this.time, this.value, {this.relativeVariance = 1.0});
 
@@ -19,14 +19,24 @@ class Observation implements Comparable<Observation> {
   /// variance, so the effective noise is
   /// `relativeVariance * model.measurementVariance`.
   ///
-  /// It is relative rather than absolute so that a model stays scale-free: one
-  /// number sets the noise level and these weights say how the readings differ
-  /// from each other. Use `0.5` for a reading you trust twice as much (an
-  /// average of two weighings, say), `4.0` for one you trust half as much.
+  /// Use `0.5` for a reading you trust twice as much (an average of two
+  /// weighings, say), `4.0` for one you trust half as much, and a large value
+  /// to set aside a reading you believe is a mistake. Must be finite and not
+  /// negative; zero asks for the reading to be matched exactly.
   final double relativeVariance;
 
   @override
   int compareTo(Observation other) => time.compareTo(other.time);
+
+  @override
+  bool operator ==(Object other) =>
+      other is Observation &&
+      other.time == time &&
+      other.value == value &&
+      other.relativeVariance == relativeVariance;
+
+  @override
+  int get hashCode => Object.hash(time, value, relativeVariance);
 
   @override
   String toString() => 'Observation($time, $value, '

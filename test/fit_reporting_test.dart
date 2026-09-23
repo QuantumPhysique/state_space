@@ -53,7 +53,7 @@ void main() {
 
   FitResult noisyCycle(int seed) => fit(
       StructuralModel([
-        const LocalLevel(processVariance: 1e-4),
+        LocalLevel(processVariance: 1e-4),
         StochasticCycle(period: 20, damping: 0.9, stationaryVariance: 0.1),
       ]),
       whiteNoise(400, seed));
@@ -145,7 +145,7 @@ void main() {
       // A weekly seasonal on a series with no weekly pattern.
       final fitted = fit(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
           ]),
           straightLine(400, 11));

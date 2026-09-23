@@ -85,7 +85,7 @@ void main() {
     test('and putting it back makes the evidence go away', () {
       final diagnostics = StructuralModel(
         [
-          const LocalLinearTrend(processVariance: 1e-8),
+          LocalLinearTrend(processVariance: 1e-8),
           TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-6),
         ],
         measurementVariance: 0.0625,
@@ -108,7 +108,7 @@ void main() {
         'directions', () {
       final diagnostics = StructuralModel(
         [
-          const LocalLinearTrend(processVariance: 1e-8),
+          LocalLinearTrend(processVariance: 1e-8),
           TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-6),
         ],
         measurementVariance: 0.0625,

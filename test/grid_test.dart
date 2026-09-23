@@ -31,10 +31,9 @@ void main() {
       expect(gridded.length, data.length);
       for (var i = 0; i < data.length; i++) {
         expect(gridded.times[i], data[i].time);
-        expect(gridded.level[i], closeTo(plain.level[i], 1e-12));
-        expect(
-            gridded.levelVariance[i], closeTo(plain.levelVariance[i], 1e-14));
-        expect(gridded.slope![i], closeTo(plain.slope![i], 1e-14));
+        expect(gridded.mean[i], closeTo(plain.mean[i], 1e-12));
+        expect(gridded.variance[i], closeTo(plain.variance[i], 1e-14));
+        expect(gridded.trendSlope![i], closeTo(plain.trendSlope![i], 1e-14));
       }
       expect(gridded.logMarginalLikelihood,
           closeTo(plain.logMarginalLikelihood, 1e-12));
@@ -63,9 +62,8 @@ void main() {
       // order 2e5 is still washing out.
       expect(gridded.length, dense.length);
       for (var i = 0; i < data.length; i++) {
-        expect(gridded.level[2 * i], closeTo(plain.level[i], 1e-8));
-        expect(gridded.levelVariance[2 * i],
-            closeTo(plain.levelVariance[i], 1e-8));
+        expect(gridded.mean[2 * i], closeTo(plain.mean[i], 1e-8));
+        expect(gridded.variance[2 * i], closeTo(plain.variance[i], 1e-8));
       }
     });
 
@@ -81,10 +79,8 @@ void main() {
       final result =
           _model().smooth(data, grid: Float64List.fromList([11, 35, 60]));
 
-      expect(
-          result.levelVariance[1], greaterThan(10 * result.levelVariance[0]));
-      expect(
-          result.levelVariance[1], greaterThan(10 * result.levelVariance[2]));
+      expect(result.variance[1], greaterThan(10 * result.variance[0]));
+      expect(result.variance[1], greaterThan(10 * result.variance[2]));
     });
 
     test(
@@ -95,15 +91,14 @@ void main() {
       final result = _model().smooth(data,
           grid: Float64List.fromList([last, last + 5, last + 50, last + 400]));
 
-      expect(result.levelVariance[1], greaterThan(result.levelVariance[0]));
-      expect(result.levelVariance[2], greaterThan(result.levelVariance[1]));
+      expect(result.variance[1], greaterThan(result.variance[0]));
+      expect(result.variance[2], greaterThan(result.variance[1]));
 
       // Level variance over a horizon h grows like h^3, so the band grows
       // like h^1.5: eight times the horizon should be about 22.6 times the
       // band. It falls a little short of that because part of the width is
       // uncertainty about where the series ended, which does not grow.
-      final growth =
-          math.sqrt(result.levelVariance[3] / result.levelVariance[2]);
+      final growth = math.sqrt(result.variance[3] / result.variance[2]);
       expect(growth, greaterThan(15));
       expect(growth, lessThan(math.pow(8, 1.5)));
     });
@@ -117,7 +112,7 @@ void main() {
     test('a grid with no observations at all has no answer to give', () {
       expect(
         () => _model().smooth(const [], grid: Float64List.fromList([0, 1, 2])),
-        throwsA(isA<StateError>()),
+        throwsA(isA<UnderdeterminedModelException>()),
       );
     });
 
@@ -125,10 +120,10 @@ void main() {
       final result = StructuralModel.localLinearTrend(
         processVariance: 8e-4,
         measurementVariance: 0.2,
-        initialization: const ApproximateDiffuse(),
+        initialization: ApproximateDiffuse(),
       ).smooth(const [], grid: Float64List.fromList([0, 1, 2]));
       expect(result.length, 3);
-      for (final v in result.levelVariance) {
+      for (final v in result.variance) {
         expect(v, greaterThan(1e4));
       }
     });

@@ -2,23 +2,15 @@
 /// concerned.
 ///
 /// Every parameter the package searches over lives in an unconstrained
-/// coordinate — a log for something positive, a logit for something bounded —
-/// so that no optimiser ever has to respect a constraint. Up to v0.4 that was
-/// the whole story, because every parameter in the package was a variance and
-/// they could all be treated alike. A length scale and a period cannot be, and
-/// the difference shows up in two places.
+/// coordinate (a log for something positive, a logit for something bounded),
+/// so that no optimiser has to respect a constraint. A variance and a shape
+/// parameter differ in two ways:
 ///
-/// The first is scale. [fit] concentrates the measurement variance out of the
-/// likelihood by searching the *ratio* of every other variance to it and
-/// multiplying the lot back up at the end. A length scale is not a variance and
-/// must not be multiplied back up; doing so would rescale a period in days by
-/// the noise level, which is nonsense in a way that produces a plausible-looking
-/// number rather than an error.
-///
-/// The second is the search bracket. Twenty decades below the measurement
-/// variance is a reasonable place to look for a variance ratio and an absurd
-/// place to look for a period. A component knows what range its own shape
-/// parameters live in and says so here.
+/// * Scale. [fit] searches the *ratio* of each variance to the measurement
+///   variance and multiplies it back up at the end. A length scale or a
+///   period is not multiplied.
+/// * Bracket. A variance ratio is searched over [fit]'s `lowerLogRatio` to
+///   `upperLogRatio`; a shape parameter over the range its component gives.
 ///
 /// {@category Components}
 sealed class ParameterSpec {
@@ -37,22 +29,18 @@ sealed class ParameterSpec {
   /// than a plausible-looking figure.
   bool get isLogarithmic;
 
-  /// How far the simplex should step along this axis when it starts.
+  /// How far the simplex should step along this axis when it starts, or null
+  /// to let [fit] choose from the scan resolution.
   ///
-  /// Null lets [fit] choose from the width of the bracket. It is worth setting
-  /// where the bracket's width is driven by something other than the scale of
-  /// the parameter: a cycle's period is scanned at high resolution because the
-  /// likelihood in it is multimodal, and deriving a simplex step from that
-  /// resolution would give the period axis a displacement thirty times smaller
-  /// than the variance axes for no reason connected to either.
+  /// Set it when the scan resolution is fine for a reason unrelated to the
+  /// parameter's scale, as for a cycle's period.
   double? get searchStep => null;
 }
 
-/// A log variance, in squared signal units.
-///
-/// This is what every parameter in the package was until v0.5, and it is still
-/// the default for a component that does not say otherwise.
+/// A log variance, in squared signal units, and the default for a component
+/// that does not say otherwise.
 final class VarianceParameter extends ParameterSpec {
+  /// A variance, described in [FitResult.warnings] as [label].
   const VarianceParameter({this.label = 'variance'});
 
   @override
@@ -60,6 +48,13 @@ final class VarianceParameter extends ParameterSpec {
 
   @override
   bool get isLogarithmic => true;
+
+  @override
+  bool operator ==(Object other) =>
+      other is VarianceParameter && other.label == label;
+
+  @override
+  int get hashCode => Object.hash(VarianceParameter, label);
 
   @override
   String toString() => 'VarianceParameter($label)';
@@ -73,14 +68,12 @@ final class VarianceParameter extends ParameterSpec {
 /// a logit for a damping factor.
 ///
 /// [scanPoints] overrides the resolution of the coordinate scan on this axis
-/// alone. It exists for the one case that genuinely needs it: the likelihood in
-/// a cycle's period is multimodal, with secondary maxima at half and twice the
-/// truth, and a scan coarse enough to step over the real peak will find one of
-/// those instead. Everything else is content with the caller's default.
+/// alone, for a likelihood that is multimodal in this parameter, as a cycle's
+/// period is.
 final class ShapeParameter extends ParameterSpec {
-  /// Validates rather than asserts, because a bracket that excludes the answer
-  /// produces a confident wrong number rather than a crash, and that is not a
-  /// failure worth shipping to release builds.
+  /// A shape parameter searched over [lower] to [upper], a finite non-empty
+  /// range. [scanPoints], if given, must be at least 3 and [searchStep]
+  /// finite and positive.
   ShapeParameter({
     required this.lower,
     required this.upper,
@@ -121,6 +114,20 @@ final class ShapeParameter extends ParameterSpec {
   /// How many points the coordinate scan places across the bracket, or null to
   /// use whatever [fit] was told.
   final int? scanPoints;
+
+  @override
+  bool operator ==(Object other) =>
+      other is ShapeParameter &&
+      other.label == label &&
+      other.lower == lower &&
+      other.upper == upper &&
+      other.scanPoints == scanPoints &&
+      other.searchStep == searchStep &&
+      other.isLogarithmic == isLogarithmic;
+
+  @override
+  int get hashCode => Object.hash(ShapeParameter, label, lower, upper,
+      scanPoints, searchStep, isLogarithmic);
 
   @override
   String toString() => 'ShapeParameter($label, lower: $lower, upper: $upper'

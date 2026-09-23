@@ -28,18 +28,21 @@ typedef LjungBoxResult = ({
 /// charges for.
 ///
 /// {@category Choosing a model}
-class InnovationDiagnostics {
-  /// Built by `StructuralModel.diagnose`.
+final class InnovationDiagnostics {
+  /// Diagnostics for standardised [residuals] at [times], which must have the
+  /// same length. `StructuralModel.diagnose` builds one from a model; any
+  /// other source of standardised residuals works too.
   InnovationDiagnostics({
-    required this.times,
-    required this.residuals,
-  }) {
+    required Float64List times,
+    required Float64List residuals,
+  })  : times = Float64List.fromList(times).asUnmodifiableView(),
+        residuals = Float64List.fromList(residuals).asUnmodifiableView() {
     if (times.length != residuals.length) {
       throw ArgumentError('times and residuals must have the same length');
     }
   }
 
-  /// Time of each residual, ascending. The first few observations are absent:
+  /// Time of each residual, ascending, as a read-only view. The first few observations are absent:
   /// they are spent locating the flat directions.
   final Float64List times;
 

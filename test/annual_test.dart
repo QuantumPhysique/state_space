@@ -40,7 +40,7 @@ List<Observation> _withoutAnnual(int days, {int seed = 3}) {
 }
 
 StructuralModel _model() => StructuralModel([
-      const LocalLinearTrend(processVariance: 1e-5),
+      LocalLinearTrend(processVariance: 1e-5),
       TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-5),
       TrigonometricSeasonal(
           period: 365.25, harmonics: 2, processVariance: 1e-5),
@@ -144,7 +144,7 @@ void main() {
       final annual = _meanStandardDeviation(posterior, 2);
       final weekly = _meanStandardDeviation(posterior, 1);
       var total = 0.0;
-      for (final value in posterior.levelVariance) {
+      for (final value in posterior.variance) {
         total += math.sqrt(value);
       }
       total /= posterior.length;

@@ -8,14 +8,17 @@ import 'parameter_spec.dart';
 import 'stats/normal.dart';
 
 /// A central interval, in the units of the observations.
-typedef Interval = ({double lo, double hi});
+typedef Band = ({double lo, double hi});
+
+/// A central interval at every output time, as two arrays of the same length.
+typedef Bands = ({Float64List lo, Float64List hi});
 
 /// The posterior of one regression coefficient.
 ///
 /// A constant state under a flat prior, so the smoother returns the same
 /// number at every step and there is one figure to report rather than a curve.
-class Coefficient {
-  const Coefficient({
+final class Coefficient {
+  const Coefficient._({
     required this.name,
     required this.estimate,
     required this.variance,
@@ -35,11 +38,9 @@ class Coefficient {
 
   /// A central credible interval for the coefficient.
   ///
-  /// Note that this is a posterior interval and not a confidence interval
-  /// derived from asymptotics. Nothing here is at a boundary — a coefficient
-  /// is free to be any real number — so the usual warning about parameters
-  /// pinned at zero does not apply to these, only to the variances.
-  Interval interval({double coverage = 0.95}) {
+  /// This is a posterior interval, not a confidence interval derived from
+  /// asymptotics.
+  Band interval({double coverage = 0.95}) {
     final half = twoSidedZ(coverage) * standardError;
     return (lo: estimate - half, hi: estimate + half);
   }
@@ -49,48 +50,88 @@ class Coefficient {
       '+/- ${standardError.toStringAsFixed(3)}';
 }
 
-/// The posterior of a fitted model, evaluated at each requested output time.
+/// Builds a [Coefficient]. Internal to the package.
+Coefficient newCoefficient(
+        {required String name,
+        required double estimate,
+        required double variance}) =>
+    Coefficient._(name: name, estimate: estimate, variance: variance);
+
+Float64List _view(Float64List list) => list.asUnmodifiableView();
+
+Bands _bands(
+    Float64List mean, Float64List variance, double extra, double coverage) {
+  final z = twoSidedZ(coverage);
+  final lo = Float64List(mean.length);
+  final hi = Float64List(mean.length);
+  for (var i = 0; i < mean.length; i++) {
+    final half = z * math.sqrt(variance[i] + extra);
+    lo[i] = mean[i] - half;
+    hi[i] = mean[i] + half;
+  }
+  return (lo: lo, hi: hi);
+}
+
+/// The posterior of a model, evaluated at each requested output time.
 ///
 /// Every array has the same length and the same ordering: the observation
-/// times, or the output grid if one was given.
+/// times, or the output grid if one was given. The arrays are read-only views.
 ///
 /// {@category Getting started}
-class SmoothingResult {
-  /// Built by [StructuralModel.smooth]; there is no reason to construct one
-  /// by hand outside a test.
-  SmoothingResult({
-    required this.times,
-    required this.level,
-    required this.levelVariance,
-    required this.slope,
-    required this.slopeVariance,
-    required this.logMarginalLikelihood,
-    required this.measurementVariance,
+final class SmoothingResult {
+  SmoothingResult._({
+    required Float64List times,
+    required Float64List mean,
+    required Float64List variance,
     required List<Float64List> componentMeans,
     required List<Float64List> componentVariances,
-    List<Coefficient> coefficients = const [],
-  })  : _componentMeans = componentMeans,
-        _componentVariances = componentVariances,
+    required List<Float64List?> componentSlopes,
+    required List<Float64List?> componentSlopeVariances,
+    required this.trendIndex,
+    required this.logMarginalLikelihood,
+    required this.measurementVariance,
+    required List<Coefficient> coefficients,
+  })  : times = _view(times),
+        mean = _view(mean),
+        variance = _view(variance),
+        _componentMeans = [for (final m in componentMeans) _view(m)],
+        _componentVariances = [for (final v in componentVariances) _view(v)],
+        _componentSlopes = [
+          for (final s in componentSlopes) s == null ? null : _view(s)
+        ],
+        _componentSlopeVariances = [
+          for (final s in componentSlopeVariances) s == null ? null : _view(s)
+        ],
         coefficients = List.unmodifiable(coefficients);
 
   /// Output times, ascending.
   final Float64List times;
 
-  /// Posterior mean of the signal, `E[H(t) x(t) | y]` — the sum of every
-  /// component's contribution. With a single trend component this is the
-  /// smoothed level.
-  final Float64List level;
+  /// Posterior mean of the signal, `E[H(t) x(t) | y]`: the sum of every
+  /// component's contribution. [componentMean] has each one on its own.
+  final Float64List mean;
 
-  /// Posterior variance of [level]. This is uncertainty about the underlying
+  /// Posterior variance of [mean]. This is uncertainty about the underlying
   /// signal and excludes measurement noise; see [predictiveInterval].
-  final Float64List levelVariance;
+  final Float64List variance;
 
-  /// Posterior mean of the rate of change, in signal units per time unit, or
-  /// null when no component in the model has a rate state.
-  final Float64List? slope;
+  /// Index of the component [trendSlope] is read from: the first component
+  /// with a rate state, or null when none has one.
+  final int? trendIndex;
 
-  /// Posterior variance of [slope], or null alongside it.
-  final Float64List? slopeVariance;
+  /// Posterior mean of the trend's rate of change, in signal units per time
+  /// unit, or null when no component has a rate state.
+  ///
+  /// This is the rate of the trend component alone, [componentSlope] of
+  /// [trendIndex]. With a seasonal or a stationary component in the model it
+  /// is not the derivative of [mean]: [mean] includes the weekly wiggle, and
+  /// the trend's slope does not.
+  Float64List? get trendSlope =>
+      trendIndex == null ? null : _componentSlopes[trendIndex!];
+
+  /// Posterior variance of [trendSlope], or null alongside it.
+  Float64List? get trendSlopeVariance =>
+      trendIndex == null ? null : _componentSlopeVariances[trendIndex!];
 
   /// `log p(y | theta)` from the forward pass, with the diffuse burn-in
   /// excluded. The same number the textbook `O(N^3)` Gaussian process
@@ -106,15 +147,12 @@ class SmoothingResult {
 
   /// Every regression coefficient in the model, in the order the regressors
   /// appear across the model's components. Empty when there are none.
-  ///
-  /// This is where "the fortnight over Christmas was worth 1.2 kg, give or
-  /// take 0.3" comes from. The coefficients are states rather than parameters,
-  /// so they cost the optimiser nothing and arrive with the rest of the
-  /// posterior.
   final List<Coefficient> coefficients;
 
   final List<Float64List> _componentMeans;
   final List<Float64List> _componentVariances;
+  final List<Float64List?> _componentSlopes;
+  final List<Float64List?> _componentSlopeVariances;
 
   /// Number of output times.
   int get length => times.length;
@@ -122,58 +160,99 @@ class SmoothingResult {
   /// Number of components in the model this came from.
   int get componentCount => _componentMeans.length;
 
-  /// Smoothed contribution of component [index] to the signal.
-  ///
-  /// With one component this is just [level]; it exists from the first release
-  /// so that adding seasonal and regression components later is not a breaking
-  /// change for anyone who has already written a chart against it.
+  /// Smoothed contribution of component [index] to the signal, where [index]
+  /// is the component's position in [StructuralModel.components].
   Float64List componentMean(int index) => _componentMeans[index];
 
   /// Posterior variance of [componentMean].
   Float64List componentVariance(int index) => _componentVariances[index];
 
-  /// Posterior standard deviation of the signal at output index [i].
-  double levelStandardDeviation(int i) => math.sqrt(levelVariance[i]);
+  /// Posterior mean of component [index]'s rate of change, or null when that
+  /// component has no rate state. See [Component.rateStateIndex].
+  Float64List? componentSlope(int index) => _componentSlopes[index];
+
+  /// Posterior variance of [componentSlope].
+  Float64List? componentSlopeVariance(int index) =>
+      _componentSlopeVariances[index];
 
   /// Where the underlying signal is, at output index [i].
   ///
   /// This is the band to draw around a trend line. It is narrow, and most
-  /// individual measurements will fall outside it — that is not a bug, it is
-  /// the difference between "where is the trend" and "where would the next
-  /// reading land". For the latter, use [predictiveInterval].
-  Interval credibleInterval(int i, {double coverage = 0.95}) {
-    final half = twoSidedZ(coverage) * math.sqrt(levelVariance[i]);
-    return (lo: level[i] - half, hi: level[i] + half);
+  /// individual measurements fall outside it: it answers "where is the
+  /// trend", not "where would the next reading land". For the latter, use
+  /// [predictiveInterval].
+  ///
+  /// The measurement variance is treated as known. When it was estimated from
+  /// a handful of readings the band is too narrow by the uncertainty in that
+  /// estimate.
+  Band credibleInterval(int i, {double coverage = 0.95}) {
+    final half = twoSidedZ(coverage) * math.sqrt(variance[i]);
+    return (lo: mean[i] - half, hi: mean[i] + half);
   }
 
   /// Where a new measurement would fall, at output index [i]: the credible
   /// interval widened by the measurement noise. Roughly 95% of the observed
   /// points should sit inside the 95% version of this band.
-  Interval predictiveInterval(int i, {double coverage = 0.95}) {
+  Band predictiveInterval(int i, {double coverage = 0.95}) {
     final half =
-        twoSidedZ(coverage) * math.sqrt(levelVariance[i] + measurementVariance);
-    return (lo: level[i] - half, hi: level[i] + half);
+        twoSidedZ(coverage) * math.sqrt(variance[i] + measurementVariance);
+    return (lo: mean[i] - half, hi: mean[i] + half);
   }
+
+  /// [credibleInterval] at every output time, as two arrays to draw.
+  Bands credibleBand({double coverage = 0.95}) =>
+      _bands(mean, variance, 0, coverage);
+
+  /// [predictiveInterval] at every output time, as two arrays to draw.
+  Bands predictiveBand({double coverage = 0.95}) =>
+      _bands(mean, variance, measurementVariance, coverage);
 }
+
+/// Builds a [SmoothingResult]. Internal to the package.
+SmoothingResult newSmoothingResult({
+  required Float64List times,
+  required Float64List mean,
+  required Float64List variance,
+  required double logMarginalLikelihood,
+  required double measurementVariance,
+  List<Float64List> componentMeans = const [],
+  List<Float64List> componentVariances = const [],
+  List<Float64List?> componentSlopes = const [],
+  List<Float64List?> componentSlopeVariances = const [],
+  int? trendIndex,
+  List<Coefficient> coefficients = const [],
+}) =>
+    SmoothingResult._(
+      times: times,
+      mean: mean,
+      variance: variance,
+      componentMeans: componentMeans,
+      componentVariances: componentVariances,
+      componentSlopes: componentSlopes,
+      componentSlopeVariances: componentSlopeVariances,
+      trendIndex: trendIndex,
+      logMarginalLikelihood: logMarginalLikelihood,
+      measurementVariance: measurementVariance,
+      coefficients: coefficients,
+    );
 
 /// The signal projected past the end of the data.
 ///
-/// Forecast uncertainty grows quickly and does so at a rate the model
-/// determines: for a local linear trend the variance of the level grows like
-/// the cube of the horizon, so the band widens like its three-halves power.
-/// That is a statement about the model, not a defect of it — a trend whose
-/// slope is free to wander really does become unknowable, and a band that
-/// stayed narrow would be lying.
+/// For a local linear trend the variance of the forecast grows like the cube
+/// of the horizon, so the band widens like its three-halves power. That is the
+/// model's statement that a trend whose slope is free to wander becomes
+/// unknowable, not a defect.
 ///
 /// {@category Getting started}
-class ForecastResult {
-  /// Built by [StructuralModel.forecast].
-  ForecastResult({
-    required this.times,
-    required this.mean,
-    required this.variance,
+final class ForecastResult {
+  ForecastResult._({
+    required Float64List times,
+    required Float64List mean,
+    required Float64List variance,
     required this.measurementVariance,
-  });
+  })  : times = _view(times),
+        mean = _view(mean),
+        variance = _view(variance);
 
   /// The requested horizon, ascending.
   final Float64List times;
@@ -191,7 +270,7 @@ class ForecastResult {
   int get length => times.length;
 
   /// Where the signal itself is heading.
-  Interval credibleInterval(int i, {double coverage = 0.95}) {
+  Band credibleInterval(int i, {double coverage = 0.95}) {
     final half = twoSidedZ(coverage) * math.sqrt(variance[i]);
     return (lo: mean[i] - half, hi: mean[i] + half);
   }
@@ -199,12 +278,34 @@ class ForecastResult {
   /// Where an actual future reading would fall: the same band widened by the
   /// measurement noise. This is the one to use for a question like "when will
   /// the scale read 75?", because the scale reading includes the noise.
-  Interval predictiveInterval(int i, {double coverage = 0.95}) {
+  Band predictiveInterval(int i, {double coverage = 0.95}) {
     final half =
         twoSidedZ(coverage) * math.sqrt(variance[i] + measurementVariance);
     return (lo: mean[i] - half, hi: mean[i] + half);
   }
+
+  /// [credibleInterval] at every horizon time, as two arrays to draw.
+  Bands credibleBand({double coverage = 0.95}) =>
+      _bands(mean, variance, 0, coverage);
+
+  /// [predictiveInterval] at every horizon time, as two arrays to draw.
+  Bands predictiveBand({double coverage = 0.95}) =>
+      _bands(mean, variance, measurementVariance, coverage);
 }
+
+/// Builds a [ForecastResult]. Internal to the package.
+ForecastResult newForecastResult({
+  required Float64List times,
+  required Float64List mean,
+  required Float64List variance,
+  required double measurementVariance,
+}) =>
+    ForecastResult._(
+      times: times,
+      mean: mean,
+      variance: variance,
+      measurementVariance: measurementVariance,
+    );
 
 /// What became of one parameter during a fit.
 enum ParameterStatus {
@@ -212,23 +313,28 @@ enum ParameterStatus {
   /// away on both sides of it. The estimate means what it says.
   determined,
 
-  /// The optimum sits at the bottom of the bracket: the component has been
-  /// shrunk out of the model rather than estimated.
+  /// The optimum sits at the bottom of the bracket rather than being
+  /// estimated.
+  ///
+  /// What that means depends on the parameter. For the variance driving a
+  /// trend or a seasonal it means the component does not change over time: it
+  /// is still in the model, fitted as a fixed line or a fixed pattern. For the
+  /// variance of a stationary component it means the component contributes
+  /// nothing.
   ///
   /// A variance of zero is the edge of the parameter space, not an interior
-  /// point, and the usual asymptotics do not hold there. Whatever width is
-  /// reported for such a parameter is one-sided — the likelihood cannot fall
-  /// away below a boundary it cannot cross — so it is not an error bar and
-  /// should not be quoted as one. The useful reading is qualitative: the data
-  /// gives this component nothing to do.
+  /// point, and the usual asymptotics do not hold there. The width reported
+  /// for such a parameter is one-sided, so it is not an error bar.
   shrunkToNothing,
 
-  /// The optimum sits at the top of the bracket, so the real one is probably
+  /// The optimum sits at the top of the bracket, so the real one may be
   /// outside it.
   ///
-  /// Almost always a unit problem. A trend's variance is per cubed time unit,
-  /// so measuring time in seconds rather than days moves the optimum about
-  /// fifteen decades; widen the bracket or change the unit.
+  /// For a trend's variance this is usually the time unit: the variance is per
+  /// cubed time unit, so measuring time in seconds rather than days moves the
+  /// optimum about fifteen decades. For a stationary component's variance it
+  /// usually means the component has taken over the measurement noise; see
+  /// [FitResult.warnings].
   beyondBracket,
 }
 
@@ -236,24 +342,27 @@ enum ParameterStatus {
 /// to tell a well-determined answer from a shrug.
 ///
 /// {@category Choosing a model}
-class FitResult {
-  /// Built by [fit].
-  FitResult({
+final class FitResult {
+  FitResult._({
     required this.model,
     required this.logMarginalLikelihood,
     required this.logPenalty,
     required this.penalty,
-    required this.varianceRatios,
     required this.evaluations,
     required this.converged,
-    required this.plateauDecadesByParameter,
-    required this.plateauWidthByParameter,
     required List<ParameterStatus> parameterStatus,
     required List<ParameterSpec> parameterSpecs,
     required this.diffuseDimension,
-    this.measurementVariancePinned = false,
+    required this.measurementVariancePinned,
+    required this.largestResidual,
+    required Float64List varianceRatios,
+    required Float64List plateauDecadesByParameter,
+    required Float64List plateauWidthByParameter,
   })  : parameterStatus = List.unmodifiable(parameterStatus),
-        parameterSpecs = List.unmodifiable(parameterSpecs);
+        parameterSpecs = List.unmodifiable(parameterSpecs),
+        varianceRatios = _view(varianceRatios),
+        plateauDecadesByParameter = _view(plateauDecadesByParameter),
+        plateauWidthByParameter = _view(plateauWidthByParameter);
 
   /// The fitted model: components at their estimated variances, and the
   /// analytically concentrated measurement variance.
@@ -351,7 +460,7 @@ class FitResult {
   /// How many flat directions this fit integrated out.
   ///
   /// Zero under [ApproximateDiffuse]. Under [ExactDiffuse] it is the number of
-  /// diffuse states, which is two for a trend, one per harmonic pair for a
+  /// diffuse states, which is two for a trend, two per harmonic for a
   /// seasonal, one per regression column, and none for a stationary component.
   /// It is what [logMarginalLikelihood] has to match before two fits can be
   /// compared.
@@ -377,6 +486,15 @@ class FitResult {
   /// means [measurementVariance] is the maximum-likelihood estimate, floor or
   /// no floor.
   final bool measurementVariancePinned;
+
+  /// The observation that sits furthest from what the rest of the data
+  /// predicts for it, or null when there are too few residuals to judge.
+  ///
+  /// [score] is its one-step-ahead prediction error divided by a robust
+  /// estimate of the typical error (1.4826 times the median absolute
+  /// residual), so the bad reading does not hide itself by inflating the
+  /// scale it is measured against. Gaussian noise almost never exceeds 6.
+  final ({double time, double score})? largestResidual;
 
   /// Whether any parameter finished at an edge of the search bracket.
   ///
@@ -424,28 +542,37 @@ class FitResult {
   /// What is worth knowing about this fit before quoting anything from it, in
   /// plain sentences, empty when there is nothing to say.
   ///
-  /// Three things are reported, and the third is the one that is easy to miss.
+  /// Five things are reported:
   ///
-  /// 1. A parameter that finished on a bound. Its estimate is a boundary, not
+  /// 1. A reading far from what the rest of the data predicts for it (see
+  ///    [largestResidual]). The fit is Gaussian, so one mistyped value
+  ///    inflates the noise estimate and moves the whole curve; screen it out
+  ///    or give it a large [Observation.relativeVariance].
+  /// 2. A parameter that finished on a bound. Its estimate is a boundary, not
   ///    an interior optimum, and the width beside it is one-sided.
-  /// 2. A parameter the data barely constrains, meaning a plateau over two
-  ///    decades wide.
-  /// 3. **A parameter whose width was measured while a shape parameter of the
-  ///    same component sat on a bound.** Every width here is conditional on
-  ///    the other parameters, so a bound elsewhere in the component can make
-  ///    one look sharp for a reason that is not about the data. A
-  ///    `StochasticCycle` fitted to a series with no cycle in it pushes the
-  ///    damping to the top of its bracket, where the component is a rigid
-  ///    sinusoid whose likelihood in frequency is as narrow as a periodogram
-  ///    spike — and then reports the period as pinned to a thousandth of a
-  ///    decade. Nothing about that is wrong arithmetically and all of it is
-  ///    misleading.
+  /// 3. A stationary component's variance at the top of its bracket, which
+  ///    means it has taken over the measurement noise.
+  /// 4. A parameter the data barely constrains: a plateau over two decades
+  ///    wide.
+  /// 5. A parameter whose width was measured while a shape parameter of the
+  ///    same component sat on a bound, which can make it look sharp for a
+  ///    reason that is not about the data. See [StochasticCycle] for the
+  ///    common case.
   List<String> get warnings {
     final found = <String>[];
+    final outlier = largestResidual;
+    if (outlier != null && outlier.score.abs() > outlierScore) {
+      found.add('the reading at time ${outlier.time} is '
+          '${outlier.score.abs().toStringAsFixed(1)} typical errors from what '
+          'the rest of the data predicts; if it is a mistake, remove it or give '
+          'it a large relativeVariance, because one bad reading inflates the '
+          'noise estimate and moves the whole curve');
+    }
     var at = 0;
     for (final component in model.components) {
       final count = component.parameterCount;
-      final name = component.runtimeType.toString();
+      final name = component.name;
+      final stationary = !component.diffuseStates.contains(true);
       var pinnedShape = -1;
       for (var i = at; i < at + count; i++) {
         if (parameterSpecs[i] is ShapeParameter &&
@@ -455,14 +582,26 @@ class FitResult {
       }
       for (var i = at; i < at + count; i++) {
         final label = '${parameterSpecs[i].label} of $name';
+        final isVariance = parameterSpecs[i] is VarianceParameter;
         switch (parameterStatus[i]) {
           case ParameterStatus.shrunkToNothing:
-            found.add('the $label was shrunk to the bottom of its bracket '
-                'rather than estimated: the data gives it nothing to do, and '
-                'the width reported for it is one-sided');
+            found.add(stationary
+                ? 'the $label was shrunk to the bottom of its bracket: the '
+                    'component contributes nothing to this data, and the '
+                    'width reported for it is one-sided'
+                : 'the $label was shrunk to the bottom of its bracket: the '
+                    'data shows no sign of the component changing over time, '
+                    'so it is fitted as fixed, and the width reported for it '
+                    'is one-sided');
           case ParameterStatus.beyondBracket:
-            found.add('the $label finished at the top of its bracket, so the '
-                'real optimum is probably outside it');
+            found.add(stationary && isVariance
+                ? 'the $label finished at the top of its bracket, which means '
+                    'the component has taken over the measurement noise and '
+                    'the fitted noise level is too small; pass '
+                    'minimumMeasurementVariance at what the instrument can '
+                    'resolve'
+                : 'the $label finished at the top of its bracket, so the real '
+                    'optimum may be outside it');
           case ParameterStatus.determined:
             if (plateauDecadesByParameter[i] > 2) {
               found.add('the $label can move '
@@ -482,6 +621,9 @@ class FitResult {
     return found;
   }
 
+  /// The [largestResidual] score above which [warnings] reports a reading.
+  static const double outlierScore = 6;
+
   /// True when the likelihood surface is too flat to support the estimate.
   bool get isFlat => plateauDecades > 2;
 
@@ -498,3 +640,37 @@ class FitResult {
         '$evaluations, converged: $converged)';
   }
 }
+
+/// Builds a [FitResult]. Internal to the package.
+FitResult newFitResult({
+  required StructuralModel model,
+  required double logMarginalLikelihood,
+  required double logPenalty,
+  required Penalty penalty,
+  required Float64List varianceRatios,
+  required int evaluations,
+  required bool converged,
+  required Float64List plateauDecadesByParameter,
+  required Float64List plateauWidthByParameter,
+  required List<ParameterStatus> parameterStatus,
+  required List<ParameterSpec> parameterSpecs,
+  required int diffuseDimension,
+  bool measurementVariancePinned = false,
+  ({double time, double score})? largestResidual,
+}) =>
+    FitResult._(
+      model: model,
+      logMarginalLikelihood: logMarginalLikelihood,
+      logPenalty: logPenalty,
+      penalty: penalty,
+      varianceRatios: varianceRatios,
+      evaluations: evaluations,
+      converged: converged,
+      plateauDecadesByParameter: plateauDecadesByParameter,
+      plateauWidthByParameter: plateauWidthByParameter,
+      parameterStatus: parameterStatus,
+      parameterSpecs: parameterSpecs,
+      diffuseDimension: diffuseDimension,
+      measurementVariancePinned: measurementVariancePinned,
+      largestResidual: largestResidual,
+    );

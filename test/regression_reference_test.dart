@@ -43,7 +43,7 @@ void main() {
     // is the corresponding diagonal of `(B' C^-1 B)^-1`.
     final data = _series(330);
     final components = [
-      const LocalLinearTrend(processVariance: processVariance),
+      LocalLinearTrend(processVariance: processVariance),
       _events(),
     ];
     final origin = data.first.time;
@@ -115,7 +115,7 @@ void main() {
       // At the first output time the trend's state *is* the pair of flat
       // directions, and its contribution to the signal is the level.
       expect(posterior.componentMean(0)[0], closeTo(dense.estimate[0], 1e-9));
-      expect(posterior.slope![0], closeTo(dense.estimate[1], 1e-9));
+      expect(posterior.trendSlope![0], closeTo(dense.estimate[1], 1e-9));
     });
 
     test('a coefficient reported the same way at every step', () {

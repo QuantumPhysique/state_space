@@ -27,9 +27,9 @@ Summary _worker((StructuralModel, List<Observation>) job) {
   final fitted = fit(model, data);
   final posterior = fitted.model.smooth(data);
   return (
-    level: posterior.level,
-    levelVariance: posterior.levelVariance,
-    slope: posterior.slope!,
+    level: posterior.mean,
+    levelVariance: posterior.variance,
+    slope: posterior.trendSlope!,
     coefficientEstimates: [for (final c in posterior.coefficients) c.estimate],
     coefficientNames: [for (final c in posterior.coefficients) c.name],
     logMarginalLikelihood: posterior.logMarginalLikelihood,
@@ -55,7 +55,7 @@ List<Observation> _data() {
 /// Every component type the package has, in one model, so that adding a
 /// closure or a non-transferable field to any of them fails here.
 StructuralModel _model() => StructuralModel([
-      const LocalLinearTrend(processVariance: 1e-4),
+      LocalLinearTrend(processVariance: 1e-4),
       TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-4),
       RegressionComponent([
         IndicatorRegressor('holiday', [(from: 120, to: 134)]),
@@ -126,7 +126,7 @@ void main() {
       final posterior = _model().smooth(data);
       final returned = await Isolate.run(() => posterior);
 
-      expect(returned.level, posterior.level);
+      expect(returned.mean, posterior.mean);
       expect(returned.times, posterior.times);
       expect(returned.componentMean(2), posterior.componentMean(2));
       expect(returned.coefficients.map((c) => c.name),

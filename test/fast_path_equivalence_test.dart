@@ -11,7 +11,7 @@ import 'package:test/test.dart';
 /// The generic engine is the definition of the answer; the fast path is an
 /// optimisation of it. So every assertion here is one-sided in spirit: if the
 /// two disagree, the fast path is wrong.
-const component = LocalLinearTrend(processVariance: 7e-4);
+final component = LocalLinearTrend(processVariance: 7e-4);
 const measurementVariance = 0.06;
 
 /// A deliberately awkward series: uneven gaps, a repeated timestamp, a long
@@ -59,8 +59,8 @@ void main() {
 
   for (final initialization in <Initialization>[
     const ExactDiffuse(),
-    const ApproximateDiffuse(),
-    const ApproximateDiffuse(variance: 1e3),
+    ApproximateDiffuse(),
+    ApproximateDiffuse(variance: 1e3),
   ]) {
     group('$initialization', () {
       test('the fast path is chosen at all', () {
@@ -150,8 +150,7 @@ void main() {
   group('when the fast path does not apply', () {
     test('a two-component model goes down the generic path', () {
       expect(
-        FastPath2x2.handles(
-            [component, const LocalLevel(processVariance: 1e-3)],
+        FastPath2x2.handles([component, LocalLevel(processVariance: 1e-3)],
             const ExactDiffuse()),
         isFalse,
       );
@@ -160,7 +159,7 @@ void main() {
     test('so does a one-state component', () {
       expect(
           FastPath2x2.handles(
-              [const LocalLevel(processVariance: 1e-3)], const ExactDiffuse()),
+              [LocalLevel(processVariance: 1e-3)], const ExactDiffuse()),
           isFalse);
     });
 
@@ -170,13 +169,13 @@ void main() {
       // diffuse information matrix really is singular and exact
       // initialisation says so. The wide prior answers anyway, which is what
       // makes it the right choice for checking the dispatch.
-      final components = [component, const LocalLevel(processVariance: 1e-3)];
+      final components = [component, LocalLevel(processVariance: 1e-3)];
       final viaDispatch = forwardPass(components, timeline,
           measurementVariance: measurementVariance,
-          initialization: const ApproximateDiffuse());
+          initialization: ApproximateDiffuse());
       final direct = KalmanFilter(components,
               measurementVariance: measurementVariance,
-              initialization: const ApproximateDiffuse())
+              initialization: ApproximateDiffuse())
           .run(timeline);
       expect(viaDispatch.logLikelihood, direct.logLikelihood);
     });
@@ -185,10 +184,10 @@ void main() {
         () {
       expect(
         () => forwardPass(
-            [component, const LocalLevel(processVariance: 1e-3)], timeline,
+            [component, LocalLevel(processVariance: 1e-3)], timeline,
             measurementVariance: measurementVariance,
             initialization: const ExactDiffuse()),
-        throwsA(isA<StateError>().having(
+        throwsA(isA<UnderdeterminedModelException>().having(
             (e) => e.message, 'message', contains('does not determine'))),
       );
     });

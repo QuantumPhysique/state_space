@@ -17,7 +17,7 @@ StructuralModel _trend({double processVariance = 1e-3}) =>
 StructuralModel _wideTrend() => StructuralModel.localLinearTrend(
       processVariance: 1e-3,
       measurementVariance: 0.25,
-      initialization: const ApproximateDiffuse(),
+      initialization: ApproximateDiffuse(),
     );
 
 void main() {
@@ -37,7 +37,7 @@ void main() {
       // whose size is an artefact of the prior.
       expect(
         () => _trend().smooth([const Observation(4, 82.5)]),
-        throwsA(isA<StateError>().having(
+        throwsA(isA<UnderdeterminedModelException>().having(
             (e) => e.message, 'message', contains('does not determine'))),
       );
     });
@@ -45,19 +45,19 @@ void main() {
     test('unless you ask for the older prior, which answers anyway', () {
       final result = _wideTrend().smooth([const Observation(4, 82.5)]);
       // Not exactly 82.5: the finite prior shrinks it by one part in kappa.
-      expect(result.level.single, closeTo(82.5, 1e-3));
+      expect(result.mean.single, closeTo(82.5, 1e-3));
       // Everything the single reading says is about the level; the slope keeps
       // its prior, which is enormous by construction.
-      expect(result.levelVariance.single, closeTo(0.25, 1e-4));
-      expect(result.slopeVariance!.single, greaterThan(1e4));
+      expect(result.variance.single, closeTo(0.25, 1e-4));
+      expect(result.trendSlopeVariance!.single, greaterThan(1e4));
     });
 
     test('every value identical gives that value and no slope', () {
       final data = [for (var i = 0; i < 20; i++) Observation(i * 1.5, 61.4)];
       final result = _trend().smooth(data);
       for (var i = 0; i < data.length; i++) {
-        expect(result.level[i], closeTo(61.4, 1e-9));
-        expect(result.slope![i], closeTo(0, 1e-10));
+        expect(result.mean[i], closeTo(61.4, 1e-9));
+        expect(result.trendSlope![i], closeTo(0, 1e-10));
       }
     });
 
@@ -70,11 +70,11 @@ void main() {
       final middle = Float64List.fromList([913.0]);
       final result = _trend().smooth(data, grid: middle);
 
-      expect(result.level.single.isFinite, isTrue);
-      expect(result.levelVariance.single, greaterThan(1e3));
+      expect(result.mean.single.isFinite, isTrue);
+      expect(result.variance.single, greaterThan(1e3));
 
       final atData = _trend().smooth(data);
-      for (final v in atData.levelVariance) {
+      for (final v in atData.variance) {
         expect(v.isFinite, isTrue);
         expect(v, greaterThan(0));
       }
@@ -89,8 +89,8 @@ void main() {
         const Observation(4, 14),
       ];
       final result = _trend().smooth(data);
-      expect(result.level[2], closeTo(20, 1e-9));
-      expect(result.levelVariance[2], closeTo(0, 1e-12));
+      expect(result.mean[2], closeTo(20, 1e-9));
+      expect(result.variance[2], closeTo(0, 1e-12));
     });
   });
 
@@ -120,10 +120,10 @@ void main() {
       // readings, the other of their average, and those are different numbers
       // for the same model. Aggregating duplicates is an optimisation, not a
       // requirement, and this is the sense in which it is safe.
-      expect(twice.level[3], closeTo(once.level[3], 1e-9));
-      expect(twice.level[4], closeTo(once.level[3], 1e-9));
-      expect(twice.levelVariance[4], closeTo(once.levelVariance[3], 1e-11));
-      expect(twice.level[5], closeTo(once.level[4], 1e-9));
+      expect(twice.mean[3], closeTo(once.mean[3], 1e-9));
+      expect(twice.mean[4], closeTo(once.mean[3], 1e-9));
+      expect(twice.variance[4], closeTo(once.variance[3], 1e-11));
+      expect(twice.mean[5], closeTo(once.mean[4], 1e-9));
     });
   });
 
@@ -187,8 +187,8 @@ void main() {
     final result = _trend().smooth(data);
     expect(result.logMarginalLikelihood.isFinite, isTrue);
     for (var i = 0; i < data.length; i++) {
-      expect(result.level[i].isFinite, isTrue);
-      expect(result.levelVariance[i], greaterThan(0));
+      expect(result.mean[i].isFinite, isTrue);
+      expect(result.variance[i], greaterThan(0));
     }
   });
 }
@@ -206,7 +206,7 @@ void _degenerateReporting() {
       final timeline =
           Timeline.merge([Observation(0, 80.0), Observation(1, 80.4)], null);
       final pass = forwardPass(
-        [const LocalLinearTrend(processVariance: 1e-3)],
+        [LocalLinearTrend(processVariance: 1e-3)],
         timeline,
         measurementVariance: 1,
         initialization: const ExactDiffuse(),
@@ -221,7 +221,9 @@ void _degenerateReporting() {
       expect(
           () => fit(StructuralModel.localLinearTrend(processVariance: 1),
               [Observation(0, 80.0), Observation(1, 80.4)]),
-          throwsA(isA<ArgumentError>().having((e) => e.toString(), 'message',
+          throwsA(isA<UnderdeterminedModelException>().having(
+              (e) => e.toString(),
+              'message',
               contains('too few observations'))));
     });
 

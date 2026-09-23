@@ -58,20 +58,20 @@ void main() {
     final band = posterior.credibleInterval(i);
     final measured = data.where((o) => o.time == posterior.times[i]);
     print('${posterior.times[i].toStringAsFixed(0).padLeft(4)}  '
-        '${posterior.level[i].toStringAsFixed(3)}  '
-        '${posterior.slope![i].toStringAsFixed(4).padLeft(9)}   '
+        '${posterior.mean[i].toStringAsFixed(3)}  '
+        '${posterior.trendSlope![i].toStringAsFixed(4).padLeft(9)}   '
         '[${band.lo.toStringAsFixed(2)}, ${band.hi.toStringAsFixed(2)}]'
         '${measured.isEmpty ? "" : "     ${measured.first.value.toStringAsFixed(2)}"}');
   }
 
   print('');
-  final widest = _argmax(posterior.levelVariance);
+  final widest = _argmax(posterior.variance);
   print(
       'The band is widest on day ${posterior.times[widest].toStringAsFixed(0)}, '
       'in the middle of the gap: '
-      '${(2 * 1.96 * math.sqrt(posterior.levelVariance[widest])).toStringAsFixed(2)} kg '
+      '${(2 * 1.96 * math.sqrt(posterior.variance[widest])).toStringAsFixed(2)} kg '
       'across, against '
-      '${(2 * 1.96 * math.sqrt(posterior.levelVariance[7])).toStringAsFixed(2)} kg '
+      '${(2 * 1.96 * math.sqrt(posterior.variance[7])).toStringAsFixed(2)} kg '
       'where the readings are dense. Nothing was interpolated to get there --');
   print(
       'the recursion simply had no observation to update on for three weeks.');

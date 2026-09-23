@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:state_space/state_space.dart';
+import 'package:state_space/authoring.dart';
 import 'package:test/test.dart';
 
 double _gaussian(math.Random random) =>
@@ -132,7 +132,7 @@ void main() {
       expect(component.parameters, isEmpty);
       expect(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-3),
+            LocalLinearTrend(processVariance: 1e-3),
             component,
           ]).parameterCount,
           1);
@@ -162,7 +162,7 @@ void main() {
 
       final fitted = fit(
         StructuralModel([
-          const LocalLinearTrend(processVariance: 1e-4),
+          LocalLinearTrend(processVariance: 1e-4),
           _events(),
         ]),
         data,
@@ -211,7 +211,7 @@ void main() {
             holidayEffect: holiday, conferenceEffect: -0.4, seed: seed);
         final fitted = fit(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             _events(),
           ]),
           data,
@@ -233,10 +233,10 @@ void main() {
           _withEvents(holidayEffect: 1.2, conferenceEffect: -0.4, days: 200);
       expect(
         () => StructuralModel([
-          const LocalLinearTrend(processVariance: 1e-4),
+          LocalLinearTrend(processVariance: 1e-4),
           _events(),
         ]).smooth(data),
-        throwsA(isA<StateError>()
+        throwsA(isA<UnderdeterminedModelException>()
             .having((e) => e.message, 'message', contains('"holiday"'))
             .having((e) => e.message, 'message', contains('zero everywhere'))),
       );
@@ -283,7 +283,7 @@ void main() {
 
       final withTrend = fit(
         StructuralModel([
-          const LocalLinearTrend(processVariance: 1e-4),
+          LocalLinearTrend(processVariance: 1e-4),
           _events(),
         ]),
         data,

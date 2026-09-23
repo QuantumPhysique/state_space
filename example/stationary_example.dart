@@ -50,7 +50,7 @@ void main() {
   // The same data with somewhere for the wobble to go.
   final withWobble = fit(
     StructuralModel([
-      const LocalLinearTrend(processVariance: 1e-3),
+      LocalLinearTrend(processVariance: 1e-3),
       Matern.oneHalf(variance: 0.1, lengthScale: 3),
     ]),
     data,
@@ -99,7 +99,7 @@ void main() {
   const floor = 0.029 * 0.029; // rounding to 100 g: 0.1 / sqrt(12)
   final floored = fit(
     StructuralModel([
-      const LocalLinearTrend(processVariance: 1e-3),
+      LocalLinearTrend(processVariance: 1e-3),
       Matern.oneHalf(variance: 0.1, lengthScale: 3),
     ]),
     data,

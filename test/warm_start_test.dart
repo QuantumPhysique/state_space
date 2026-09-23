@@ -22,7 +22,7 @@ void main() {
   }
 
   StructuralModel template() => StructuralModel([
-        const LocalLinearTrend(processVariance: 1e-4),
+        LocalLinearTrend(processVariance: 1e-4),
         TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-4),
       ]);
 
@@ -71,7 +71,7 @@ void main() {
   test('a parameter outside the bracket is clamped rather than refused', () {
     final data = diary(300);
     final wild = StructuralModel([
-      const LocalLinearTrend(processVariance: 1e30),
+      LocalLinearTrend(processVariance: 1e30),
       TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-40),
     ]);
     final warm = fit(wild, data, start: SearchStart.previousParameters);

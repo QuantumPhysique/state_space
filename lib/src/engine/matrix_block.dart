@@ -8,8 +8,8 @@ import 'dart:typed_data';
 /// can be written without knowing where it sits or copying anything afterwards.
 ///
 /// Indices are not bounds-checked beyond what the typed list does itself; this
-/// type is internal and lives in the filter's hot loop.
-class MatrixBlock {
+/// type lives in the filter's hot loop.
+final class MatrixBlock {
   /// A view of [rows] x [cols] starting at [offset], where consecutive rows of
   /// the view are [stride] elements apart in [storage].
   MatrixBlock(this.storage, this.offset, this.stride, this.rows, this.cols);

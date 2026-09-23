@@ -1,10 +1,11 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'package:state_space/authoring.dart';
 import 'package:state_space/src/engine/kalman.dart';
 import 'package:state_space/src/engine/rts.dart';
 import 'package:state_space/src/engine/timeline.dart';
-import 'package:state_space/state_space.dart';
+import 'package:state_space/src/result.dart' show newSmoothingResult;
 import 'package:test/test.dart';
 
 /// A regression component that declines to admit it is static.
@@ -12,7 +13,7 @@ import 'package:test/test.dart';
 /// Identical in every other respect, so smoothing a model built from it runs
 /// the full `n x n` backward pass over states the reduced path skips. That
 /// makes it the reference: if the two disagree, the reduction is wrong.
-class _Opaque extends Component {
+final class _Opaque extends Component {
   _Opaque(this.inner);
 
   final RegressionComponent inner;
@@ -107,16 +108,12 @@ void main() {
       level[k] = signal;
       variance[k] = spread;
     }
-    return SmoothingResult(
+    return newSmoothingResult(
       times: times,
-      level: level,
-      levelVariance: variance,
-      slope: null,
-      slopeVariance: null,
+      mean: level,
+      variance: variance,
       logMarginalLikelihood: result.logLikelihood,
       measurementVariance: 0.09,
-      componentMeans: const [],
-      componentVariances: const [],
     );
   }
 
@@ -136,11 +133,11 @@ void main() {
     ]) {
       test(name, () {
         final reduced = StructuralModel(
-          [const LocalLinearTrend(processVariance: 1e-4), events()],
+          [LocalLinearTrend(processVariance: 1e-4), events()],
           measurementVariance: 0.09,
         ).smooth(data, grid: grid);
         final reference = unreduced(
-            [const LocalLinearTrend(processVariance: 1e-4), _Opaque(events())],
+            [LocalLinearTrend(processVariance: 1e-4), _Opaque(events())],
             data,
             grid);
 
@@ -153,13 +150,11 @@ void main() {
 
         expect(reduced.length, reference.length);
         for (var i = 0; i < reduced.length; i++) {
-          expect(reduced.level[i],
-              closeTo(reference.level[i], tolerance(reference.level[i])),
+          expect(reduced.mean[i],
+              closeTo(reference.mean[i], tolerance(reference.mean[i])),
               reason: 'level at output $i');
-          expect(
-              reduced.levelVariance[i],
-              closeTo(reference.levelVariance[i],
-                  tolerance(reference.levelVariance[i])),
+          expect(reduced.variance[i],
+              closeTo(reference.variance[i], tolerance(reference.variance[i])),
               reason: 'variance at output $i');
         }
         expect(
@@ -171,7 +166,7 @@ void main() {
 
     test('including the coefficients and their standard errors', () {
       final model = StructuralModel(
-        [const LocalLinearTrend(processVariance: 1e-4), events()],
+        [LocalLinearTrend(processVariance: 1e-4), events()],
         measurementVariance: 0.09,
       );
       final coefficients = model.smooth(data).coefficients;
@@ -201,7 +196,7 @@ void main() {
       expect(posterior.coefficients[0].estimate, closeTo(1.0, 1e-6));
       expect(posterior.coefficients[1].estimate, closeTo(2.0, 1e-6));
       for (var i = 0; i < posterior.length; i++) {
-        expect(posterior.level[i], closeTo(flat[i].value, 1e-6));
+        expect(posterior.mean[i], closeTo(flat[i].value, 1e-6));
       }
     });
 
@@ -209,17 +204,17 @@ void main() {
       // Nothing is dropped there, because a wide proper prior gives a
       // coefficient real variance and a real gain.
       final model = StructuralModel(
-        [const LocalLinearTrend(processVariance: 1e-4), events()],
+        [LocalLinearTrend(processVariance: 1e-4), events()],
         measurementVariance: 0.09,
-        initialization: const ApproximateDiffuse(variance: 1e8),
+        initialization: ApproximateDiffuse(variance: 1e8),
       );
       final posterior = model.smooth(data);
       final exact = StructuralModel(
-        [const LocalLinearTrend(processVariance: 1e-4), events()],
+        [LocalLinearTrend(processVariance: 1e-4), events()],
         measurementVariance: 0.09,
       ).smooth(data);
       for (var i = 0; i < posterior.length; i++) {
-        expect(posterior.level[i], closeTo(exact.level[i], 1e-4));
+        expect(posterior.mean[i], closeTo(exact.mean[i], 1e-4));
       }
     });
   });

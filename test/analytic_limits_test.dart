@@ -55,8 +55,8 @@ void main() {
         var worst = 0.0;
         for (var i = 0; i < data.length; i++) {
           final expected = line.intercept + line.slope * data[i].time;
-          worst = math.max(worst, (result.level[i] - expected).abs());
-          expect(result.slope![i], closeTo(line.slope, 1e-5 * line.slope));
+          worst = math.max(worst, (result.mean[i] - expected).abs());
+          expect(result.trendSlope![i], closeTo(line.slope, 1e-5 * line.slope));
         }
         return worst;
       }
@@ -91,8 +91,8 @@ void main() {
       final mean = weighted / weight;
 
       for (var i = 0; i < data.length; i++) {
-        expect(result.level[i], closeTo(mean, 1e-8));
-        expect(result.levelVariance[i], closeTo(1 / weight, 1e-8));
+        expect(result.mean[i], closeTo(mean, 1e-8));
+        expect(result.variance[i], closeTo(1 / weight, 1e-8));
       }
     });
   });
@@ -112,10 +112,10 @@ void main() {
       ).smooth(data);
 
       for (var i = 0; i < data.length; i++) {
-        expect(result.level[i],
+        expect(result.mean[i],
             closeTo(line.intercept + line.slope * data[i].time, 1e-9),
             reason: 'level at $i');
-        expect(result.slope![i], closeTo(line.slope, 1e-11));
+        expect(result.trendSlope![i], closeTo(line.slope, 1e-11));
       }
     });
 
@@ -138,8 +138,8 @@ void main() {
       }
 
       for (var i = 0; i < data.length; i++) {
-        expect(result.level[i], closeTo(weighted / weight, 1e-12));
-        expect(result.levelVariance[i], closeTo(1 / weight, 1e-12));
+        expect(result.mean[i], closeTo(weighted / weight, 1e-12));
+        expect(result.variance[i], closeTo(1 / weight, 1e-12));
       }
     });
 
@@ -160,12 +160,13 @@ void main() {
       final backward = model.smooth(reversed);
       final n = data.length;
       for (var i = 0; i < n; i++) {
-        expect(backward.level[n - 1 - i], closeTo(forward.level[i], 1e-10),
+        expect(backward.mean[n - 1 - i], closeTo(forward.mean[i], 1e-10),
             reason: 'level at $i');
-        expect(backward.slope![n - 1 - i], closeTo(-forward.slope![i], 1e-11),
+        expect(backward.trendSlope![n - 1 - i],
+            closeTo(-forward.trendSlope![i], 1e-11),
             reason: 'slope at $i');
-        expect(backward.levelVariance[n - 1 - i],
-            closeTo(forward.levelVariance[i], 1e-12),
+        expect(
+            backward.variance[n - 1 - i], closeTo(forward.variance[i], 1e-12),
             reason: 'variance at $i');
       }
     });
@@ -185,8 +186,8 @@ void main() {
       final a = model.smooth(data);
       final b = model.smooth(shifted);
       for (var i = 0; i < data.length; i++) {
-        expect(b.level[i], closeTo(a.level[i], 1e-9));
-        expect(b.levelVariance[i], closeTo(a.levelVariance[i], 1e-9));
+        expect(b.mean[i], closeTo(a.mean[i], 1e-9));
+        expect(b.variance[i], closeTo(a.variance[i], 1e-9));
       }
       expect(b.logMarginalLikelihood, closeTo(a.logMarginalLikelihood, 1e-9));
     });
@@ -210,8 +211,8 @@ void main() {
       final a = base.smooth(data);
       final b = scaled.smooth(data);
       for (var i = 0; i < data.length; i++) {
-        expect(b.level[i], closeTo(a.level[i], 1e-9));
-        expect(b.levelVariance[i], closeTo(a.levelVariance[i] * c, 1e-9));
+        expect(b.mean[i], closeTo(a.mean[i], 1e-9));
+        expect(b.variance[i], closeTo(a.variance[i] * c, 1e-9));
       }
     });
 
@@ -239,9 +240,10 @@ void main() {
         // A prior of 1e8 sits at the sweet spot: wide enough that the
         // asymmetry it causes is down at 1e-8, narrow enough that the
         // arithmetic noise from covariances of that size has not caught up.
-        expect(backward.level[n - 1 - i], closeTo(forward.level[i], 1e-6),
+        expect(backward.mean[n - 1 - i], closeTo(forward.mean[i], 1e-6),
             reason: 'level at $i');
-        expect(backward.slope![n - 1 - i], closeTo(-forward.slope![i], 1e-6),
+        expect(backward.trendSlope![n - 1 - i],
+            closeTo(-forward.trendSlope![i], 1e-6),
             reason: 'slope at $i');
       }
     });
@@ -260,7 +262,7 @@ void main() {
     var previous = double.infinity;
     for (var n = 8; n <= data.length; n += 4) {
       final variance =
-          model.smooth(data.sublist(0, n), grid: probe).levelVariance[0];
+          model.smooth(data.sublist(0, n), grid: probe).variance[0];
       expect(variance, lessThanOrEqualTo(previous * (1 + 1e-12)),
           reason: 'variance grew when going to $n observations');
       previous = variance;

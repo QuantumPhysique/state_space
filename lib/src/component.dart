@@ -12,17 +12,29 @@ import 'parameter_spec.dart';
 ///
 /// Everything is continuous-time: [transition] and [processNoise] take a gap
 /// `dt` in whatever time unit the caller uses, and must be exact for *any*
-/// non-negative gap, including zero. That is what makes irregular sampling a
-/// non-issue rather than a special case.
+/// non-negative gap, including zero (`A(0) = I`, `Q(0) = 0`).
 ///
-/// Implementations are immutable. [withParameters] returns a new instance,
-/// which is what lets the fitting code evaluate a likelihood surface without
-/// mutating the caller's model.
+/// Implementations are immutable. [withParameters] returns a new instance.
+///
+/// To write one, extend this class and implement the nine abstract members:
+/// [stateDim], [parameterCount], [transition], [processNoise],
+/// [observationAt], [diffuseStates], [properPrior], [parameters] and
+/// [withParameters]. The rest have defaults. `checkComponent` in
+/// `package:state_space/authoring.dart` tests the properties the engine relies
+/// on.
 ///
 /// {@category Components}
 /// {@category How it works}
-abstract class Component {
+abstract base class Component {
+  /// Const, so that components can be.
   const Component();
+
+  /// A name for this component in the sentences [FitResult.warnings] writes.
+  ///
+  /// Every component in this package returns its class name as a literal.
+  /// The default reads `runtimeType`, which an obfuscated build mangles, so a
+  /// component of your own should override it.
+  String get name => runtimeType.toString();
 
   /// Number of states this component contributes.
   int get stateDim;
@@ -36,15 +48,15 @@ abstract class Component {
   void transition(double dt, MatrixBlock out);
 
   /// Writes the process-noise block `Q_i(dt)` into [out], which is
-  /// [stateDim] x [stateDim] and may contain stale values.
+  /// [stateDim] x [stateDim] and may contain stale values. It must be
+  /// symmetric and positive semi-definite.
   void processNoise(double dt, MatrixBlock out);
 
   /// Writes this component's slice of the observation row `H(t)` into [out],
   /// a view of length [stateDim].
   ///
-  /// Time-varying because a regression component's row holds the covariate
-  /// values at [time]. For the components in this release the row is constant
-  /// and [time] is ignored.
+  /// [time] matters only to a component whose row varies with time, such as a
+  /// regression column.
   void observationAt(double time, Float64List out);
 
   /// Which of this component's states have no proper prior, one flag per state.
@@ -55,13 +67,12 @@ abstract class Component {
 
   /// Writes the prior mean and covariance of the non-diffuse states.
   ///
-  /// Called once per fit. Entries belonging to diffuse states are ignored, so
-  /// a fully diffuse component may leave both arguments untouched.
+  /// Entries belonging to diffuse states are ignored, so a fully diffuse
+  /// component may leave both arguments untouched.
   void properPrior(Float64List mean, MatrixBlock covariance);
 
   /// The current parameter vector, unconstrained (variances as logs, bounded
-  /// quantities as logits). Fitting works in this space so that no optimiser
-  /// ever has to respect a constraint.
+  /// quantities as logits), as a fresh copy.
   Float64List get parameters;
 
   /// A copy of this component with [theta] as its [parameters].
@@ -69,113 +80,71 @@ abstract class Component {
 
   /// What each entry of [parameters] is, in the same order.
   ///
-  /// Defaults to a log variance for every one, which is what every component
-  /// shipped before v0.5 had and all it needed. A component with a length
-  /// scale, a period or a damping factor among its parameters must override
-  /// this, or [fit] will rescale that parameter by the fitted noise level and
-  /// search it over a bracket meant for variance ratios. See [ParameterSpec].
+  /// Defaults to a log variance for every entry. Override it if any parameter
+  /// is a length scale, a period or a damping factor; otherwise [fit] rescales
+  /// that parameter by the fitted noise level and searches it over a bracket
+  /// meant for variance ratios. See [ParameterSpec].
   List<ParameterSpec> get parameterSpecs =>
       List.filled(parameterCount, const VarianceParameter());
 
-  /// The same, narrowed by what the sampling of the data can actually resolve.
+  /// [parameterSpecs], narrowed by what data sampled every [resolution] time
+  /// units can resolve.
   ///
-  /// [resolution] is the median gap between consecutive distinct observation
-  /// times, or zero when the series is too short for that to mean anything.
-  /// The default ignores it, which is right for every parameter whose meaning
-  /// does not involve the time axis.
+  /// [resolution] is the typical gap between readings (see
+  /// `samplingResolution`), or zero when the series is too short for that to
+  /// mean anything. The default ignores it.
   ///
-  /// It exists because a *shape* parameter measured in time units has a limit
-  /// below which it stops being a different model. A Matérn with `nu = 1/2`
-  /// and a length scale far below the sampling interval is white noise, so it
-  /// competes with the measurement error rather than with the trend, and the
-  /// likelihood is happy to let it win: on daily readings with a true noise
-  /// standard deviation of 0.3, a Matérn allowed down to a length scale of
-  /// 0.01 days takes the noise for itself and the fit reports a measurement
-  /// standard deviation of 0.002. The reported noise level, the credible band
-  /// and the trend curve are all then wrong together, and only
-  /// [FitResult.atBracketEdge] says anything is amiss.
-  ///
-  /// This is the same kind of refusal as `TrigonometricSeasonal` rejecting a
-  /// harmonic at or past the Nyquist frequency, moved to where the limit
-  /// depends on the data rather than on the component alone. A caller's own
-  /// bracket is still respected — the floor can only raise the lower end, and
-  /// never past what the caller allowed.
+  /// A shape parameter measured in time units needs this. A Matérn with a
+  /// length scale far below the sampling interval is white noise and competes
+  /// with the measurement error rather than the trend; on daily readings with
+  /// a true noise standard deviation of 0.3, a Matérn allowed down to 0.01
+  /// days reports a noise standard deviation of 0.002. The floor may only
+  /// raise the lower end of a bracket, never past its upper end.
   List<ParameterSpec> parameterSpecsAt({required double resolution}) =>
       parameterSpecs;
 
   /// Root-mean-square deviation of this component's contribution from its own
   /// average, over a window of [span] time units of its own driving noise.
   ///
-  /// This exists so that a penalty can be stated in one unit for every
-  /// component. A trend's variance is per cubed time unit and a seasonal's per
-  /// time unit, so their raw parameters are not comparable and no single scale
-  /// could serve both. How much each one contributes to the spread of the data
-  /// is comparable, and is a quantity a modeller has an opinion about.
-  ///
-  /// It is deliberately the spread of the *path* and not the standard
-  /// deviation the component reaches at the end,
+  /// This is the spread of the path,
   ///
   /// ```text
   /// (1/T) integral k(t, t) dt  -  (1/T^2) double integral k(t, s) dt ds
   /// ```
   ///
-  /// because that is what the sample standard deviation of the observations
-  /// estimates, and the two differ by a constant that is not the same for
-  /// every component — a factor of sqrt(10) for a trend against sqrt(2) for a
-  /// seasonal. Using the terminal figure would silently penalise trends about
-  /// two and a half times harder than seasonals for the same visible
-  /// contribution.
+  /// with the diffuse starting point excluded. It is what [ComplexityPenalty]
+  /// measures every component in, so that a trend's variance (per cubed time
+  /// unit) and a seasonal's (per time unit) can be penalised on one scale.
   ///
-  /// The diffuse starting point is excluded. Where the component began is for
-  /// the data to say; the penalty is about how much it moves afterwards.
-  ///
-  /// It defaults to zero, which is what a component that does not move should
-  /// return and is also the right answer for one that has not worked out its
-  /// own path spread: no penalty will then shrink it. Deriving that integral
-  /// is comfortably the hardest thing in this interface, and requiring it of
-  /// somebody who only wants to add a kernel — and who may never use a
-  /// penalty, since none is on by default — was the wrong trade.
+  /// Defaults to 0, which exempts the component from [ComplexityPenalty].
   double wanderOver(double span) => 0;
 
   /// Why this component's flat directions might not be identifiable on a
-  /// series running from [from] to [to], or null if nothing about it is
-  /// suspect.
+  /// series running from [from] to [to] with readings typically [resolution]
+  /// apart, or null if nothing about it is suspect.
   ///
-  /// The engine knows nothing about seasonal periods or holiday calendars and
-  /// is not about to start. When the diffuse system comes out singular it asks
-  /// each component whether it can explain itself and pastes together whatever
-  /// comes back, which keeps the diagnosis where the knowledge is.
-  ///
-  /// Both endpoints are passed rather than the duration, because a component
-  /// may care where the series sits on the time axis and not only how long it
-  /// is: an event indicator whose occurrences all fall outside the data
-  /// contributes a column of zeros, and that is the most common way for this
-  /// to be reached at all.
-  String? identifiabilityHint(double from, double to) => null;
+  /// Called only to explain an [UnderdeterminedModelException]: the engine
+  /// adds whatever each component returns to the message. [resolution] is
+  /// zero when the series is too short to have one.
+  String? identifiabilityHint(double from, double to,
+          {double resolution = 0}) =>
+      null;
 
   /// Whether this component's states never move: `A(dt) = I` and `Q(dt) = 0`
   /// for every gap, and every state diffuse.
   ///
-  /// A regression coefficient is the case, and it is worth the engine knowing
-  /// because such a state has *no dynamics to smooth*. Under exact diffuse
-  /// initialisation its covariance conditional on the flat directions is
-  /// identically zero at every step, so the backward pass's gain has zero rows
-  /// and zero columns there: its smoothed moments equal its filtered ones, and
-  /// it contributes nothing to anyone else's. Everything such a state is worth
-  /// is carried in `dx/dd` by the forward pass and folded back in at the end.
+  /// A regression coefficient is the case. Under exact diffuse initialisation
+  /// such a state smooths to its filtered value, so declaring it lets the
+  /// backward pass, which is cubic in the state dimension, skip it: a trend
+  /// plus twenty indicators smooths two states rather than twenty-two.
   ///
-  /// Declaring it lets the smoother work on the states that actually move,
-  /// which for a trend plus twenty holiday indicators is two rather than
-  /// twenty-two — and the backward pass is cubic in that number.
-  ///
-  /// A component that returns true and then moves would be silently
-  /// mis-smoothed, so the default is false and the claim is opt-in.
+  /// A component that returns true and then moves is silently mis-smoothed,
+  /// so the default is false.
   bool get isStatic => false;
 
   /// Index within this component's block of a state holding the instantaneous
   /// rate of change of the component's contribution, or null if it has none.
   ///
-  /// Purely a convenience for reporting: it is how [stateDim]-agnostic result
-  /// objects find a slope to expose. The engine never reads it.
+  /// Read only for reporting, by [SmoothingResult.componentSlope].
   int? get rateStateIndex => null;
 }

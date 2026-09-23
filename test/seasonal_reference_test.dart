@@ -65,7 +65,7 @@ void main() {
               period: 7, harmonics: 2, processVariance: seasonalVariance)
         ],
         measurementVariance: measurementVariance,
-        initialization: const ApproximateDiffuse(variance: diffuseVariance),
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
       ).smooth(observations, grid: grid);
 
       final slow = densePosterior(
@@ -79,9 +79,9 @@ void main() {
       );
 
       for (var i = 0; i < grid.length; i++) {
-        expect(fast.level[i], closeTo(slow.mean[0][i], 1e-9),
+        expect(fast.mean[i], closeTo(slow.mean[0][i], 1e-9),
             reason: 'mean at grid point $i');
-        expect(fast.levelVariance[i], closeTo(slow.variance[0][i], 1e-9),
+        expect(fast.variance[i], closeTo(slow.variance[0][i], 1e-9),
             reason: 'variance at grid point $i');
       }
     });
@@ -114,7 +114,7 @@ void main() {
 
   group('a trend and two seasonals composed', () {
     List<Component> components() => [
-          const LocalLinearTrend(processVariance: trendVariance),
+          LocalLinearTrend(processVariance: trendVariance),
           TrigonometricSeasonal(
               period: 7, harmonics: 2, processVariance: seasonalVariance),
           TrigonometricSeasonal(
@@ -144,7 +144,7 @@ void main() {
       final fast = StructuralModel(
         components(),
         measurementVariance: measurementVariance,
-        initialization: const ApproximateDiffuse(variance: diffuseVariance),
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
       ).smooth(observations, grid: grid);
       final slow = densePosterior(observations, grid.toList(), kernels(),
           measurementVariance: measurementVariance);
@@ -161,8 +161,8 @@ void main() {
       }
 
       for (var i = 0; i < grid.length; i++) {
-        expect(fast.level[i], closeTo(slow.mean[3][i], 1e-9));
-        expect(fast.levelVariance[i], closeTo(slow.variance[3][i], 1e-9));
+        expect(fast.mean[i], closeTo(slow.mean[3][i], 1e-9));
+        expect(fast.variance[i], closeTo(slow.variance[3][i], 1e-9));
       }
     });
 

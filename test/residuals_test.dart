@@ -30,15 +30,14 @@ void main() {
   group('recursive residuals under a flat prior', () {
     final data = _series(140);
     final components = [
-      const LocalLinearTrend(processVariance: 4e-5),
+      LocalLinearTrend(processVariance: 4e-5),
       TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 3e-4),
     ];
 
     FilterResult run({bool exact = true}) => KalmanFilter(
           components,
           measurementVariance: 0.01,
-          initialization:
-              exact ? const ExactDiffuse() : const ApproximateDiffuse(),
+          initialization: exact ? ExactDiffuse() : ApproximateDiffuse(),
         ).run(Timeline.merge(data, null), keepResiduals: true);
 
     test('cost exactly one observation per flat direction', () {
@@ -77,7 +76,7 @@ void main() {
           StructuralModel(components, measurementVariance: 0.01).smooth(data);
       var inSample = 0.0;
       for (var i = 0; i < data.length; i++) {
-        final r = data[i].value - smoothed.level[i];
+        final r = data[i].value - smoothed.mean[i];
         inSample += r * r / 0.01;
       }
       expect(inSample,
@@ -150,7 +149,7 @@ void main() {
       }
 
       final forward = forwardPass(
-        [const LocalLinearTrend(processVariance: processVariance)],
+        [LocalLinearTrend(processVariance: processVariance)],
         Timeline.merge(data, null),
         measurementVariance: measurementVariance,
         initialization: const ExactDiffuse(),
@@ -175,7 +174,7 @@ void main() {
   group('both engines', () {
     test('produce the same residuals', () {
       final data = _series(90, seed: 44);
-      final component = const LocalLinearTrend(processVariance: 5e-4);
+      final component = LocalLinearTrend(processVariance: 5e-4);
       final fast = forwardPass([component], Timeline.merge(data, null),
           measurementVariance: 0.02,
           initialization: const ExactDiffuse(),

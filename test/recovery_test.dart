@@ -174,8 +174,8 @@ void main() {
       expect(
         () => fit(
             StructuralModel([
-              const LocalLinearTrend(processVariance: 1e-3),
-              const LocalLevel(processVariance: 1e-3),
+              LocalLinearTrend(processVariance: 1e-3),
+              LocalLevel(processVariance: 1e-3),
             ]),
             simulate(
               count: 50,
@@ -183,7 +183,7 @@ void main() {
               measurementVariance: 0.1,
               seed: 1,
             )),
-        throwsA(isA<StateError>()
+        throwsA(isA<UnderdeterminedModelException>()
             .having((e) => e.message, 'message', contains('the same signal'))),
       );
     });
@@ -192,7 +192,7 @@ void main() {
       expect(
         () => fit(StructuralModel.localLinearTrend(processVariance: 1),
             [const Observation(0, 1), const Observation(1, 2)]),
-        throwsArgumentError,
+        throwsA(isA<UnderdeterminedModelException>()),
       );
     });
   });

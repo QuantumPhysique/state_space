@@ -1,7 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
-import 'package:state_space/state_space.dart';
+import 'package:state_space/authoring.dart';
 import 'package:test/test.dart';
 
 /// Reads a component's block out into nested lists, which is the only shape
@@ -245,7 +245,7 @@ void main() {
 
       final fitted = fit(
         StructuralModel([
-          const LocalLinearTrend(processVariance: 1e-4),
+          LocalLinearTrend(processVariance: 1e-4),
           Matern.oneHalf(variance: 0.1, lengthScale: 3),
         ]),
         data,
@@ -292,7 +292,7 @@ void main() {
           plain.ljungBox(lags: 10, fittedParameters: 1).pValue, lessThan(0.01));
       final better = fit(
         StructuralModel([
-          const LocalLinearTrend(processVariance: 1e-4),
+          LocalLinearTrend(processVariance: 1e-4),
           Matern.oneHalf(variance: 0.1, lengthScale: 3),
         ]),
         data,

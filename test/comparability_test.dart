@@ -33,7 +33,7 @@ void main() {
       final data = series(120);
       double likelihoodAtColumnScale(double scale) {
         final model = StructuralModel([
-          const LocalLinearTrend(processVariance: 1e-4),
+          LocalLinearTrend(processVariance: 1e-4),
           RegressionComponent([
             StepRegressor('dose', Float64List.fromList([50, 60]),
                 Float64List.fromList([scale, 0]))
@@ -54,7 +54,7 @@ void main() {
       final data = series(120);
       SmoothingResult posteriorAtColumnScale(double scale) {
         final model = StructuralModel([
-          const LocalLinearTrend(processVariance: 1e-4),
+          LocalLinearTrend(processVariance: 1e-4),
           RegressionComponent([
             StepRegressor('dose', Float64List.fromList([50, 60]),
                 Float64List.fromList([scale, 0]))
@@ -66,7 +66,7 @@ void main() {
       final unit = posteriorAtColumnScale(1);
       final thousandfold = posteriorAtColumnScale(1000);
       for (var i = 0; i < unit.length; i++) {
-        expect(thousandfold.level[i], closeTo(unit.level[i], 1e-9));
+        expect(thousandfold.mean[i], closeTo(unit.mean[i], 1e-9));
       }
       // The coefficient absorbs the scale exactly, which is what makes the
       // likelihood shift a statement about units rather than about fit.
@@ -101,7 +101,7 @@ void main() {
     test('a proper prior has no such freedom, and does not move', () {
       final data = series(120);
       const q = 1e-4, r = 0.09;
-      const wide = ApproximateDiffuse(variance: 1e8);
+      final wide = ApproximateDiffuse(variance: 1e8);
       final atUnitTime = StructuralModel.localLinearTrend(
               processVariance: q, measurementVariance: r, initialization: wide)
           .logLikelihood(data);
@@ -124,19 +124,19 @@ void main() {
   group('diffuseDimension says when two fits may be subtracted', () {
     test('counts the flat directions of each component', () {
       expect(
-          StructuralModel([const LocalLinearTrend(processVariance: 1e-4)])
+          StructuralModel([LocalLinearTrend(processVariance: 1e-4)])
               .diffuseDimension,
           2);
       expect(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             TrigonometricSeasonal(
                 period: 7, harmonics: 2, processVariance: 1e-4),
           ]).diffuseDimension,
           6);
       expect(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             RegressionComponent([
               IndicatorRegressor('a', [(from: 1.0, to: 2.0)]),
               IndicatorRegressor('b', [(from: 3.0, to: 4.0)]),
@@ -148,7 +148,7 @@ void main() {
     test('a stationary component adds none', () {
       expect(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1e-4),
+            LocalLinearTrend(processVariance: 1e-4),
             Matern.oneHalf(variance: 0.05, lengthScale: 5),
           ]).diffuseDimension,
           2);
@@ -156,22 +156,21 @@ void main() {
 
     test('an approximate prior integrates nothing out', () {
       expect(
-          StructuralModel([const LocalLinearTrend(processVariance: 1e-4)],
-                  initialization: const ApproximateDiffuse())
+          StructuralModel([LocalLinearTrend(processVariance: 1e-4)],
+                  initialization: ApproximateDiffuse())
               .diffuseDimension,
           0);
     });
 
     test('isComparableWith is false exactly when the dimensions differ', () {
       final data = series(160);
-      final trend = fit(
-          StructuralModel([const LocalLinearTrend(processVariance: 1)]), data);
-      final trendAgain = fit(
-          StructuralModel([const LocalLinearTrend(processVariance: 1e-6)]),
-          data);
+      final trend =
+          fit(StructuralModel([LocalLinearTrend(processVariance: 1)]), data);
+      final trendAgain =
+          fit(StructuralModel([LocalLinearTrend(processVariance: 1e-6)]), data);
       final withMatern = fit(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1),
+            LocalLinearTrend(processVariance: 1),
             Matern.oneHalf(
                 variance: 0.05,
                 lengthScale: 5,
@@ -180,7 +179,7 @@ void main() {
           data);
       final withSeasonal = fit(
           StructuralModel([
-            const LocalLinearTrend(processVariance: 1),
+            LocalLinearTrend(processVariance: 1),
             TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1),
           ]),
           data);

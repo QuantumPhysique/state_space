@@ -40,15 +40,15 @@ double roundingFloor = math.pow(0.1 / math.sqrt(12), 2).toDouble();
 final Map<String, StructuralModel Function()> models = {
   'trend': () => StructuralModel.localLinearTrend(processVariance: 1e-3),
   'trend + weekly': () => StructuralModel([
-        const LocalLinearTrend(processVariance: 1e-3),
+        LocalLinearTrend(processVariance: 1e-3),
         TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
       ]),
   'trend + water': () => StructuralModel([
-        const LocalLinearTrend(processVariance: 1e-3),
+        LocalLinearTrend(processVariance: 1e-3),
         Matern.oneHalf(variance: 0.05, lengthScale: 3),
       ]),
   'trend + both': () => StructuralModel([
-        const LocalLinearTrend(processVariance: 1e-3),
+        LocalLinearTrend(processVariance: 1e-3),
         TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3),
         Matern.oneHalf(variance: 0.05, lengthScale: 3),
       ]),

@@ -115,7 +115,7 @@ class ResidualPieces {
     // a matrix that is singular in exact arithmetic can still hand back a
     // tiny positive pivot and a residual that means nothing.
     factor.setAll(0, information);
-    if (i >= d && choleskyFactor(factor, d)) {
+    if (i >= d && factorInformation(factor, d)) {
       estimate.setAll(0, rhs);
       for (var c = 0; c < d; c++) {
         estimate[c] = -estimate[c];
