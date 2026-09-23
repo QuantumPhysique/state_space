@@ -180,7 +180,7 @@ void main() {
     });
   });
 
-  group('what a multi-parameter FitResult reports', () {
+  group('a multi-parameter FitResult', () {
     late FitResult result;
 
     setUpAll(() {
@@ -212,7 +212,7 @@ void main() {
       expect(result.isFlat, isFalse);
     });
 
-    test('reports no penalty when none was applied', () {
+    test('has no penalty term when none was applied', () {
       expect(result.penalty, isA<NoPenalty>());
       expect(result.logPenalty, 0);
     });

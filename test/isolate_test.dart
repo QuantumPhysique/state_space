@@ -83,7 +83,7 @@ void main() {
     // test guards the promise rather than any particular rule about how to
     // write a component; it fails when something in the model or in a result
     // stops being plain data, whatever the route by which that happened.
-    test('a model goes over, a posterior comes back, and both are right',
+    test('a model and its posterior round-trip through Isolate.run unchanged',
         () async {
       final data = _data();
       final here = _worker((_model(), data));
@@ -98,7 +98,16 @@ void main() {
       expect(there.coefficientNames, here.coefficientNames);
       expect(there.coefficientEstimates, here.coefficientEstimates);
       expect(there.logMarginalLikelihood, here.logMarginalLikelihood);
-      expect(there.varianceRatios, here.varianceRatios);
+      // Shape parameters have no variance ratio and report NaN, which is
+      // compared as NaN rather than left to the matcher's notion of equality.
+      expect(there.varianceRatios.length, here.varianceRatios.length);
+      for (var i = 0; i < here.varianceRatios.length; i++) {
+        if (here.varianceRatios[i].isNaN) {
+          expect(there.varianceRatios[i].isNaN, isTrue);
+        } else {
+          expect(there.varianceRatios[i], here.varianceRatios[i]);
+        }
+      }
     });
 
     test('the model itself survives the trip, not just its output', () async {

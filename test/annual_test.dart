@@ -109,22 +109,16 @@ void main() {
   });
 
   group('an annual component on less than a year of data', () {
-    // The roadmap's advice was to always include the annual component and let
-    // the marginal likelihood shrink it to nothing, rather than gating on how
-    // much history there is. That is not what happens, and the reason is worth
-    // knowing: shrinking the variance to zero does not remove the component,
-    // it only stops it evolving. What is left is a rigid Fourier series whose
-    // starting coefficients have a flat prior that nothing shrinks -- and over
-    // less than one period, a rigid sinusoid is very nearly a constant plus a
+    // Shrinking the annual variance to zero does not remove the component; it
+    // leaves a rigid Fourier series whose starting coefficients are diffuse,
+    // and over less than one period that is very nearly a constant plus a
     // slope.
 
-    test('draws a pattern that is not there', () {
+    test('draws a spurious pattern about 1.1 peak to trough', () {
       final data = _withoutAnnual(180);
       final fitted = fit(_model(), data);
       final posterior = fitted.model.smooth(data);
 
-      // Its variance is at the floor, so by the roadmap's reasoning it should
-      // be contributing nothing.
       expect(fitted.parameterStatus[2], ParameterStatus.shrunkToNothing);
       // It is contributing more than the weekly pattern that is actually
       // there: about 1.1 peak to trough, on data with no annual cycle in it.
@@ -132,12 +126,10 @@ void main() {
     });
 
     test('but says, loudly, that it does not know its own share', () {
-      // This is what saves the advice. The component's own posterior is
-      // enormously wider than the total signal's, because it is confounded
-      // with the trend rather than determined: at 180 days its share carries a
+      // The component is confounded with the trend, so its own posterior is
+      // far wider than the total signal's: at 180 days its share carries a
       // standard deviation of about 1.27, larger than the 1.14 amplitude it
-      // drew, while the total signal is known to 0.07. Read the band and the
-      // spurious pattern is plainly consistent with nothing at all.
+      // drew, while the total signal is known to 0.07.
       final data = _withoutAnnual(180);
       final posterior = fit(_model(), data).model.smooth(data);
 
@@ -156,8 +148,7 @@ void main() {
 
     test('and stops saying it once there is a year of data', () {
       // 0.065 at one year and 0.026 by two, against 0.045 for the weekly
-      // pattern throughout. The confounding is a fact about the window, not
-      // about the model, and it goes away when the window does.
+      // pattern throughout.
       final short = fit(_model(), _withoutAnnual(180)).model;
       final full = fit(_model(), _withoutAnnual(365)).model;
 

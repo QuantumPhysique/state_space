@@ -200,16 +200,14 @@ void main() {
         }
       });
 
-      test(
-          'smoothed covariances over the first two steps agree to about '
-          'four digits, which is what an approximate diffuse prior buys', () {
+      test('smoothed covariances over the first two steps, to four digits', () {
         // At the first steps the smoothed covariance is the difference of two
         // quantities of order kappa = 1e6 times the measurement variance, and
         // the answer is of order 1e-3. Nine digits go into that subtraction
         // before either implementation has done anything wrong, and the two
         // do it by different routes: this package uses the RTS gain form,
         // statsmodels the disturbance-smoother form. Exact diffuse
-        // initialisation (0.2) removes the subtraction rather than tightening
+        // initialisation removes the subtraction rather than tightening
         // the tolerance.
         //
         // The point of asserting it at all is that four digits is a floor,

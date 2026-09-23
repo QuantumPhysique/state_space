@@ -59,8 +59,7 @@ void main() {
       });
     }
 
-    test('and off the observation times, where interpolation actually happens',
-        () {
+    test('agrees with the dense GP between observation times', () {
       // A grid point between two readings is where a wrong stationary prior
       // would show up first: the filter has to fill the gap from the kernel
       // rather than from an observation.

@@ -214,16 +214,24 @@ void main() {
     }
 
     test('recovers the marginal variance and the length scale', () {
-      final data =
-          ornsteinUhlenbeck(days: 900, sd: 0.6, lengthScale: 8, noise: 0.2);
-      final fitted = fit(
-          StructuralModel([Matern.oneHalf(variance: 1, lengthScale: 1)]), data);
-      final component = fitted.model.components.first as Matern;
-
-      expect(math.sqrt(component.variance), closeTo(0.6, 0.15));
-      expect(component.lengthScale, closeTo(8, 2.5));
-      expect(math.sqrt(fitted.measurementVariance), closeTo(0.2, 0.05));
-      expect(fitted.parameterStatus, everyElement(ParameterStatus.determined));
+      // At 900 days a single estimate of a length scale of 8 ranges from about
+      // 5.6 to 12.4 across seeds, so the assertion is on the median of twenty.
+      final scales = <double>[];
+      for (var seed = 1; seed <= 20; seed++) {
+        final data = ornsteinUhlenbeck(
+            days: 900, sd: 0.6, lengthScale: 8, noise: 0.2, seed: seed);
+        final fitted = fit(
+            StructuralModel([Matern.oneHalf(variance: 1, lengthScale: 1)]),
+            data);
+        final component = fitted.model.components.first as Matern;
+        expect(math.sqrt(component.variance), closeTo(0.6, 0.15));
+        expect(math.sqrt(fitted.measurementVariance), closeTo(0.2, 0.05));
+        expect(
+            fitted.parameterStatus, everyElement(ParameterStatus.determined));
+        scales.add(component.lengthScale);
+      }
+      scales.sort();
+      expect((scales[9] + scales[10]) / 2, closeTo(8, 1));
     });
 
     test('and separates a trend from the correlated wobble on top of it', () {
