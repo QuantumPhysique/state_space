@@ -120,8 +120,9 @@ final class SmoothingResult {
   /// signal and excludes measurement noise; see [predictiveInterval].
   final Float64List variance;
 
-  /// Index of the component [trendSlope] is read from: the first component
-  /// with a rate state, or null when none has one.
+  /// Index of the component [trendSlope] is read from: the first
+  /// non-stationary component with a rate state, or failing that the first
+  /// stationary one, or null when none has one.
   final int? trendIndex;
 
   /// Posterior mean of the trend's rate of change, in signal units per time
