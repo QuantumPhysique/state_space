@@ -22,7 +22,7 @@ environment:
   sdk: ^3.9.0
 
 dev_dependencies:
-  benchmark_harness: ^2.4.0
+  benchmark_harness: ^2.3.1
   lints: ^5.1.0
   matrices: ^2.0.0 # dense reference implementation for the tests
   test: ^1.26.0
