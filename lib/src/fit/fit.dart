@@ -144,6 +144,13 @@ FitResult fit(
   if (scanPoints < 3) {
     throw ArgumentError.value(scanPoints, 'scanPoints', 'must be at least 3');
   }
+  if (!(tolerance > 0) || !tolerance.isFinite) {
+    throw ArgumentError.value(
+      tolerance,
+      'tolerance',
+      'must be finite and positive',
+    );
+  }
 
   FitResult run(double? fixed) => _search(
     initial,
