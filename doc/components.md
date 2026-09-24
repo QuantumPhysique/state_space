@@ -212,12 +212,26 @@ higher, and the upper bound is honoured as given.
 
 ## Writing your own
 
-Import `package:state_space/authoring.dart` and extend `Component`. Nine members
-have no default: `stateDim`, `parameterCount`, `transition` and `processNoise`
-(`A(dt)` and `Q(dt)`, exact for *any* non-negative gap including zero),
-`observationAt`, `diffuseStates`, `properPrior` for the states that are not
-diffuse, `parameters` and `withParameters`. Override `name` with a literal, and
-`parameterSpecs` if any parameter is not a variance.
+Import `package:state_space/authoring.dart` and extend `Component`. It is a
+`base` class, so the subclass must be declared `final`, `base` or `sealed`:
+
+```dart
+final class MyComponent extends Component {
+  const MyComponent();
+
+  @override
+  String get name => 'MyComponent';
+
+  // stateDim, parameterCount, transition, processNoise, observationAt,
+  // diffuseStates, properPrior, parameters, withParameters
+}
+```
+
+Nine members have no default: `stateDim`, `parameterCount`, `transition` and
+`processNoise` (`A(dt)` and `Q(dt)`, exact for *any* non-negative gap including
+zero), `observationAt`, `diffuseStates`, `properPrior` for the states that are
+not diffuse, `parameters` and `withParameters`. Override `name` with a literal,
+and `parameterSpecs` if any parameter is not a variance.
 
 `MatrixBlock` is the matrix type components write into: a view onto the
 engine's buffer, so a component fills its own block in place without knowing

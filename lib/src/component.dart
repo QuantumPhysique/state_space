@@ -16,7 +16,9 @@ import 'parameter_spec.dart';
 ///
 /// Implementations are immutable. [withParameters] returns a new instance.
 ///
-/// To write one, extend this class and implement the nine abstract members:
+/// To write one, extend this class with a `final` or `base` class (`final
+/// class MyComponent extends Component`) and implement the nine abstract
+/// members:
 /// [stateDim], [parameterCount], [transition], [processNoise],
 /// [observationAt], [diffuseStates], [properPrior], [parameters] and
 /// [withParameters]. The rest have defaults. `checkComponent` in

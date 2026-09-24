@@ -191,6 +191,17 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('rejects a fit tolerance that is not finite and positive', () {
+      final data = [for (var t = 0; t < 10; t++) Observation(t.toDouble(), 1)];
+      for (final tolerance in [0.0, -1e-4, double.nan, double.infinity]) {
+        expect(
+          () => fit(_trend(), data, tolerance: tolerance),
+          throwsArgumentError,
+          reason: 'tolerance $tolerance',
+        );
+      }
+    });
   });
 
   test('a long series stays finite and monotone in its own likelihood', () {
