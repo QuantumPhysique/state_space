@@ -209,4 +209,142 @@ void main() {
       expect(fitted.warnings, isNotEmpty);
     });
   });
+
+  group('a parameter is on a bound only where the likelihood says so', () {
+    /// A year of mornings with one in ten missed: a wandering level, water
+    /// retention that fades over [lengthScale] days, and reading error. The
+    /// shape of a real diary, where the retention dominates the noise.
+    List<Observation> waterDiary(int seed, {double lengthScale = 1.3}) {
+      final random = math.Random(seed);
+      final decay = math.exp(-1 / lengthScale);
+      var level = 80.0, slope = 0.0, water = 0.0;
+      final readings = <Observation>[];
+      for (var day = 0; day < 365; day++) {
+        slope += 0.002 * _gaussian(random);
+        level += slope;
+        water =
+            decay * water +
+            0.6 * math.sqrt(1 - decay * decay) * _gaussian(random);
+        if (random.nextDouble() < 0.1) continue;
+        readings.add(
+          Observation(day.toDouble(), level + water + 0.18 * _gaussian(random)),
+        );
+      }
+      return readings;
+    }
+
+    StructuralModel trendAndWater({
+      ({double lower, double upper}) lengthScaleBounds = const (
+        lower: 1e-2,
+        upper: 1e4,
+      ),
+    }) => StructuralModel([
+      LocalLinearTrend(processVariance: 1e-3),
+      Matern.oneHalf(
+        variance: 0.05,
+        lengthScale: 3,
+        lengthScaleBounds: lengthScaleBounds,
+      ),
+    ]);
+
+    double lengthScaleOf(FitResult fitted) =>
+        (fitted.model.components[1] as Matern).lengthScale;
+
+    test('a length scale one scan cell above the sampling floor is '
+        'estimated', () {
+      final data = waterDiary(3);
+      final fitted = fit(trendAndWater(), data);
+
+      // The trap: the floor is one day, the scan cells on the length-scale
+      // axis are a factor of 1.47 wide, and the estimate lands in the first.
+      expect(lengthScaleOf(fitted), inExclusiveRange(1.0, 1.47));
+      final theta = fitted.model.parameters..[2] = 0; // log of one day
+      final atFloor = fitted.model
+          .withParameters(theta)
+          .withEstimatedScale(data)
+          .logLikelihood(data);
+      expect(
+        fitted.logMarginalLikelihood - atFloor,
+        greaterThan(1),
+        reason: 'the floor is well outside the half-nat plateau',
+      );
+
+      expect(fitted.parameterStatus, everyElement(ParameterStatus.determined));
+      expect(fitted.warnings, isEmpty);
+    });
+
+    test('a length scale held at the bottom of its bracket says bottom', () {
+      final fitted = fit(
+        trendAndWater(lengthScaleBounds: (lower: 5, upper: 1e4)),
+        waterDiary(3),
+      );
+      expect(fitted.parameterStatus[2], ParameterStatus.beyondBracket);
+      expect(
+        fitted.warnings,
+        contains(
+          allOf(
+            contains('length scale of Matern'),
+            contains('bottom of its bracket'),
+          ),
+        ),
+      );
+      expect(fitted.warnings, isNot(contains(contains('top of its bracket'))));
+    });
+
+    test('a length scale at the sampling floor says the sampling set it', () {
+      final fitted = fit(trendAndWater(), waterDiary(9));
+      expect(lengthScaleOf(fitted), closeTo(1.0, 1e-3));
+      expect(fitted.parameterStatus[2], ParameterStatus.beyondBracket);
+      expect(
+        fitted.warnings,
+        contains(
+          allOf(
+            contains('length scale of Matern'),
+            contains('bottom of its bracket'),
+            contains('what the sampling can resolve'),
+          ),
+        ),
+      );
+    });
+
+    test('a Matern that took over the noise asks for a floor', () {
+      final fitted = fit(trendAndWater(), waterDiary(5));
+      expect(fitted.measurementVariancePinned, isFalse);
+      expect(fitted.parameterStatus[1], ParameterStatus.beyondBracket);
+      expect(
+        fitted.warnings,
+        contains(
+          allOf(
+            contains('variance of Matern'),
+            contains('taken over the measurement noise'),
+            contains('pass minimumMeasurementVariance'),
+          ),
+        ),
+      );
+    });
+
+    test('with the noise pinned, it does not ask for a floor', () {
+      final fitted = fit(
+        trendAndWater(),
+        waterDiary(3),
+        fixedMeasurementVariance: 1e-6,
+      );
+      expect(fitted.measurementVariancePinned, isTrue);
+      expect(fitted.parameterStatus[1], ParameterStatus.beyondBracket);
+      expect(
+        fitted.warnings,
+        contains(
+          allOf(
+            contains('variance of Matern'),
+            contains('top of its bracket'),
+            contains('noise level held fixed'),
+          ),
+        ),
+      );
+      expect(
+        fitted.warnings,
+        isNot(contains(contains('minimumMeasurementVariance'))),
+      );
+    });
+  });
 }

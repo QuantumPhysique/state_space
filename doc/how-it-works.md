@@ -173,9 +173,11 @@ the sampling interval they stop being a different model. See
 ## What the fit tells you afterwards
 
 * **`parameterStatus`** — whether each parameter was estimated, shrunk out at the
-  bottom of its bracket, or pushed past the top. A variance of zero is the edge of
-  the parameter space rather than an interior point, so the width reported for
-  such a parameter is one-sided and is not an error bar.
+  bottom of its bracket, or pushed past an edge: the top, or for a shape
+  parameter either end. A parameter counts as on a bound only when the
+  likelihood at the bound is within half a nat of the optimum. A variance of
+  zero is the edge of the parameter space rather than an interior point, so the
+  width reported for such a parameter is one-sided and is not an error bar.
 * **`plateauDecadesByParameter`** — how far each parameter can move before the fit
   loses half a nat. `NaN` where the coordinate is not a logarithm;
   `plateauWidthByParameter` has the raw number.
