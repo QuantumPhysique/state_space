@@ -310,7 +310,7 @@ FitResult _search(
     converged: best.converged,
     plateauDecadesByParameter: decades,
     plateauWidthByParameter: widths,
-    parameterStatus: _classify(optimum, specs, brackets),
+    parameterStatus: _classify(objective, best, specs, brackets),
     parameterSpecs: specs,
     diffuseDimension: initial.diffuseDimension,
     measurementVariancePinned: fixedMeasurementVariance != null,
@@ -560,24 +560,40 @@ _Optimum? _restartWithMoreNoise(
 }
 
 /// A parameter counts as sitting on a bound when it finishes in the last cell
-/// of the scan that found it. An exact comparison would miss the usual case:
-/// golden section stops a little short of the bound, and the simplex is
-/// repelled from it by the objective going to minus infinity just outside.
+/// of the scan next to that bound, and the objective at the bound itself is
+/// within half a nat of the optimum.
+///
+/// An exact comparison would miss the usual case: golden section stops a
+/// little short of the bound, and the simplex is repelled from it by the
+/// objective going to minus infinity just outside. The cell alone is too
+/// coarse: on a log axis four decades wide it spans a factor of 1.5, so a
+/// length scale of 1.4 over a floor of 1 would count as on the floor while
+/// the floor is more than a nat worse.
 ///
 /// A variance at the bottom of its bracket has been shrunk; a shape parameter
 /// at the bottom has not been shrunk out of anything, and its bracket is in
 /// the wrong place, which is what beyondBracket means.
 List<ParameterStatus> _classify(
-  Float64List optimum,
+  double Function(Float64List) objective,
+  _Optimum best,
   List<ParameterSpec> specs,
   _Brackets brackets,
 ) {
   final (:lower, :upper, points: _, :step) = brackets;
+  final optimum = best.argument;
+  final probe = Float64List.fromList(optimum);
+  bool reaches(int axis, double bound) {
+    probe[axis] = bound;
+    final value = objective(probe);
+    probe[axis] = optimum[axis];
+    return value >= best.value - _halfNat;
+  }
+
   return [
     for (var i = 0; i < optimum.length; i++)
-      if (optimum[i] >= upper[i] - step[i])
+      if (optimum[i] >= upper[i] - step[i] && reaches(i, upper[i]))
         ParameterStatus.beyondBracket
-      else if (optimum[i] <= lower[i] + step[i])
+      else if (optimum[i] <= lower[i] + step[i] && reaches(i, lower[i]))
         specs[i] is VarianceParameter
             ? ParameterStatus.shrunkToNothing
             : ParameterStatus.beyondBracket

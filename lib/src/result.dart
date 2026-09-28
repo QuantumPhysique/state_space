@@ -331,14 +331,19 @@ enum ParameterStatus {
   /// for such a parameter is one-sided, so it is not an error bar.
   shrunkToNothing,
 
-  /// The optimum sits at the top of the bracket, so the real one may be
-  /// outside it.
+  /// The optimum sits at the top of the bracket, or for a shape parameter at
+  /// either end, so the real one may be outside it.
   ///
   /// For a trend's variance this is usually the time unit: the variance is per
   /// cubed time unit, so measuring time in seconds rather than days moves the
   /// optimum about fifteen decades. For a stationary component's variance it
-  /// usually means the component has taken over the measurement noise; see
-  /// [FitResult.warnings].
+  /// usually means the component has taken over the measurement noise. For a
+  /// length scale or a period at the bottom, the bottom is often the one [fit]
+  /// raised to what the sampling can resolve. [FitResult.warnings] says which
+  /// edge, and which case.
+  ///
+  /// A parameter counts as on a bound only when the likelihood at the bound
+  /// is within half a nat of the optimum.
   beyondBracket,
 }
 
@@ -554,10 +559,12 @@ final class FitResult {
   ///    [largestResidual]). The fit is Gaussian, so one mistyped value
   ///    inflates the noise estimate and moves the whole curve; screen it out
   ///    or give it a large [Observation.relativeVariance].
-  /// 2. A parameter that finished on a bound. Its estimate is a boundary, not
-  ///    an interior optimum, and the width beside it is one-sided.
+  /// 2. A parameter that finished on a bound, and which one. Its estimate is a
+  ///    boundary, not an interior optimum, and the width beside it is
+  ///    one-sided.
   /// 3. A stationary component's variance at the top of its bracket, which
-  ///    means it has taken over the measurement noise.
+  ///    means it has taken over the measurement noise, unless the noise level
+  ///    was pinned ([measurementVariancePinned]).
   /// 4. A parameter the data barely constrains: a plateau over two decades
   ///    wide.
   /// 5. A parameter whose width was measured while a shape parameter of the
@@ -576,6 +583,7 @@ final class FitResult {
         'noise estimate and moves the whole curve',
       );
     }
+    final theta = model.parameters;
     var at = 0;
     for (final component in model.components) {
       final count = component.parameterCount;
@@ -605,14 +613,13 @@ final class FitResult {
             );
           case ParameterStatus.beyondBracket:
             found.add(
-              stationary && isVariance
-                  ? 'the $label finished at the top of its bracket, which means '
-                        'the component has taken over the measurement noise and '
-                        'the fitted noise level is too small; pass '
-                        'minimumMeasurementVariance at what the instrument can '
-                        'resolve'
-                  : 'the $label finished at the top of its bracket, so the real '
-                        'optimum may be outside it',
+              _beyondBracketWarning(
+                label,
+                parameterSpecs[i],
+                component.parameterSpecs[i - at],
+                theta[i],
+                noiseAbsorbed: stationary && isVariance,
+              ),
             );
           case ParameterStatus.determined:
             if (plateauDecadesByParameter[i] > 2) {
@@ -635,6 +642,44 @@ final class FitResult {
       at += count;
     }
     return found;
+  }
+
+  /// The sentence for a parameter at an edge of its bracket.
+  ///
+  /// [searched] is the bracket the fit used and [declared] the component's
+  /// own; they differ where the fit raised the bottom to what the sampling can
+  /// resolve. [value] is the estimate in the same coordinate.
+  String _beyondBracketWarning(
+    String label,
+    ParameterSpec searched,
+    ParameterSpec declared,
+    double value, {
+    required bool noiseAbsorbed,
+  }) {
+    if (searched case ShapeParameter(
+      :final lower,
+      :final upper,
+    ) when value - lower < upper - value) {
+      final raised = declared is ShapeParameter && declared.lower < lower;
+      return raised
+          ? 'the $label finished at the bottom of its bracket, which was '
+                'raised to what the sampling can resolve: below it the '
+                'component could not be told apart from measurement noise'
+          : 'the $label finished at the bottom of its bracket, so the real '
+                'optimum may be outside it';
+    }
+    if (noiseAbsorbed && !measurementVariancePinned) {
+      return 'the $label finished at the top of its bracket, which means the '
+          'component has taken over the measurement noise and the fitted '
+          'noise level is too small; pass minimumMeasurementVariance at what '
+          'the instrument can resolve';
+    }
+    if (noiseAbsorbed) {
+      return 'the $label finished at the top of its bracket with the noise '
+          'level held fixed, so the real optimum may be outside it';
+    }
+    return 'the $label finished at the top of its bracket, so the real '
+        'optimum may be outside it';
   }
 
   /// The [largestResidual] score above which [warnings] reports a reading.

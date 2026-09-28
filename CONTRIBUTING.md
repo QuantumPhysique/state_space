@@ -1,7 +1,7 @@
 # Contributing
 
 Issues and pull requests are welcome. For anything larger than a fix, open an
-issue first so the design can be agreed before the code is written.
+issue first, so the design can be agreed before the code is written.
 
 ## Checks
 
@@ -34,6 +34,7 @@ new component should come with a dense reference test and pass
 | the statsmodels exact-diffuse comparison | `uv run --with numpy --with statsmodels tool/statsmodels_diffuse_repro.py` |
 | performance tables in `doc/validation.md` | `dart compile exe benchmark/<name>.dart -o /tmp/b && /tmp/b` for `scaling_benchmark` and `components_benchmark` |
 | `doc/images/trend.png` | `dart run tool/figure/figure.dart > /tmp/trend.csv && uv run --with matplotlib tool/figure/plot.py /tmp/trend.csv doc/images/trend.png` |
+| `doc/images/icon.png`, `icon.svg`, `screenshot.png`, `social-preview.png` | `dart run tool/figure/icon.dart > /tmp/icon.csv && dart run tool/figure/figure.dart > /tmp/trend.csv && uv run --with matplotlib tool/figure/icon.py /tmp/icon.csv /tmp/trend.csv doc/images` |
 | calibration tables | `dart run tool/calibration/calibrate.dart --all --today=2026-09-17` |
 
 Record the machine and `dart --version` beside any timings you change.
