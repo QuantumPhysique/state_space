@@ -8,6 +8,8 @@ repository: https://github.com/QuantumPhysique/state_space
 issue_tracker: https://github.com/QuantumPhysique/state_space/issues
 
 screenshots:
+  - description: Readings with a gap, the smoothed trend with its credible band, and a forecast
+    path: doc/images/screenshot.png
   - description: Smoothed trend with its 95% credible band across a gap, and a forecast
     path: doc/images/trend.png
 
