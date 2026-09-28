@@ -1,7 +1,7 @@
 # Contributing
 
 Issues and pull requests are welcome. For anything larger than a fix, open an
-issue first so the design can be agreed before the code is written.
+issue first, so the design can be agreed before the code is written.
 
 ## Checks
 

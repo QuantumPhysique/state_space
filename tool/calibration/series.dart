@@ -20,12 +20,9 @@ class Series {
 
   double get span => observations.last.time - observations.first.time;
 
-  /// The last [days] days of the history, which is what a user with a shorter
-  /// diary would have had.
-  ///
-  /// Counted from the *end* rather than the start, because the question this
-  /// tool exists to answer is what a fit would have shown someone at a given
-  /// point in their history, and the recent end is the part everybody has.
+  /// The first [days] days of the history, counted from the first reading:
+  /// what a fit would have had to work with at that point in the diary's
+  /// life.
   Series firstDays(int days) {
     final cutoff = observations.first.time + days;
     final kept = observations.where((o) => o.time <= cutoff).toList();
