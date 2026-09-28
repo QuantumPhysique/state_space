@@ -67,10 +67,9 @@ class ResidualPieces {
 /// ```
 ///
 /// where `M_{t-1}` and `dhat_{t-1}` are the information and the estimate
-/// accumulated strictly before `t`. Those are independent standard normals
-/// under the model — genuinely so, not approximately — which is the property
-/// a Ljung-Box test needs and which substituting the final estimate would
-/// quietly destroy.
+/// accumulated strictly before `t`. Those are exactly independent standard
+/// normals under the model, which a Ljung-Box test needs and which
+/// substituting the final estimate would break.
 ///
 /// Nothing is reported until the flat directions are pinned down, since until
 /// then the prediction has infinite variance in some direction. That happens

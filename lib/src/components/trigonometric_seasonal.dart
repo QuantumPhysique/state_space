@@ -30,10 +30,10 @@ import '../parameter_spec.dart';
 /// data.
 ///
 /// Without process noise the component is an ordinary Fourier series with
-/// unknown coefficients — rigid, repeating forever. [processVariance] is what
-/// lets it breathe: it is the rate at which the pattern is allowed to change
-/// shape, in squared signal units per time unit. All harmonics share it
-/// (Harvey's specification), so the component has one free parameter.
+/// unknown coefficients, repeating forever. [processVariance] is the rate at
+/// which the pattern may change shape, in squared signal units per time unit.
+/// All harmonics share it (Harvey's specification), so the component has one
+/// free parameter.
 ///
 /// The rotation is orthogonal and the noise isotropic, so the implied
 /// Gaussian process kernel is
@@ -42,7 +42,7 @@ import '../parameter_spec.dart';
 /// k(t, t') = processVariance * min(t, t') * sum_j cos(lambda_j (t - t'))
 /// ```
 ///
-/// — Brownian motion multiplied by a cosine comb.
+/// which is Brownian motion multiplied by a cosine comb.
 ///
 /// Averaged over a full period each harmonic integrates to zero, so the
 /// component carries no level of its own. Over a stretch of data shorter than
@@ -147,8 +147,9 @@ final class TrigonometricSeasonal extends Component {
 
   @override
   void properPrior(Float64List mean, MatrixBlock covariance) {
-    // Every state is diffuse: where the pattern sits in its cycle, and how
-    // large it is, are both for the data to say.
+    // Every state is diffuse: phase and amplitude come from the data.
+    // TODO(gwosd): the rigid periodic kernel on the roadmap would put a
+    // Bessel stationary prior here and drop the process noise.
   }
 
   @override

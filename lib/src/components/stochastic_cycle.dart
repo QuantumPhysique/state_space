@@ -126,8 +126,8 @@ final class StochasticCycle extends Component {
   /// The default places 120 points across [periodBounds], which over the
   /// default two-decade range is about five per cent apart. The peak in the
   /// period is roughly `1 / (2 * cycles observed)` wide in relative terms, so
-  /// this resolves a peak from eight cycles onward — which is about where the
-  /// period becomes estimable in the first place.
+  /// this resolves a peak from about eight cycles onward, which is also where
+  /// the period starts to be estimable.
   final int periodScanPoints;
 
   /// Angular frequency, `2 pi / period`.

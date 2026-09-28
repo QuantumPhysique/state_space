@@ -600,6 +600,8 @@ FitResult _withLargestResidual(
   FitResult result,
   List<Observation> observations,
 ) {
+  // TODO(gwosd): iterate this into a robust fit that down-weights the worst
+  // readings through relativeVariance and refits (see doc/roadmap.md).
   final diagnostics = result.model.diagnose(observations);
   final residuals = diagnostics.residuals;
   if (residuals.length < 8) return result;

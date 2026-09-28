@@ -44,10 +44,9 @@ FilterResult forwardPass(
 /// The forward pass for a model that is one two-state component, written out
 /// in scalars.
 ///
-/// Nothing here is new mathematics. It is the same predict, the same
-/// Joseph-form update, the same augmentation for the flat directions, with the
-/// loops unrolled and the state held in local doubles instead of typed arrays
-/// — no bounds checks, no block offsets, no matrix views.
+/// The same predict, Joseph-form update and augmentation for the flat
+/// directions as [KalmanFilter], with the loops unrolled and the state held in
+/// local doubles: no bounds checks, no block offsets, no matrix views.
 ///
 /// [fit] runs a forward pass per likelihood evaluation, dozens to hundreds of
 /// times per call, while the backward pass runs once, so only the forward
@@ -71,11 +70,9 @@ class FastPath2x2 {
 
   /// Whether the specialisation covers this model.
   ///
-  /// One component, two states, and — under exact initialisation — both of
-  /// them flat. A component with one flat state and one proper state is
-  /// perfectly legal and simply goes down the generic path, because carrying a
-  /// one-column sensitivity in unrolled scalars would double this file to
-  /// serve a case nothing yet produces.
+  /// One component, two states, and under exact initialisation both of them
+  /// flat. A component with one flat and one proper state takes the generic
+  /// path; nothing in the package produces one yet.
   static bool handles(
     List<Component> components,
     Initialization initialization,

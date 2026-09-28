@@ -30,10 +30,9 @@ final double _inverseGolden = (math.sqrt(5) - 1) / 2;
 /// search.
 ///
 /// One function evaluation per iteration after the first two, no derivatives,
-/// and a bracket that shrinks by a fixed factor every step — which for a
-/// likelihood evaluated by a full Kalman pass is exactly the trade one wants.
-/// It assumes a single maximum in the bracket; the caller is responsible for
-/// having found the right basin first.
+/// and a bracket that shrinks by a fixed factor every step. It assumes a
+/// single maximum in the bracket; the caller is responsible for having found
+/// the right basin first.
 GoldenSectionResult maximise(
   double Function(double) objective,
   double lower,

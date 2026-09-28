@@ -16,10 +16,9 @@ import 'penalty.dart';
 /// Rather than searching over `(sigma_1^2, ..., sigma_k^2, sigma_eps^2)`, the
 /// filter is run at unit measurement variance and process variances
 /// `exp(logRatios)`. The measurement variance that maximises the likelihood
-/// for those ratios then has a closed form, so the search always has one
-/// dimension fewer than the model has variances — a saving of exactly one, no
-/// matter how many components there are. See
-/// [FilterResult.profileMeasurementVariance] for why it works.
+/// for those ratios then has a closed form, so the search has one dimension
+/// fewer than the model has variances. See
+/// [FilterResult.profileMeasurementVariance].
 ///
 /// The timeline is built once and reused, so an evaluation is one forward pass
 /// and nothing else.
@@ -159,8 +158,8 @@ class ProfileLikelihood {
     return _cached;
   }
 
-  /// Multiplies the variance entries of [logRatios] up by [scale], leaving the
-  /// shape parameters — a length scale, a period — untouched.
+  /// Multiplies the variance entries of [logRatios] up by [scale], leaving
+  /// shape parameters such as a length scale or a period untouched.
   Float64List _lift(Float64List logRatios, double scale) {
     if (scale == 1) return logRatios;
     final shift = math.log(scale);

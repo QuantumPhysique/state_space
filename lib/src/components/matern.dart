@@ -42,9 +42,6 @@ enum MaternOrder {
 /// a = sqrt(2 nu) |tau| / lengthScale
 /// ```
 ///
-/// The class is spelled without the accent because Dart identifiers are
-/// ASCII.
-///
 /// The process is **stationary**: it hovers around zero with variance
 /// [variance] and forgets where it has been over about [lengthScale], so it
 /// has a proper prior and no diffuse states. Alongside a `LocalLinearTrend` it
@@ -157,14 +154,13 @@ final class Matern extends Component {
   /// hour to twenty-seven years. Time measured in seconds needs a different
   /// one, exactly as the variance bracket does.
   ///
-  /// The bottom of it is only a request. [fit] raises it to the median gap
-  /// between readings, because below that a Matérn is measurement noise under
-  /// another name and the likelihood will take it — see [parameterSpecsAt].
-  /// The top is honoured as given.
+  /// [fit] raises the bottom of it to the median gap between readings, below
+  /// which a Matérn cannot be told apart from measurement noise; see
+  /// [parameterSpecsAt]. The top is used as given.
   final ({double lower, double upper}) lengthScaleBounds;
 
-  /// The inverse length scale `sqrt(2 nu) / lengthScale`, which is where every
-  /// formula in this class actually starts.
+  /// The inverse length scale `sqrt(2 nu) / lengthScale`, which every formula
+  /// in this class starts from.
   double get rate =>
       switch (order) {
         MaternOrder.oneHalf => 1.0,
@@ -275,18 +271,16 @@ final class Matern extends Component {
   /// function of `u = rate * dt` times `variance * rate^(i + j)`, so there is
   /// no matrix work to do and nothing to allocate.
   ///
-  /// Over a very short gap the two terms very nearly cancel — `Q(0,0)` is
-  /// `O(dt^3)` for `nu = 3/2` and `O(dt^5)` for `nu = 5/2`, while the terms it
-  /// is built from are `O(1)` — so below [_seriesBelow] the integral form is
-  /// summed directly instead. Computed the other way `Q(0,0)` has no correct
-  /// digits once `rate * dt` falls under about `6e-6` for `nu = 3/2` or `6e-4`
-  /// for `nu = 5/2`, and it comes out *negative* not much further down, which
-  /// costs `Q` its positive semi-definiteness.
+  /// Over a very short gap the two terms nearly cancel (`Q(0,0)` is `O(dt^3)`
+  /// for `nu = 3/2` and `O(dt^5)` for `nu = 5/2`, built from `O(1)` terms), so
+  /// below [_seriesBelow] the integral form is summed directly instead.
+  /// Computed the other way `Q(0,0)` has no correct digits once `rate * dt`
+  /// falls under about `6e-6` for `nu = 3/2` or `6e-4` for `nu = 5/2`, and it
+  /// comes out *negative* not much further down, which costs `Q` its positive
+  /// semi-definiteness.
   ///
-  /// Which gaps are small enough to reach depends on the caller's time unit
-  /// and not on anything the component can see — `rate * dt` is `1.7e-5` for a
-  /// length scale of `1e5` seconds sampled every second, which is an ordinary
-  /// thing to ask for.
+  /// How small a gap gets depends on the caller's time unit: `rate * dt` is
+  /// `1.7e-5` for a length scale of `1e5` seconds sampled every second.
   @override
   void processNoise(double dt, MatrixBlock out) {
     final u = rate * dt;

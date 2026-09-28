@@ -79,12 +79,11 @@ class FilterResult {
   /// the result is exactly the restricted likelihood.
   ///
   /// It does **not** make likelihoods comparable across models with different
-  /// diffuse dimensions. The integral is against an improper flat prior of unit density,
-  /// so `d` carries units and the answer carries them too: scaling one column
-  /// of `B` by `c` scales `|M|` by `c^2` and shifts the log likelihood by
-  /// exactly `-log c`, without changing the model, the data or the posterior.
-  /// Rescaling a regression column or changing the time unit both do this. See
-  /// [diffuseDim] and `FitResult.isComparableWith`.
+  /// diffuse dimensions. The flat prior has unit density, so `d` carries
+  /// units: scaling one column of `B` by `c` scales `|M|` by `c^2` and shifts
+  /// the log likelihood by `-log c`, with the model, the data and the
+  /// posterior unchanged. Rescaling a regression column or changing the time
+  /// unit both do this. See `FitResult.isComparableWith`.
   final double diffuseLogDeterminant;
 
   /// Generalised-least-squares estimate of the flat directions, length
@@ -99,10 +98,8 @@ class FilterResult {
   ///
   /// Filtered when the forward pass returns them: `E[x_t | y_1..t]`. The
   /// backward pass overwrites them in place with the smoothed moments, and
-  /// `RtsSmoother.combineDiffuse` then folds the flat directions in — so what
-  /// these hold depends on how far along the pipeline the caller is, which is
-  /// why they are not named for any one stage. The memory argument for
-  /// overwriting is in `RtsSmoother`.
+  /// `RtsSmoother.combineDiffuse` then folds the flat directions in, so what
+  /// they hold depends on how far along the pipeline the caller is.
   final Float64List? stateMean;
 
   /// Its covariance, `stateDim x stateDim` per step, row-major.
@@ -144,9 +141,9 @@ class FilterResult {
 
   /// Whether anything is left to estimate a noise level from.
   ///
-  /// False when every observation went on locating the flat directions —
-  /// exactly `d` readings under a flat prior, or none at all — in which case
-  /// both quantities below are undefined rather than merely imprecise.
+  /// False when every observation went on locating the flat directions
+  /// (exactly `d` readings under a flat prior, or none at all). Both
+  /// quantities below are then undefined.
   bool get hasResidualDegreesOfFreedom => usedObservations > 0;
 
   /// Restricted maximum-likelihood measurement variance given the *ratios* of
@@ -156,15 +153,14 @@ class FilterResult {
   /// Scaling every covariance in the model by a constant leaves the Kalman
   /// gains and every innovation `v_t` untouched and scales every `S_t` by that
   /// constant. So the measurement variance can be concentrated out of the
-  /// likelihood analytically instead of being searched over — one dimension
-  /// less for every fit, no matter how many components there are.
+  /// likelihood analytically instead of being searched over, which takes one
+  /// dimension off every fit.
   ///
   /// Restricted rather than plain maximum likelihood: the divisor is
-  /// [usedObservations], which under a flat prior is `N - d` rather than `N`.
-  /// That is the right partner for a likelihood that has integrated `d`
-  /// directions away, and it is a factor of `N / (N - d)` away from the plain
-  /// estimate — twenty-five per cent on thirty readings with six flat
-  /// directions.
+  /// [usedObservations], which under a flat prior is `N - d` rather than `N`,
+  /// to match a likelihood that has integrated `d` directions away. On thirty
+  /// readings with six flat directions that is 25 % above the plain
+  /// estimate.
   double get profileMeasurementVariance => hasResidualDegreesOfFreedom
       ? measurementVariance * sumWeightedSquares / usedObservations
       : double.nan;
@@ -206,9 +202,9 @@ class FilterResult {
 
 /// Forward Kalman recursion over a [Timeline].
 ///
-/// Holds the workspace for one pass. Construction is cheap relative to the
-/// pass itself (everything is `O(stateDim^2)`), so the fitting code simply
-/// builds a new filter per likelihood evaluation rather than mutating one.
+/// Holds the workspace for one pass. Construction is `O(stateDim^2)`, cheap
+/// next to the pass, so the fit builds a new filter per likelihood
+/// evaluation.
 class KalmanFilter {
   /// A filter for [components] at [measurementVariance] under
   /// [initialization], excluding the first [burnIn] observations from the
@@ -312,15 +308,13 @@ class KalmanFilter {
   late final Float64List _diffuseRhs;
   late final Float64List _vb;
 
-  /// Innovation and its variance from the most recent [_update]. Kept as
-  /// fields rather than returned in a wrapper so that the loop over a long
-  /// series allocates nothing at all.
+  /// Innovation and its variance from the most recent [_update], kept in
+  /// fields so the loop allocates nothing.
   double _innovation = 0;
   double _innovationVariance = 0;
 
   /// Gap the cached [_a] and [_q] were built for, or NaN if they are stale.
-  /// A uniformly sampled series rebuilds them once and then never again, which
-  /// is the common case for callers who ask for a regular output grid.
+  /// On a regular grid they are built once.
   double _cachedGap = double.nan;
 
   /// Runs the forward pass. With [keepHistory] the filtered and predicted
@@ -450,9 +444,8 @@ class KalmanFilter {
   ///
   /// Must be called on the same filter that produced [result], directly after
   /// [run], because it continues from the workspace that pass left behind.
-  /// Forecasting is just prediction with the update skipped, which is the same
-  /// thing the recursion does over any gap in the middle of a series -- the
-  /// only difference is that no observation ever arrives to close it.
+  /// Forecasting is prediction with the update skipped, as over any gap inside
+  /// the series.
   ({Float64List mean, Float64List variance}) project(
     double from,
     Float64List horizon,
@@ -558,9 +551,8 @@ class KalmanFilter {
   /// Prior at the first step: a large multiple of the measurement variance on
   /// the diffuse states, whatever the component asks for on the rest.
   ///
-  /// Scaling the prior by the measurement variance rather than fixing it in
-  /// absolute terms keeps the whole model scale-equivariant, which is what
-  /// makes [FilterResult.profileLogLikelihood] exact rather than merely close.
+  /// The prior scales with the measurement variance so that the model stays
+  /// scale-equivariant, which [FilterResult.profileLogLikelihood] relies on.
   void _initialise() {
     final n = stateDim;
     _x.fillRange(0, n, 0);
@@ -607,23 +599,19 @@ class KalmanFilter {
   /// `x- = A x`, `P- = A P A' + Q`, exploiting the block-diagonal structure of
   /// `A` and `Q`.
   ///
-  /// The covariance itself is dense — the gain is a rank-one update spanning
-  /// every state — but the transition is not, so this costs
-  /// `2n * sum(n_i^2)` rather than `2n^3`.
+  /// The covariance is dense (the gain is a rank-one update across every
+  /// state) but the transition is not, so this costs `2n * sum(n_i^2)` rather
+  /// than `2n^3`.
   void _predict(double dt) {
     final n = stateDim;
-    // Read the workspace fields once. A `late final` field carries an
-    // initialisation check on every read, which costs about a third of a bare
-    // matrix multiply at these sizes; over a hundred thousand steps it is
-    // worth the two extra lines.
+    // Locals, because every read of a `late final` field is checked, and at
+    // these sizes that costs about a third of the multiply itself.
     final x = _x, p = _p, xPred = _xPred, pPred = _pPred;
     final a = _a, q = _q, work = _work;
     final d = diffuseDim;
 
     if (dt == 0) {
-      // A = I and Q = 0, so the prediction is the previous posterior. This is
-      // the same-timestamp case: two readings on one morning are simply two
-      // updates.
+      // A = I and Q = 0: two readings at the same time are two updates.
       xPred.setAll(0, x);
       pPred.setAll(0, p);
       if (d > 0) _xbPred.setAll(0, _xb);
@@ -652,9 +640,9 @@ class KalmanFilter {
       }
     }
 
-    // The sensitivity to the flat directions rides along on the same
-    // transition. It is d extra mean propagations and no extra covariance
-    // work, which is the whole reason exact initialisation is affordable here.
+    // The sensitivity to the flat directions goes through the same
+    // transition: d extra mean propagations and no covariance work, which is
+    // what keeps exact initialisation cheap.
     if (d > 0) {
       final xb = _xb, xbPred = _xbPred;
       for (var b = 0; b < components.length; b++) {
@@ -742,10 +730,8 @@ class KalmanFilter {
     }
     final v = value - predicted;
 
-    // Dense over both indices, unlike the reporting code, which skips zero
-    // entries of H. This runs once per observation and is `O(n^2)` either way;
-    // a branch inside it would cost more on the models where H is dense than
-    // it saves on the ones where it is not.
+    // Dense in both indices. Skipping zeros of H, as the reporting code does,
+    // costs more than it saves when H is dense.
     for (var i = 0; i < n; i++) {
       var sum = 0.0;
       for (var j = 0; j < n; j++) {
@@ -827,12 +813,9 @@ class KalmanFilter {
 /// Explains a singular diffuse information matrix as well as the model
 /// allows.
 ///
-/// Shared by both forward-pass implementations so that the two never drift
-/// apart on the one error a caller is actually likely to hit. The engine
-/// contributes the arithmetic — how many flat directions there are and how
-/// much data there was — and the components contribute whatever they know
-/// about their own identifiability, which is knowledge the engine is
-/// deliberately kept clear of.
+/// Shared by both forward-pass implementations. The engine supplies the
+/// counts, and each component adds what it knows about its own
+/// identifiability through [Component.identifiabilityHint].
 String singularDiffuseMessage(
   List<Component> components,
   int diffuseDim,
@@ -863,7 +846,7 @@ String singularDiffuseMessage(
   }
   if (reasons.isEmpty && components.length > 1) {
     reasons.add(
-      'two components can produce the same signal on this data — a '
+      'two components can produce the same signal on this data: a '
       'trend and a level both supply a level, and two seasonals that share '
       'a harmonic are the same function of time',
     );

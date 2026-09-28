@@ -152,9 +152,8 @@ class Timeline {
         throw ArgumentError(
           'observations must be sorted by time, but observations[$i] at '
           '${o.time} precedes observations[${i - 1}] at '
-          '${observations[i - 1].time}. Sort the list before calling; the '
-          'package deliberately does not reorder it, because results are '
-          'reported in input order.',
+          '${observations[i - 1].time}. Sort the list before calling; '
+          'results are reported in input order.',
         );
       }
     }
