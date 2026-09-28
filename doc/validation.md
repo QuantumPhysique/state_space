@@ -1,20 +1,16 @@
 # Validation
 
-Computing the right thing is a claim that can be tested, and this is the part of
-the package worth reading before trusting it. There are several independent
-checks and none of them subsumes the others.
-
-The shape of the argument throughout: the `O(N³)` Gaussian process is the
-*specification*, the linear-time recursion is the *implementation*, and the tests
-compare them in-language on every commit. That validates the model and not merely
-the code.
+What the tests check, against what, and how closely. The `O(N³)` Gaussian
+process is the reference and the linear-time recursion the implementation, and
+the tests compare the two in Dart on every commit. The checks below are
+independent, and none of them covers the others.
 
 ## The linear-time answer equals the cubic-time definition
 
 `test/dense_gp_reference_test.dart` builds the `N × N` spline kernel from the
 equations in [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md), adds the noise, and computes the
 textbook `O(N³)` posterior with a Cholesky factorisation from the `matrices`
-package — a dev dependency used for nothing else.
+package, a dev dependency used only here.
 
 The smoothed mean and the log likelihood agree to 1e-9, and the posterior variance
 to 1e-9 absolute, at observation times and at grid points between them.
@@ -28,28 +24,27 @@ does not depend on `u` at all and the integral over the noise collapses to
 k(t, t') = sigma^2 min(t, t') sum_j cos(lambda_j (t - t'))
 ```
 
-— Brownian motion multiplied by a comb of cosines.
+which is Brownian motion multiplied by a comb of cosines.
 `test/seasonal_reference_test.dart` builds that matrix densely and checks the
 filter against it, then does the same for a trend plus two seasonals of different
 periods and checks each component's share against the dense per-component
 posterior. Confounding between a trend and a weekly pattern leaves the total fit
-intact and shows up only in the decomposition, which is what you would want.
+intact and shows up only in the decomposition.
 
 ## A regression coefficient equals its generalised least-squares estimate
 
-A coefficient is a flat direction like any other, so the exact diffuse machinery
-estimates it as a by-product. `test/regression_reference_test.dart` is what makes
-"by-product" mean exactly rather than approximately: the smoothed coefficient
-matches the dense GLS estimate to 1e-9 and its variance matches the corresponding
+A coefficient is a flat direction like any other, so exact diffuse
+initialisation estimates it along the way. `test/regression_reference_test.dart`
+checks that the smoothed coefficient matches the dense GLS estimate to 1e-9 and its variance matches the corresponding
 diagonal of `(B' C⁻¹ B)⁻¹` to 1e-11, with the trend's own level and slope checked
 from the same solve to show the regression columns have not disturbed them.
 
 ## The diffuse likelihood equals the restricted likelihood
 
 Exact diffuse initialisation leaves a `log|M|` term behind when the flat prior is
-integrated out. Get its sign or scale wrong and every likelihood shifts by a
-constant that nothing else would notice — fits still converge, to the same place,
-but the number reported is not the restricted likelihood it claims to be.
+integrated out. With its sign or scale wrong, every likelihood would shift by a
+constant: fits would still converge to the same place, but the reported number
+would not be the restricted likelihood.
 
 Densely the same quantity is REML, so the test computes
 
@@ -59,32 +54,31 @@ Densely the same quantity is REML, so the test computes
 
 and checks both the total and `log|M|` on its own.
 
-**Being REML is also the limit of what the number is good for.**
+Being REML also limits what the number can be used for.
 `comparability_test.dart` pins the two changes of unit that shift it while
-leaving the fit, the posterior and the coefficient alone, and checks that a
-*proper* prior has no such freedom and does not move. What that means for
+leaving the fit, the posterior and the coefficient alone, and checks that the
+likelihood under a *proper* prior does not move. What that means for
 comparing models is in
-[Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#how-to-tell-whether-it-earned-its-place--and-how-not-to).
+[Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#comparing-models).
 
 ## Cross-language golden fixtures, for both initialisations
 
 `tool/generate_fixtures.py` builds the same model in statsmodels as an `MLEModel`
 with time-varying system matrices, once with a wide proper prior and once with
 `initialization='diffuse'`, and dumps the filtered, predicted and smoothed states,
-their covariances and the per-observation likelihood to JSON. Script and both
-fixture sets are committed, so the claim that exact initialisation changes the
-first few steps and nothing else is testable rather than asserted.
+their covariances and the per-observation likelihood to JSON. The script and
+both fixture sets are committed, which lets the tests check that exact
+initialisation changes the first few steps and nothing else.
 
 Under the exact prior everything agrees to 1e-10 at every step including the
 first. Under the wide one the first two steps agree to about four digits, because
 there the smoothed covariance is the difference of two quantities of order 1e5
 giving an answer of order 1e-3, which is asserted as a floor.
 
-Two things worth knowing about the reference:
+Two notes on the reference:
 
-* `UnobservedComponents(level='local linear trend')` is the *discrete* model and
-  is not what this package implements, so comparing against it would be comparing
-  against a different model.
+* `UnobservedComponents(level='local linear trend')` is the *discrete* model,
+  not the one this package implements, so the fixtures do not use it.
 * statsmodels' exact diffuse smoother (0.15.0) disagrees with a dense generalised
   least-squares computation about the smoothed slope at the very first step when
   the transition matrix is time-varying. It agrees to 1e-14 whenever the step is
@@ -113,8 +107,8 @@ agrees to 1e-12 there too.
 
 ## The reduced backward pass is held to the full one
 
-`static_state_test.dart` does the same job for the smoother's static-state
-reduction, through a regression component that declines to admit it is static, so
+`static_state_test.dart` does the same for the smoother's static-state
+reduction, using a regression component that does not declare itself static, so
 the reference runs the full `n × n` recursion over states the reduced path skips.
 They agree to nine significant figures across three output grids; the residual is
 the reference's own jitter, which the reduced path never incurs.
@@ -122,13 +116,12 @@ the reference's own jitter, which the reduced path never incurs.
 ## Analytic limits
 
 * Sending the process variance to zero reproduces ordinary least squares for the
-  two-state model and the precision-weighted mean for the one-state model — and
-  the agreement improves as `1/kappa` with the width of the diffuse prior, which
-  is asserted rather than assumed.
+  two-state model and the precision-weighted mean for the one-state model, and
+  the tests check that the agreement improves as `1/kappa` with the width of
+  the diffuse prior.
 * Shifting all times by a constant changes nothing.
 * Scaling every variance by `c` scales the posterior variance by `c` and leaves
-  the posterior mean alone. That is the invariance the profile likelihood rests
-  on, so it is tested directly.
+  the posterior mean alone. The profile likelihood depends on this.
 * Reversing time reverses the answer.
 * Posterior variance never grows when data is added.
 
@@ -136,9 +129,9 @@ the reference's own jitter, which the reduced path never incurs.
 
 `matern_noise_test.dart` checks that the Matérn process noise keeps its leading
 asymptotic down to `dt = 1e-9` and that every leading principal minor stays
-non-negative down to `dt = 1e-12`, because `Q = P∞ − A P∞ A'` is a difference of
-two quantities of order `variance` whose answer is `O(dt³)` or `O(dt⁵)` and loses
-every digit if computed that way.
+non-negative down to `dt = 1e-12`. `Q = P∞ − A P∞ A'` is a difference of two
+quantities of order `variance` with a result of order `dt³` or `dt⁵`, so
+computing it that way loses every digit.
 
 ## Parameter recovery
 
@@ -163,10 +156,9 @@ input.
 
 ## The complexity penalty
 
-`ComplexityPenalty` is off by default because of this measurement. Simulating a
-trend plus a weekly seasonal at known variances, fitting with and without the
-penalty, and comparing the fitted decomposition against the paths that generated
-it, over twelve replications:
+`ComplexityPenalty` is off by default. A trend plus a weekly seasonal simulated
+at known variances, fitted with and without the penalty, and compared against
+the paths that generated it, over twelve replications:
 
 ```text
            seasonal RMSE              trend RMSE
@@ -202,8 +194,8 @@ plus smoother plus the reported posterior, for a `LocalLinearTrend`.
 | 10 000 | 0.28 ms | 1.75 ms | 175 ns | 371 ms |
 | 100 000 | 2.86 ms | 18.7 ms | 187 ns | — |
 
-Flat cost per observation across three orders of magnitude, which is what linear
-means. Ten years of daily readings smooth in under a millisecond.
+The cost per observation stays flat across three orders of magnitude. Ten years
+of daily readings smooth in under a millisecond.
 
 The `logLikelihood` column is where the two-state fast path shows up, a little
 over three times faster than the generic engine on the same forward pass:
