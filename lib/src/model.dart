@@ -9,6 +9,7 @@ import 'components/regression.dart';
 import 'diagnostics.dart';
 import 'engine/fast_path_2x2.dart';
 import 'engine/kalman.dart';
+import 'engine/layout.dart';
 import 'engine/rts.dart';
 import 'engine/scale.dart';
 import 'engine/timeline.dart';
@@ -123,16 +124,9 @@ final class StructuralModel {
   /// models with the same diffuse dimension have integrated the same thing
   /// away and can be compared; two with different dimensions cannot. See
   /// [logLikelihood].
-  int get diffuseDimension {
-    if (initialization is! ExactDiffuse) return 0;
-    var count = 0;
-    for (final component in components) {
-      for (final flag in component.diffuseStates) {
-        if (flag) count++;
-      }
-    }
-    return count;
-  }
+  int get diffuseDimension => initialization is ExactDiffuse
+      ? diffuseStateIndices(components).length
+      : 0;
 
   /// Total number of free parameters across all components.
   int get parameterCount => components.fold(0, (n, c) => n + c.parameterCount);
@@ -413,12 +407,7 @@ final class StructuralModel {
     final mean = filtered.stateMean!;
     final covariance = filtered.stateCovariance!;
 
-    final offsets = <int>[];
-    var next = 0;
-    for (final component in components) {
-      offsets.add(next);
-      next += component.stateDim;
-    }
+    final offsets = blockOffsets(components);
 
     final h = Float64List(n);
     final slices = [

@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 
 import '../arguments.dart';
+import '../engine/layout.dart';
 import '../engine/scale.dart';
 import '../exceptions.dart';
 import '../model.dart';
@@ -215,9 +216,7 @@ FitResult _search(
     origin[i] = (lower[i] + upper[i]) / 2;
   }
   if (profile.evaluate(origin).usedObservations < 1) {
-    final flat = [
-      for (final component in initial.components) ...component.diffuseStates,
-    ].where((flag) => flag).length;
+    final flat = diffuseStateIndices(initial.components).length;
     throw UnderdeterminedModelException(
       'too few observations to estimate '
       'anything: the model has $flat flat directions, which use up one '

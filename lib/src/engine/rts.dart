@@ -5,6 +5,7 @@ import '../exceptions.dart';
 import '../initialization.dart';
 import 'cholesky.dart';
 import 'kalman.dart';
+import 'layout.dart';
 import 'matrix_block.dart';
 import 'timeline.dart';
 
@@ -52,7 +53,7 @@ class RtsSmoother {
   /// real variance and a real gain like anything else.
   RtsSmoother(this.components, {Initialization? initialization})
     : stateDim = components.fold(0, (n, c) => n + c.stateDim),
-      _offsets = _blockOffsets(components),
+      _offsets = blockOffsets(components),
       _active = _activeStates(components, initialization) {
     final n = _active.length;
     _a = Float64List(n * n);
@@ -113,16 +114,6 @@ class RtsSmoother {
   /// The diagonal nudge that last rescued a factorisation, as a fraction of
   /// that step's mean diagonal, or zero.
   double _lastJitterRatio = 0;
-
-  static List<int> _blockOffsets(List<Component> components) {
-    final offsets = <int>[];
-    var next = 0;
-    for (final c in components) {
-      offsets.add(next);
-      next += c.stateDim;
-    }
-    return offsets;
-  }
 
   /// The states the backward recursion can change.
   ///

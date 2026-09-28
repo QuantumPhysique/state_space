@@ -5,6 +5,7 @@ import '../component.dart';
 import '../exceptions.dart';
 import '../initialization.dart';
 import 'cholesky.dart';
+import 'layout.dart';
 import 'matrix_block.dart';
 import 'recursive_residuals.dart';
 import 'scale.dart';
@@ -217,17 +218,17 @@ class KalmanFilter {
     required this.measurementVariance,
     required this.initialization,
     int? burnIn,
-  }) : diffuseDim = initialization is ExactDiffuse
-           ? _diffuseStateCount(components)
+  }) : _offsets = blockOffsets(components),
+       _diffuseStates = diffuseStateIndices(components),
+       stateDim = components.fold(0, (n, c) => n + c.stateDim),
+       diffuseDim = initialization is ExactDiffuse
+           ? diffuseStateIndices(components).length
            : 0,
        burnIn =
            burnIn ??
            (initialization is ExactDiffuse
                ? 0
-               : _diffuseStateCount(components)),
-       stateDim = components.fold(0, (n, c) => n + c.stateDim),
-       _offsets = _blockOffsets(components),
-       _diffuseStates = _diffuseStateIndices(components) {
+               : diffuseStateIndices(components).length) {
     final n = stateDim;
     final d = diffuseDim;
     _x = Float64List(n);
@@ -321,38 +322,6 @@ class KalmanFilter {
   /// A uniformly sampled series rebuilds them once and then never again, which
   /// is the common case for callers who ask for a regular output grid.
   double _cachedGap = double.nan;
-
-  static List<int> _blockOffsets(List<Component> components) {
-    final offsets = <int>[];
-    var next = 0;
-    for (final c in components) {
-      offsets.add(next);
-      next += c.stateDim;
-    }
-    return offsets;
-  }
-
-  static List<int> _diffuseStateIndices(List<Component> components) {
-    final indices = <int>[];
-    var next = 0;
-    for (final c in components) {
-      for (final flag in c.diffuseStates) {
-        if (flag) indices.add(next);
-        next++;
-      }
-    }
-    return indices;
-  }
-
-  static int _diffuseStateCount(List<Component> components) {
-    var count = 0;
-    for (final c in components) {
-      for (final flag in c.diffuseStates) {
-        if (flag) count++;
-      }
-    }
-    return count;
-  }
 
   /// Runs the forward pass. With [keepHistory] the filtered and predicted
   /// moments are retained for the RTS backward pass.
