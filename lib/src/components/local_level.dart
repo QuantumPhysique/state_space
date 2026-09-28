@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../arguments.dart';
 import '../component.dart';
 import '../engine/matrix_block.dart';
 
@@ -19,13 +20,7 @@ final class LocalLevel extends Component {
   /// A level driven by white noise of intensity [processVariance], which must
   /// be finite and positive.
   LocalLevel({required this.processVariance}) {
-    if (!(processVariance > 0) || !processVariance.isFinite) {
-      throw ArgumentError.value(
-        processVariance,
-        'processVariance',
-        'must be finite and positive',
-      );
-    }
+    checkPositive(processVariance, 'processVariance');
   }
 
   @override

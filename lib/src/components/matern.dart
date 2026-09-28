@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../arguments.dart';
 import '../component.dart';
 import '../engine/matrix_block.dart';
 import '../exceptions.dart';
@@ -78,20 +79,8 @@ final class Matern extends Component {
     required this.lengthScale,
     this.lengthScaleBounds = const (lower: 1e-2, upper: 1e4),
   }) {
-    if (!(variance > 0) || !variance.isFinite) {
-      throw ArgumentError.value(
-        variance,
-        'variance',
-        'must be finite and positive',
-      );
-    }
-    if (!(lengthScale > 0) || !lengthScale.isFinite) {
-      throw ArgumentError.value(
-        lengthScale,
-        'lengthScale',
-        'must be finite and positive',
-      );
-    }
+    checkPositive(variance, 'variance');
+    checkPositive(lengthScale, 'lengthScale');
     final (:lower, :upper) = lengthScaleBounds;
     if (!(lower > 0) || !(lower < upper) || !upper.isFinite) {
       throw ArgumentError.value(

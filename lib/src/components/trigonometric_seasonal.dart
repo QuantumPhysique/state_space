@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../arguments.dart';
 import '../component.dart';
 import '../engine/matrix_block.dart';
 import '../exceptions.dart';
@@ -65,23 +66,11 @@ final class TrigonometricSeasonal extends Component {
     required this.harmonics,
     required this.processVariance,
   }) {
-    if (!(period > 0) || !period.isFinite) {
-      throw ArgumentError.value(
-        period,
-        'period',
-        'must be finite and positive',
-      );
-    }
+    checkPositive(period, 'period');
     if (harmonics < 1) {
       throw ArgumentError.value(harmonics, 'harmonics', 'must be at least 1');
     }
-    if (!(processVariance > 0) || !processVariance.isFinite) {
-      throw ArgumentError.value(
-        processVariance,
-        'processVariance',
-        'must be finite and positive',
-      );
-    }
+    checkPositive(processVariance, 'processVariance');
   }
 
   @override

@@ -1,3 +1,5 @@
+import 'arguments.dart';
+
 /// How the prior on the state at the first time step is specified.
 ///
 /// Trend and seasonal states are non-stationary: there is no proper prior to
@@ -38,13 +40,7 @@ final class ApproximateDiffuse extends Initialization {
   /// A prior of [variance] times the measurement variance, which must be
   /// finite and positive.
   ApproximateDiffuse({this.variance = 1e6}) {
-    if (!(variance > 0) || !variance.isFinite) {
-      throw ArgumentError.value(
-        variance,
-        'variance',
-        'must be finite and positive',
-      );
-    }
+    checkPositive(variance, 'variance');
   }
 
   /// Prior variance on each diffuse state, as a multiple of the measurement

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'arguments.dart';
 import 'component.dart';
 import 'components/local_level.dart';
 import 'components/local_linear_trend.dart';
@@ -50,13 +51,7 @@ final class StructuralModel {
         'a model needs at least one component',
       );
     }
-    if (!(measurementVariance > 0) || !measurementVariance.isFinite) {
-      throw ArgumentError.value(
-        measurementVariance,
-        'measurementVariance',
-        'must be finite and positive',
-      );
-    }
+    checkPositive(measurementVariance, 'measurementVariance');
     for (var i = 0; i < components.length; i++) {
       final c = components[i];
       if (c.parameters.length != c.parameterCount) {
@@ -223,13 +218,7 @@ final class StructuralModel {
     double? minimumMeasurementVariance,
   }) {
     final floor = minimumMeasurementVariance;
-    if (floor != null && (!(floor > 0) || !floor.isFinite)) {
-      throw ArgumentError.value(
-        floor,
-        'minimumMeasurementVariance',
-        'must be finite and positive',
-      );
-    }
+    if (floor != null) checkPositive(floor, 'minimumMeasurementVariance');
     final pass = _filter(
       Timeline.merge(observations, null),
       keepHistory: false,

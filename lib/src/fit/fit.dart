@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../arguments.dart';
 import '../engine/scale.dart';
 import '../exceptions.dart';
 import '../model.dart';
@@ -130,13 +131,11 @@ FitResult fit(
       'cannot also be given a floor to clear',
     );
   }
-  for (final (name, value) in [
-    ('fixedMeasurementVariance', fixedMeasurementVariance),
-    ('minimumMeasurementVariance', minimumMeasurementVariance),
-  ]) {
-    if (value != null && (!(value > 0) || !value.isFinite)) {
-      throw ArgumentError.value(value, name, 'must be finite and positive');
-    }
+  if (fixedMeasurementVariance != null) {
+    checkPositive(fixedMeasurementVariance, 'fixedMeasurementVariance');
+  }
+  if (minimumMeasurementVariance != null) {
+    checkPositive(minimumMeasurementVariance, 'minimumMeasurementVariance');
   }
   if (!(lowerLogRatio < upperLogRatio)) {
     throw ArgumentError('empty bracket [$lowerLogRatio, $upperLogRatio]');
@@ -144,13 +143,7 @@ FitResult fit(
   if (scanPoints < 3) {
     throw ArgumentError.value(scanPoints, 'scanPoints', 'must be at least 3');
   }
-  if (!(tolerance > 0) || !tolerance.isFinite) {
-    throw ArgumentError.value(
-      tolerance,
-      'tolerance',
-      'must be finite and positive',
-    );
-  }
+  checkPositive(tolerance, 'tolerance');
 
   FitResult run(double? fixed) => _search(
     initial,
