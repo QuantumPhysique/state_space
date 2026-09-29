@@ -46,6 +46,8 @@ jobs:
           sdk: stable
       - run: dart pub get
       - run: dart pub publish --dry-run
+      # pana converts the screenshots with cwebp, gif2webp and webpinfo.
+      - run: sudo apt-get update && sudo apt-get install -y webp
       - name: pana
         run: |
           dart pub global activate pana
