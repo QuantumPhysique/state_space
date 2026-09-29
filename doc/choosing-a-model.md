@@ -174,10 +174,12 @@ better but cannot say which part did the work.
 
 ## A worked comparison on real data
 
-`tool/calibration/` fits several candidate models to a weight diary (a real
-export, or four synthetic ones) and prints the fitted smoothing, how well it is
-determined, the noise level and a Ljung–Box test, for the whole history and at
-several earlier lengths.
+[`tool/calibration/`](https://github.com/QuantumPhysique/state_space/tree/main/tool/calibration)
+in the GitHub repository fits several candidate models to a weight diary (a
+real export, or four synthetic ones) and prints the fitted smoothing, how well
+it is determined, the noise level and a Ljung–Box test, for the whole history
+and at several earlier lengths. It is not part of the published package; run it
+from a clone of the repository:
 
 ```sh
 dart run tool/calibration/calibrate.dart --all
