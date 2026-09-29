@@ -1,7 +1,7 @@
 # Smooth trends from noisy, irregular time series
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/social-preview.png" alt="Social preview" width="50%">
+  <img src="https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/social-preview.png" alt="Social preview" width="66%">
 </p>
 
 **state_space** estimates smoothed trends from noisy readings taken at
