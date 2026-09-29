@@ -3,9 +3,15 @@
 ![Readings with a gap, the smoothed trend with its 95% credible band, and a forecast](https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/trend.png)
 
 **state_space** estimates smoothed trends from noisy readings taken at
-irregular times. I wrote it for body-weight diaries, where days are skipped and
-readings come in bursts, but nothing in it is specific to weight: a sensor or a
-price works just as well. It returns the trend, its slope and a credible band,
+irregular times. Although it was designed for the body-weight diary [trale](https://github.com/QuantumPhysique/trale),
+where days are skipped and readings are sporadic, nothing about it is specific to
+weight; it works on any time series. It returns the trend, its slope and a
+credible band, across gaps and into the future. It is written in pure Dart, so
+it runs on every platform in Flutter.
+
+I wrote it for body-weight diaries, where days are skipped and
+readings come in bursts, but nothing in it is specific to weight: it works on
+any time series. It returns the trend, its slope and a credible band,
 across gaps and into the future. It is written in pure Dart, so it runs in
 Flutter on every platform.
 
