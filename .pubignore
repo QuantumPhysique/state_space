@@ -1,0 +1,9 @@
+# Replaces .gitignore when publishing, so its rules are repeated here.
+.dart_tool/
+pubspec.lock
+doc/api/
+.claude/
+
+# Maintainer scripts; available in the GitHub repository.
+tool/
+benchmark/
