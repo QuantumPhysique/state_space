@@ -24,9 +24,8 @@ sealed class ParameterSpec {
   /// it divided by `ln 10` is a width in decades.
   ///
   /// True for a log variance, a log length scale and a log period. False for a
-  /// logit, where the same division produces a number in no unit at all — see
-  /// [FitResult.plateauDecadesByParameter], which reports [double.nan] rather
-  /// than a plausible-looking figure.
+  /// logit, for which [FitResult.plateauDecadesByParameter] reports
+  /// [double.nan].
   bool get isLogarithmic;
 
   /// How far the simplex should step along this axis when it starts, or null
@@ -64,8 +63,8 @@ final class VarianceParameter extends ParameterSpec {
 /// damping factor.
 ///
 /// Unaffected by the scale of the data, and searched over [lower] to [upper] in
-/// whatever unconstrained coordinate the component chose — a log for a period,
-/// a logit for a damping factor.
+/// whatever unconstrained coordinate the component chose (a log for a period,
+/// a logit for a damping factor).
 ///
 /// [scanPoints] overrides the resolution of the coordinate scan on this axis
 /// alone, for a likelihood that is multimodal in this parameter, as a cycle's

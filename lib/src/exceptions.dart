@@ -2,7 +2,7 @@
 ///
 /// Thrown for conditions that depend on the data rather than on how the API
 /// was called, so a caller that feeds in user data should expect to catch it.
-/// Invalid arguments — an unsorted list, a negative variance — throw
+/// Invalid arguments (an unsorted list, a negative variance) throw
 /// [ArgumentError] instead.
 ///
 /// {@category Getting started}

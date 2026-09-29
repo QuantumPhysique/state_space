@@ -1,8 +1,8 @@
 # Getting started
 
-The examples use a body-weight diary: readings that skip days, two readings on
-one morning, a fortnight away with none at all. Nothing in the package is
-specific to it.
+The examples use a body-weight diary with skipped days, two readings on one
+morning and a fortnight with no readings. Nothing in the package is specific to
+weight.
 
 ## Install
 
@@ -13,7 +13,7 @@ dependencies:
 
 No runtime dependencies, no platform channels, no native code.
 
-## The shortest thing that works
+## A first fit
 
 ```dart
 import 'package:state_space/state_space.dart';
@@ -39,21 +39,21 @@ final data = [
 ];
 
 final fitted = fit(StructuralModel.localLinearTrend(processVariance: 1), data);
-print(fitted.warnings);         // [] -- nothing to worry about
+print(fitted.warnings);         // []
 final trend = fitted.model.smooth(data);
 
 trend.mean[0];                  // the smoothed curve at the first reading
 trend.credibleInterval(0);      // (lo: ..., hi: ...) around it
 ```
 
-Two calls. `fit` estimates how flexible the curve should be; `smooth` computes
-the posterior. `fit` ignores the `processVariance` you pass: it scans a fixed
-bracket thirteen decades wide in the ratio of the process variance to the
-noise, from about `1e-8.7` to `1e4.3`, and `lowerLogRatio` and `upperLogRatio`
-move it. That bracket suits time in days.
+`fit` estimates how flexible the curve should be and `smooth` computes the
+posterior. `fit` ignores the `processVariance` you pass: it scans a fixed
+bracket, thirteen decades wide, in the ratio of the process variance to the
+noise (about `1e-8.7` to `1e4.3`). `lowerLogRatio` and `upperLogRatio` move it.
+The default suits time in days.
 
-Check `fitted.warnings` before quoting a fit. Four readings, for instance, do
-not determine a smoothing level, and the fit then says so;
+Check `fitted.warnings` before using a fit. Four readings, for instance, do
+not determine a smoothing level, and the fit says so;
 [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#read-the-warnings)
 explains each warning.
 
@@ -76,7 +76,7 @@ per output time, in the order you asked for them.
 `trendSlope` is the trend's own rate. With a weekly seasonal in the model it is
 not the derivative of `mean`, which includes the weekly wiggle.
 
-Two kinds of interval, and the difference matters:
+There are two kinds of interval:
 
 ```dart
 trend.credibleInterval(i);    // where the underlying trend is
@@ -84,10 +84,10 @@ trend.predictiveInterval(i);  // where the next reading would fall
 trend.credibleBand();         // the first at every output time, as lo and hi arrays
 ```
 
-The credible band is the one to draw around a curve. It is narrow, and most
-individual measurements fall outside it: it answers "where is the trend", not
-"where would the next reading land". About 95 % of the observations should sit
-inside the 95 % predictive band.
+Draw the credible band around the curve. It is narrow, and most individual
+readings fall outside it, because it describes the trend rather than the next
+reading. About 95 % of the observations should sit inside the 95 % predictive
+band.
 
 ## Dates
 
@@ -102,11 +102,11 @@ final data = [for (final r in readings) axis.observation(r.date, r.kg)];
 final dates = [for (final t in trend.times) axis.dateAt(t)];
 ```
 
-Subtracting two `DateTime`s and dividing by 24 hours drifts by an hour across a
-change of clocks, so readings taken at 07:00 every day stop landing on whole
+Subtracting two `DateTime`s and dividing by 24 hours is off by an hour after a
+change of clocks, so readings taken at 07:00 every day no longer land on whole
 days.
 
-## Irregular data is not a special case
+## Irregular data
 
 ```dart
 final data = [
@@ -117,29 +117,28 @@ final data = [
 ];
 ```
 
-Nothing is interpolated, nothing is resampled, no gap is filled, and you do not
-have to average the duplicates. A gap is a larger `dt` in the recursion, a
-repeated timestamp is `dt = 0`, and a day with no reading is a step with no
-update.
+There is no interpolation or resampling, and duplicates do not need averaging.
+A gap is a larger `dt` in the recursion, a repeated timestamp is `dt = 0`, and a
+day with no reading is a step without an update.
 
-**Observations must be sorted by time.** The package does not sort them,
-because results come back in the order you supplied.
+**Observations must be sorted by time.** Results come back in the order you
+supplied.
 
 ## Asking for output between the readings
 
-Pass a grid. Grid points are steps with no observation attached, so a value
-between two readings costs one more step in the same linear recursion.
+Pass a grid. Grid points are steps with no observation attached, so each one
+costs one more step of the recursion.
 
 ```dart
 final everyDay = [for (var d = 0; d <= 30; d++) d.toDouble()];
 final daily = fitted.model.smooth(data, grid: everyDay);
 ```
 
-A grid may extend past the data at either end, and the band widens accordingly.
+A grid may extend past the data at either end; the band widens there.
 Where a grid time coincides exactly with an observation, the reported state
 includes that observation.
 
-## The slope, and where it is heading
+## Slopes and forecasts
 
 The trend carries its own rate of change:
 
@@ -148,7 +147,7 @@ daily.trendSlope![10];          // signal units per time unit
 daily.trendSlopeVariance![10];  // and how sure it is
 ```
 
-Forecasting is the same recursion with no observations left to update on:
+A forecast is the same recursion with no more observations:
 
 ```dart
 final horizon = [for (var d = 31; d <= 60; d++) d.toDouble()];
@@ -158,19 +157,19 @@ ahead.credibleInterval(0);    // where the signal is going
 ahead.predictiveInterval(0);  // where an actual reading would fall
 ```
 
-The band widens quickly: for a local linear trend the variance of the forecast
-grows like the cube of the horizon, because a slope that is free to wander
-becomes unknowable. That is the model working, not a defect.
+The band widens quickly. For a local linear trend the forecast variance grows
+like the cube of the horizon, because the slope itself is uncertain and keeps
+drifting. This is expected behaviour.
 
-A horizon whose first entry *is* the last observation time reports the filtered
-state there, conditioned on everything up to and including that reading and
-nothing after it. That is the number to show when it must not move once shown.
+If the first horizon time equals the last observation time, the forecast there
+is the filtered state: conditioned on everything up to and including that
+reading. Use it for a value that should not change once it has been shown.
 
 ## Readings you trust differently
 
-`relativeVariance` weights one observation against the model's own noise level,
-so an average of two weighings and a hurried single one can sit in the same
-series:
+`relativeVariance` scales one observation's noise against the model's noise
+level, so an average of two weighings and a single quick one can be in the
+same series:
 
 ```dart
 Observation(4, 80.4);                          // an ordinary reading
@@ -180,10 +179,10 @@ Observation(6, 79.1, relativeVariance: 4.0);   // trusted half as much
 
 ## Bad readings
 
-The fit is Gaussian, so a single mistyped value (801 for 80.1, or 8.01) pulls
-the noise estimate up and moves the curve for months around it. `fit` measures
-how far each reading sits from what the rest of the data predicts for it, and
-names the worst in `warnings` when it is more than six typical errors away:
+The fit is Gaussian, so one mistyped value (801 for 80.1, or 8.01) inflates
+the noise estimate and moves the curve for months around it. `fit` measures
+how far each reading is from what the rest of the data predicts, and names the
+worst one in `warnings` when it is more than six typical errors away:
 
 ```dart
 var fitted = fit(model, data);
@@ -199,33 +198,33 @@ if (worst != null && worst.score.abs() > FitResult.outlierScore) {
 }
 ```
 
-A very large `relativeVariance` sets the reading aside without removing it, so
-the output times stay where they were. Dropping it from the list works too.
+A very large `relativeVariance` effectively ignores the reading but keeps it in
+the list, so the output times do not change. Removing it works too.
 
-## Telling it what the instrument can do
+## Noise floors
 
-Left alone, the noise level is whatever explains the data best. On a run of
-nearly identical readings that can be a number no real scale could deliver, and
-a band far too narrow to believe.
+By default the noise level is whatever explains the data best. On a run of
+nearly identical readings that can be smaller than any real scale could
+achieve, with a band that is far too narrow.
 
 ```dart
 fit(model, data, minimumMeasurementVariance: 0.029 * 0.029);  // rounds to 100 g
 fit(model, data, fixedMeasurementVariance: 0.2 * 0.2);        // known noise
 ```
 
-`minimumMeasurementVariance` is a floor. The fit runs normally and is redone
-with the noise pinned only if the free estimate lands below the floor, so it
-costs nothing when the data agrees. A display that rounds to 100 g contributes a
-rounding error of standard deviation `0.1 / sqrt(12)`, about 0.029 kg, which no
-amount of data can see through. Use a floor whenever a `Matern` is in the model.
+`minimumMeasurementVariance` is a floor. The fit runs normally and is only
+redone with the noise pinned if the free estimate is below the floor, so it
+costs nothing otherwise. A display that rounds to 100 g adds a rounding error
+with standard deviation `0.1 / sqrt(12)`, about 0.029 kg. Use a floor whenever
+a `Matern` is in the model.
 
 `fixedMeasurementVariance` pins the noise level for when it is known, and
 estimates the smoothing given it.
 
 ## Choosing the smoothing yourself
 
-When the stiffness of the curve is a setting rather than an estimate, do not
-fit. Build the model at the ratio you want and let the data set the scale:
+If the stiffness of the curve is a user setting rather than an estimate, skip
+`fit`. Build the model at the ratio you want and let the data set the scale:
 
 ```dart
 // A stiffness from a user setting: process variance = ratio * noise variance.
@@ -235,15 +234,15 @@ final trend = chosen.smooth(data, grid: everyDay);
 ```
 
 `withEstimatedScale` keeps every variance ratio and sets the noise level to its
-restricted maximum likelihood estimate, in one forward pass. The curve is then
-the same whatever the noise level turns out to be; only the band changes. Pass
+restricted maximum likelihood estimate, in one forward pass. The curve depends
+only on the ratio; the noise level only changes the band. Pass
 `minimumMeasurementVariance` to put a floor under the estimate.
 
 ## When there is not enough data
 
-A trend has two flat directions, a level and a slope, and needs readings at two
-distinct times before it means anything; each harmonic of a seasonal adds two
-more, and each regression column one. `fit` needs one reading more than that to
+A trend has two flat directions, a level and a slope, so it needs readings at
+two distinct times. Each harmonic of a seasonal adds two more, and each
+regression column one. `fit` needs one reading more than that to
 estimate a noise level from. With fewer, the package throws an
 `UnderdeterminedModelException` whose message says what is missing:
 
@@ -260,19 +259,18 @@ All the package's data-dependent failures are `StateSpaceException`s:
 component whose process noise is not a covariance. Invalid arguments throw
 `ArgumentError`.
 
-`ApproximateDiffuse` answers where exact initialisation refuses, with a very
-wide band instead. It is sound only with a time unit that keeps rates of change
+`ApproximateDiffuse` returns a very wide band where exact initialisation
+throws. It is sound only with a time unit that keeps rates of change
 near order one, such as days.
 
 A band computed from a handful of readings treats the estimated noise level as
-known, so in the first week or two of a diary it is too narrow by the
-uncertainty in that estimate. A floor on the noise at a realistic spread, rather
-than at the instrument's resolution, helps.
+known, so in the first week or two of a diary it is too narrow. A noise floor
+at a realistic spread, rather than at the instrument's resolution, helps.
 
 ## Refitting as data arrives
 
-A diary that gains a reading a day rarely moves its optimum far, and
-rediscovering the same basin costs hundreds of filter passes.
+A diary that gains one reading a day rarely moves its optimum far, so there is
+no need to repeat the full scan:
 
 ```dart
 var fitted = fit(model, data);                          // cold, once
@@ -281,15 +279,14 @@ fitted = fit(fitted.model, longerData,                  // warm, after
 ```
 
 On two years of daily readings with a trend, a weekly seasonal and a Matérn,
-adding one observation: 573 filter passes cold, 232 warm, the same likelihood
-to 1e-4. The local search follows the optimum as far as the new data moves it,
-but cannot jump to a different basin, so run a cold fit whenever the data
-changes character rather than merely grows.
+adding one observation took 573 filter passes cold and 232 warm, with the same
+likelihood to 1e-4. A warm start cannot jump to a different basin, so run a
+cold fit when the data changes character rather than just growing.
 
-## Off the interface thread
+## Isolates
 
-A model and its posterior are plain data, so they cross an isolate boundary
-unchanged:
+A model and its posterior are plain data, so they can be sent to another
+isolate:
 
 ```dart
 final posterior = await Isolate.run(() => model.smooth(data));
@@ -301,8 +298,8 @@ diagnostics.
 
 ## Where to go next
 
-* [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md): which components, and how to tell
-  whether one earned its place
+* [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md): which components, and how to
+  compare them
 * [Components](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md): what each one is, and which kernels are reachable
 * [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md): the Gaussian process, the SDE and the filter
 * [Validation](https://github.com/QuantumPhysique/state_space/blob/main/doc/validation.md): what is checked, against what, and how closely

@@ -151,8 +151,8 @@ SimplexResult maximiseSimplex(
       continue;
     }
 
-    // The reflection was no help, so pull in — from outside if the reflection
-    // at least beat the point it replaced, from inside if it did not.
+    // Reflection did not help: contract, outside if the reflection at least
+    // beat the point it replaced, inside if not.
     final outside = reflected > values[worst];
     final contracted = Float64List(k);
     for (var j = 0; j < k; j++) {

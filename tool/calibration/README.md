@@ -1,13 +1,10 @@
 # Calibration
 
-Does the right answer help?
-
-The test suite pins this package to dense Gaussian process references to nine
-or ten digits. That says it computes the right thing. It says nothing about
-whether the right thing is any use on a real weight diary — whether the fitted
-smoothing is stable enough to show someone, whether a model needs a weekly
-component, whether the noise level it reports is believable. This directory
-answers those with numbers.
+The test suite checks the package against dense Gaussian process references to
+nine or ten digits. This tool looks at how the models behave on weight diaries:
+whether the fitted smoothing is stable enough to show someone, whether a
+weekly component is needed, and whether the reported noise level is
+believable.
 
 ## Running it
 
@@ -21,8 +18,8 @@ uses those instead: comment lines starting with `#`, then an ISO 8601
 timestamp, a space and a weight in kilograms per line. Commas and semicolons
 work as separators too, so an ordinary two-column CSV needs no conversion.
 
-Nothing leaves the machine. A file passed on the command line is read, turned
-into numbers, and the numbers are printed.
+Everything runs locally. A file passed on the command line is only read and
+summarised.
 
 | option | |
 |---|---|
@@ -42,41 +39,38 @@ Read the log likelihoods only down a run of equal `diff`: the trend-only and
 trend-plus-hydration models have two flat directions each and can be compared,
 and neither can be compared with the ones carrying a weekly component, which have
 six. The fitted noise level and the Ljung–Box p-value are comparable across all
-four, and are the way to choose. [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#how-to-tell-whether-it-earned-its-place--and-how-not-to)
+four, and are the way to choose. [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#comparing-models)
 explains why.
 
-**The stability table** refits at 14, 21, 30, 45, 60, 90, 120 and 186 days, and
-asks the question a user would: does the curve keep its character as the diary
-grows? The bracketed figure is how many decades the trend's own variance can
-move before the fit is half a nat worse, so it is a width and not a value: under
-half a decade is a real estimate, and over two — starred — means the printed
-bandwidth is a convention.
+**The stability table** refits at 14, 21, 30, 45, 60, 90, 120 and 186 days, to
+see whether the curve keeps its character as the diary grows. The bracketed
+figure is how many decades the trend's variance can move before the fit is
+half a nat worse. Under half a decade is a real estimate; over two (starred)
+means the printed bandwidth is not determined by the data.
 
 Bandwidth is in days, via Silverman's equivalent kernel: a smoothing spline with
 parameter `lambda` on data sampled `f` times per unit time behaves like a kernel
 smoother of bandwidth `(lambda / f)^(1/4)`. With daily readings and `lambda` the
 reciprocal of the fitted variance ratio, that is the ratio to the power of minus
-a quarter. The exponent is why a factor of sixteen in the variance is only a
-factor of two on the chart, and why a setting expressed in days is a much better
-thing to hand a user than one expressed in variance.
+a quarter. So a factor of sixteen in the variance is only a factor of two on
+the chart, and a user setting in days is easier to work with than one in
+variance.
 
-**The floor table** shows where asserting the scale's own precision changes the
-answer. A floor that does not bind costs nothing; one that binds costs one more
-fit. Where it binds it tends to change everything, because a model that has
-driven the measurement noise to a thousandth of a kilogram is fitting the
-readings rather than the weight.
+**The floor table** shows where a noise floor at the scale's precision changes
+the answer. A floor that does not bind costs nothing; one that binds costs one
+more fit. Where it binds it usually changes the result a lot, because a model
+with a measurement noise of a thousandth of a kilogram is fitting the readings
+rather than the weight.
 
 ## The synthetic diaries
 
-Four courses — two losing at different scales, one holding steady, one gaining —
-with hydration that persists across days rather than scattering, a weekday
-pattern, reading error, rounding to the tenth of a kilogram the display shows,
-missed mornings that clump into lapses, and a trip with a gap and a rebound.
-Four rather than one because the interesting question is whether a fit behaves
-the same way for all of them, and one series cannot answer that.
+Four courses (two losing at different rates, one steady, one gaining) with
+hydration that persists across days, a weekday pattern, reading error,
+rounding to the 0.1 kg the display shows, missed mornings that cluster into
+lapses, and a trip with a gap and a rebound. There are four so that you can see
+whether a fit behaves the same way on all of them.
 
-They are a stand-in and not the point. Every constant in `synthetic.dart` says
-where it came from, and several say they are guesses. A real export settles
-things that a generator written by the same person who wrote the model never
-can — most of all whether a weekly pattern is there at all, which on this data
-is the single thing that decides whether the fitted smoothing is stable.
+Every constant in `synthetic.dart` has a comment on where it came from, and
+some are guesses. A real export is the better test, above all for whether a
+weekly pattern is present, which on this data decides whether the fitted
+smoothing is stable.

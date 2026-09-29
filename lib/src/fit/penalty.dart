@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../arguments.dart';
 import '../component.dart';
 
 /// A term added to the log-likelihood before it is maximised.
@@ -70,9 +71,7 @@ final class ComplexityPenalty extends Penalty {
   /// [scale] must be finite and positive and [tailProbability] strictly
   /// between 0 and 1.
   ComplexityPenalty({this.scale = 1, this.tailProbability = 0.01}) {
-    if (!(scale > 0) || !scale.isFinite) {
-      throw ArgumentError.value(scale, 'scale', 'must be finite and positive');
-    }
+    checkPositive(scale, 'scale');
     if (!(tailProbability > 0) || !(tailProbability < 1)) {
       throw ArgumentError.value(
         tailProbability,

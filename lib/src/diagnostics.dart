@@ -13,19 +13,16 @@ typedef LjungBoxResult = ({
 /// What the one-step-ahead prediction errors say about the model that
 /// produced them.
 ///
-/// A structural model asserts that everything systematic in the series has
-/// been absorbed by its components, leaving independent Gaussian noise. That
-/// assertion is testable, and this is the object that tests it: the residuals
-/// should have mean zero, unit variance, and no autocorrelation at any lag. A
-/// weekly pattern left out of the model shows up here as a spike in the
-/// autocorrelation at seven days' worth of observations, long before it shows
-/// up as a visibly bad fit.
+/// If the model is right, its components absorb everything systematic and the
+/// residuals are independent standard normals: mean zero, unit variance, no
+/// autocorrelation. A weekly pattern left out of the model shows up here as a
+/// spike in the autocorrelation at seven days' worth of observations, long
+/// before it shows up as a visibly bad fit.
 ///
-/// The residuals are the recursive ones described in `recursive_residuals.dart`
-/// — each conditioned only on what came before it — so they are genuinely
-/// independent under the model rather than approximately so, and there are
-/// `N - d` of them for `d` flat directions, exactly as many as the likelihood
-/// charges for.
+/// The residuals are the recursive ones from `recursive_residuals.dart`, each
+/// conditioned only on what came before it, so they are exactly independent
+/// under the model. There are `N - d` of them for `d` flat directions, as many
+/// as the likelihood charges for.
 ///
 /// {@category Choosing a model}
 final class InnovationDiagnostics {
@@ -42,8 +39,8 @@ final class InnovationDiagnostics {
     }
   }
 
-  /// Time of each residual, ascending, as a read-only view. The first few observations are absent:
-  /// they are spent locating the flat directions.
+  /// Time of each residual, ascending, as a read-only view. The first few
+  /// observations are absent: they are spent locating the flat directions.
   final Float64List times;
 
   /// Standardised one-step-ahead prediction errors. Standard normal under a
@@ -70,9 +67,9 @@ final class InnovationDiagnostics {
   /// Their sample variance, which should be one to within
   /// `sqrt(2 / count)`.
   ///
-  /// Reliably above one means the model is more confident than it has earned
-  /// — the measurement variance, or a process variance, is too small. Below
-  /// one means the opposite.
+  /// Reliably above one means the model is overconfident: the measurement
+  /// variance, or a process variance, is too small. Below one means the
+  /// opposite.
   ///
   /// **This says nothing at all about a model that has just been fitted.**
   /// Fitting concentrates the measurement variance out, which is to say it
@@ -99,14 +96,11 @@ final class InnovationDiagnostics {
 
   /// Sample autocorrelation of the residuals at [lag].
   ///
-  /// Note what a lag is here. It counts *observations*, not time: lag one is
-  /// the previous reading, whenever that happened to be. That is the right
-  /// notion for this test — under the model the residuals are independent
-  /// however unevenly they are spaced, so any dependence between neighbours
-  /// is a defect regardless of the gap between them — but it does mean a
-  /// weekly pattern shows up at "seven observations" only when the sampling
-  /// is roughly daily. On thinner data, look for it wherever a period's worth
-  /// of readings falls.
+  /// A lag counts *observations*, not time: lag one is the previous reading,
+  /// whenever that was. Under the model the residuals are independent however
+  /// unevenly they are spaced, so this is the right notion, but a weekly
+  /// pattern shows up at lag seven only when the sampling is roughly daily.
+  /// On thinner data, look wherever a period's worth of readings falls.
   double autocorrelation(int lag) {
     if (lag < 1 || lag >= count) {
       throw ArgumentError.value(
@@ -139,9 +133,8 @@ final class InnovationDiagnostics {
   /// informative about that than the statistic is.
   ///
   /// Pass [fittedParameters] when the variances were estimated on the same
-  /// data. Each estimated parameter costs a degree of freedom, and ignoring
-  /// that makes the test optimistic — it will fail to reject models it should
-  /// reject.
+  /// data. Each estimated parameter costs a degree of freedom, and without
+  /// them the test fails to reject models it should reject.
   ///
   /// [lags] defaults to ten, the usual choice for a non-seasonal series. With
   /// a seasonal component, twice the number of observations in a period is

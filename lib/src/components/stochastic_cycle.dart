@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../arguments.dart';
 import '../component.dart';
 import '../engine/matrix_block.dart';
 import '../exceptions.dart';
@@ -55,13 +56,7 @@ final class StochasticCycle extends Component {
     this.dampingBounds = const (lower: 0.05, upper: 0.9999),
     this.periodScanPoints = 120,
   }) {
-    if (!(period > 0) || !period.isFinite) {
-      throw ArgumentError.value(
-        period,
-        'period',
-        'must be finite and positive',
-      );
-    }
+    checkPositive(period, 'period');
     if (!(damping > 0) || !(damping < 1)) {
       throw ArgumentError.value(
         damping,
@@ -70,13 +65,7 @@ final class StochasticCycle extends Component {
             'is not stationary, and at 0 it has no memory to oscillate with',
       );
     }
-    if (!(stationaryVariance > 0) || !stationaryVariance.isFinite) {
-      throw ArgumentError.value(
-        stationaryVariance,
-        'stationaryVariance',
-        'must be finite and positive',
-      );
-    }
+    checkPositive(stationaryVariance, 'stationaryVariance');
     if (!(periodBounds.lower > 0) ||
         !(periodBounds.lower < periodBounds.upper) ||
         !periodBounds.upper.isFinite) {
@@ -137,8 +126,8 @@ final class StochasticCycle extends Component {
   /// The default places 120 points across [periodBounds], which over the
   /// default two-decade range is about five per cent apart. The peak in the
   /// period is roughly `1 / (2 * cycles observed)` wide in relative terms, so
-  /// this resolves a peak from eight cycles onward — which is about where the
-  /// period becomes estimable in the first place.
+  /// this resolves a peak from about eight cycles onward, which is also where
+  /// the period starts to be estimable.
   final int periodScanPoints;
 
   /// Angular frequency, `2 pi / period`.

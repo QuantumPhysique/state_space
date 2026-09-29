@@ -2,11 +2,11 @@ import '../observation.dart';
 
 /// The smallest measurement variance a fit will report for [observations].
 ///
-/// A series that a model explains exactly — every reading identical, or on a
-/// straight line under a trend — has a restricted maximum likelihood noise
-/// level of zero, or a rounding error either side of it, and no model can be
-/// built with that. This floor is far below anything an instrument resolves:
-/// a standard deviation of one part in a billion of the largest reading.
+/// A series that a model explains exactly (every reading identical, or on a
+/// straight line under a trend) has a restricted maximum likelihood noise
+/// level of zero, give or take rounding, and no model can be built with that.
+/// This floor is far below anything an instrument resolves: a standard
+/// deviation of one part in a billion of the largest reading.
 double scaleFloor(List<Observation> observations) {
   var largest = 0.0;
   for (final o in observations) {

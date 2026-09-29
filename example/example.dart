@@ -1,5 +1,5 @@
-// A worked example: thirty noisy readings with a three-week hole in the
-// middle, an estimated smoothing level, and a trend with an honest band.
+// Thirty noisy readings with a three-week gap in the middle: fit the
+// smoothing level, then print the daily trend, its slope and its band.
 //
 //   dart run example/example.dart
 

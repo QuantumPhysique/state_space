@@ -6,9 +6,9 @@ A model is a sum of components:
 y(t) = sum_i H_i(t) x_i(t) + eps(t),   eps ~ N(0, measurementVariance)
 ```
 
-Each one is a Gaussian process kernel written in the form that makes it fast, and
-each owns a few consecutive states. They compose block-diagonally, so adding a
-component costs what that component costs and nothing more.
+Each is a Gaussian process kernel in state-space form and owns a few
+consecutive states. The blocks are stacked block-diagonally, so a component only
+adds its own cost.
 
 | component | kernel | states | prior | parameters |
 |---|---|---|---|---|
@@ -19,56 +19,55 @@ component costs what that component costs and nothing more.
 | `Matern` | Matérn, ν = 1/2, 3/2, 5/2 | 1, 2, 3 | stationary | 2 |
 | `StochasticCycle` | `ρ^\|τ\| cos(2πτ/p)`, period estimated | 2 | stationary | 3 |
 
-The last column is the number of search dimensions each adds to `fit`, which
-concentrates the measurement variance out on top of that. A trend plus twenty
+The last column is how many search dimensions each adds to `fit`. The
+measurement variance is concentrated out and adds none, so a trend plus twenty
 holiday indicators is a one-dimensional search.
 
 ## Supported kernels
 
-Only kernels with a finite-dimensional state-space form are supported, because
-linear time comes from the Markov property; the table above is the list. A new
-one is added by writing a `Component`, not by passing `k(s, t)`, which would
-cost `O(N³)`.
+Only kernels with a finite-dimensional state-space form are supported, since
+the linear cost relies on the Markov property; the table above is the list. A
+new one is added by writing a `Component`, not by passing `k(s, t)`, which
+would cost `O(N³)`.
 
 The squared exponential is not supported: it has no exact finite-state form.
 
 ## The non-stationary ones
 
-These have no prior of their own. Where the level sits, and where a pattern sits
-in its cycle, are questions only the data can answer, and the engine handles them
-as flat directions — see [exact diffuse initialisation](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md#exact-diffuse-initialisation).
+These have no proper prior: the level, and the phase of a pattern, come from
+the data alone. The engine treats them as flat directions; see
+[exact diffuse initialisation](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md#exact-diffuse-initialisation).
 
 ### `LocalLevel`
 
 A level following a Wiener process. One state, `A(dt) = 1`, `Q(dt) = σ² dt`. The
-posterior mean is a linear interpolant through shrunken observations — the
+posterior mean is a linear interpolant through shrunken observations, the
 continuous-time counterpart of simple exponential smoothing.
 
 Use it when the series has no persistent direction. It will not extrapolate.
 
 ### `LocalLinearTrend`
 
-The default, and the one most series want. The state is `(level, slope)`, the
-slope is driven by white noise and the level is its integral:
+The default. The state is `(level, slope)`; the slope is driven by white noise
+and the level is its integral:
 
 ```text
 d(mu) = nu dt,   d(nu) = sigma dB
 ```
 
 The implied kernel is the cubic spline kernel, so **the posterior mean is a
-natural cubic smoothing spline**, computed as the exact posterior of a Gaussian
-process with a credible band, in linear time (Wahba 1978).
+natural cubic smoothing spline** (Wahba 1978), here with a credible band and in
+linear time.
 [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md#as-a-kalman-filter-and-rts-smoother)
 has the kernel and the smoothing parameter.
 
-Choosing this over `LocalLevel` is a claim that "still going down" is a
-meaningful sentence about your data. It carries a slope and will extrapolate it.
+Unlike `LocalLevel` it carries a slope, and extrapolates it.
 
 ### `TrigonometricSeasonal`
 
-A repeating pattern of known period whose shape drifts. Each harmonic is a pair
-of states that rotate into one another as time passes; the observation reads the
-sum.
+A repeating pattern of known period whose shape can drift. Each harmonic is a
+pair of states that rotate into one another over time, and the observation
+reads their sum.
 
 ```dart
 TrigonometricSeasonal(period: 7, harmonics: 2, processVariance: 1e-3)
@@ -81,34 +80,32 @@ refuse it with an `UnderdeterminedModelException`. The check uses the typical
 gap between readings, so the period can be in any time unit: `period: 1` with
 time in years and monthly readings is fine.
 
-`processVariance` is the rate at which the pattern is allowed to change shape,
-not its amplitude. All harmonics share it, which is Harvey's specification and
-keeps the component to one parameter.
+`processVariance` is the rate at which the pattern may change shape, not its
+amplitude. All harmonics share it (Harvey's specification), so the component
+has one parameter.
 
-Two things about it that surprise people:
+Two properties worth knowing:
 
 * **Averaged over a full period each harmonic integrates to zero**, so the
-  component carries no level of its own and does not compete with a trend for
-  one. Over a stretch shorter than a period they *are* confounded, but that is a
-  statement about the data.
+  component has no level of its own and does not compete with a trend for one.
+  Over a stretch shorter than a period the two are confounded.
 * **Shrinking the variance to zero does not remove the component.** It only
-  stops the pattern evolving; what is left is a rigid Fourier series whose
-  starting coefficients have a flat prior that nothing shrinks. Over less than
-  one period a rigid sinusoid is very nearly a constant plus a slope, so an
-  annual component on 180 days of data draws a cycle of 1.14 peak to trough out
-  of a series that has none, while reporting its variance at the floor. It does
-  say so, in the place worth looking: that component's own posterior standard
-  deviation there is 1.27 — larger than the pattern it drew, and eighteen times
-  the 0.07 the total signal is known to. By a year it is 0.065. See
-  [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#what-competes-with-what).
+  stops the pattern changing, leaving a rigid Fourier series whose starting
+  coefficients have a flat prior. Over less than one period a rigid sinusoid is
+  very nearly a constant plus a slope, so an annual component on 180 days of
+  data draws a cycle of 1.14 peak to trough in a series that has none, while
+  reporting its variance at the floor. The component's own posterior standard
+  deviation shows the problem: it is 1.27 there, larger than the pattern it drew
+  and eighteen times the 0.07 of the total signal. With a year of data it is
+  0.065. See [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#what-competes-with-what).
 
-The usual alternative, dummy-variable seasonality, has no sensible `A(dt)` for a
-non-integer gap, which rules it out here.
+Dummy-variable seasonality is not available, since it has no sensible `A(dt)`
+for a non-integer gap.
 
 ### `RegressionComponent`
 
-Coefficients on known columns of time — a fortnight over Christmas, a
-conference, a course of medication, a dose:
+Coefficients on known functions of time, such as a fortnight over Christmas, a
+conference, a course of medication or a dose:
 
 ```dart
 RegressionComponent([
@@ -119,13 +116,12 @@ RegressionComponent([
 
 `IndicatorRegressor` is one while something is happening and zero otherwise;
 `StepRegressor` holds a value between known instants. A regressor is data rather
-than a closure, so that it survives an isolate boundary whatever it was built
-from.
+than a closure, so it can be sent to an isolate.
 
 Each coefficient is one state with `A = I` and `Q = 0` under a flat prior, so
-**`parameterCount` is zero**: the exact diffuse machinery already integrates out
-flat directions, and a coefficient is one. They add no search dimension and
-arrive with posterior standard errors from the same recursion that produced the
+**`parameterCount` is zero**: a coefficient is a flat direction, which exact
+diffuse initialisation integrates out anyway. Coefficients add no search
+dimension and come with posterior standard errors from the same pass as the
 trend:
 
 ```dart
@@ -135,21 +131,21 @@ posterior.coefficients.first;   // christmas: 1.121 +/- 0.091
 Because such a state never moves, the backward pass skips it; see
 [`Component.isStatic`](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md#the-smoother).
 The forward pass still carries every column as a flat direction, and its cost
-grows roughly with the square of their number: on two years of daily readings
+grows roughly with the square of the number of columns: on two years of daily readings
 a likelihood evaluation of a trend and a weekly seasonal takes 0.4 ms, with one
 indicator 0.5 ms, and with twenty 20 ms, so a fit with twenty indicators costs
 about fifty times one without.
 
 ## The stationary ones
 
-These have a prior of their own: they hover around zero and forget where they
-have been. That makes them the right shape for a component that is a *deviation*
-rather than a level, and it means they contribute no flat directions at all.
+These have a proper prior: they stay around zero and forget their past. That
+suits a *deviation* from a trend rather than a level, and they add no flat
+directions.
 
 ### `Matern`
 
-The standard Gaussian process kernel, in state-space form, at ν = 1/2, 3/2 and
-5/2 — one, two and three states, exactly rather than approximately.
+The Matérn kernel at ν = 1/2, 3/2 and 5/2, exactly, with one, two and three
+states.
 
 ```dart
 final model = StructuralModel([
@@ -159,56 +155,55 @@ final model = StructuralModel([
 fit(model, data, minimumMeasurementVariance: 0.029 * 0.029);
 ```
 
-Reach for it when a series has structure the trend should not be chasing. `ν = 1/2`
-is an Ornstein–Uhlenbeck process, the exact continuous-time AR(1), and it absorbs
-the correlated wobble a trend-only model has nowhere to put but the noise.
+Use it for short-lived correlated deviations that the trend should not follow.
+`ν = 1/2` is an Ornstein–Uhlenbeck process, the continuous-time AR(1). It takes
+up correlated day-to-day variation that a trend-only model would count as
+noise.
 
-The order also decides how rough the path may be: the cubic spline of
-`LocalLinearTrend` assumes a trend with a continuous derivative, and `ν = 1/2`
-allows corners.
+The order sets how rough the path is: `LocalLinearTrend` has a continuous
+derivative, and `ν = 1/2` allows corners.
 
 Give `fit` a `minimumMeasurementVariance` whenever a Matérn is in the model.
 With correlated day-to-day variation in the data, the likelihood can prefer a
-large Matérn and a noise level near zero; `fit` searches for the alternative
-and `warnings` reports it, but a floor at the instrument's resolution rules the
-corner out.
+large Matérn and a noise level near zero. `fit` searches for the alternative
+and `warnings` reports it, but a floor at the instrument's resolution avoids
+the problem.
 
 ### `StochasticCycle`
 
-The *approximate* rhythm: a cosine that fades and finds its way back, rather than
-a pattern that repeats forever. A seasonal of period 7 insists that Tuesdays are
-seven days apart forever; a cycle of period 7 says the series tends to come back
-round after about a week, drifts out of step, and returns.
+An approximate rhythm: a damped cosine, rather than a pattern that repeats
+exactly. A seasonal of period 7 repeats every seven days forever; a cycle of
+period 7 tends to come round after about a week, drifts out of step, and comes
+back.
 
-Its period is estimated rather than given, which makes it the one component here
-whose likelihood is multimodal — a cycle at half the period explains every second
-peak and sits on its own maximum. `fit` scans that axis far more finely than the
-others before anything local runs.
+Its period is estimated, and the likelihood is multimodal in it: a cycle at
+half the period explains every second peak and has its own maximum. `fit` scans
+that axis much more finely than the others before the local search.
 
-It needs a lot of data. Below about four complete cycles the period is not
-estimable at all and below eight it is very noisy, and the fit will still return
-a number.
+It needs a lot of data. Below about four complete cycles the period cannot be
+estimated, and below eight it is very noisy, although the fit still returns a
+value.
 
-**Read the damping before the period.** On a series with no cycle the damping
+**Check the damping before the period.** On a series with no cycle the damping
 goes to the top of its bracket, and the width reported for the period becomes
-tiny and meaningless. The `StochasticCycle` API documentation has the details,
-and `warnings` reports both.
+tiny and meaningless. `warnings` reports both, and the `StochasticCycle` API
+documentation has the details.
 
-## Both stationary components have a floor you did not set
+## A floor from the sampling
 
-A shape parameter measured in time units stops being a different model below the
-sampling interval. A Matérn with `ν = 1/2` and a length scale shorter than the gap
-between readings *is* white noise, so it competes with the measurement error
-rather than with the trend, and the likelihood mildly prefers it that way.
-Allowed down to a length scale of 0.01 on daily readings with a true noise level
-of 0.3, it reports the noise as **0.002**, draws a band covering every point,
-and hands back a trend interpolating the noise.
+Below the sampling interval, a shape parameter measured in time units no longer
+describes a different model. A Matérn with `ν = 1/2` and a length scale shorter
+than the gap between readings is effectively white noise, so it competes with
+the measurement error instead of the trend, and the likelihood slightly prefers
+it. Allowed down to a length scale of 0.01 on daily readings with a true noise
+level of 0.3, it reports the noise as **0.002**, with a band covering every
+point and a trend that interpolates the noise.
 
 So `fit` raises the bottom of `lengthScaleBounds` to the typical gap between
 visits, and a cycle's `periodBounds` to twice it, which is the Nyquist limit.
 Readings much closer together than the typical gap, such as two weighings on one
-morning, count as one visit. Your own lower bound is respected when it is
-higher, and the upper bound is honoured as given.
+morning, count as one visit. A higher lower bound of your own is kept, and the
+upper bound is used as given.
 
 ## Writing your own
 

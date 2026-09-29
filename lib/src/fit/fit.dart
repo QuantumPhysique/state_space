@@ -1,6 +1,8 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../arguments.dart';
+import '../engine/layout.dart';
 import '../engine/scale.dart';
 import '../exceptions.dart';
 import '../model.dart';
@@ -130,13 +132,11 @@ FitResult fit(
       'cannot also be given a floor to clear',
     );
   }
-  for (final (name, value) in [
-    ('fixedMeasurementVariance', fixedMeasurementVariance),
-    ('minimumMeasurementVariance', minimumMeasurementVariance),
-  ]) {
-    if (value != null && (!(value > 0) || !value.isFinite)) {
-      throw ArgumentError.value(value, name, 'must be finite and positive');
-    }
+  if (fixedMeasurementVariance != null) {
+    checkPositive(fixedMeasurementVariance, 'fixedMeasurementVariance');
+  }
+  if (minimumMeasurementVariance != null) {
+    checkPositive(minimumMeasurementVariance, 'minimumMeasurementVariance');
   }
   if (!(lowerLogRatio < upperLogRatio)) {
     throw ArgumentError('empty bracket [$lowerLogRatio, $upperLogRatio]');
@@ -144,13 +144,7 @@ FitResult fit(
   if (scanPoints < 3) {
     throw ArgumentError.value(scanPoints, 'scanPoints', 'must be at least 3');
   }
-  if (!(tolerance > 0) || !tolerance.isFinite) {
-    throw ArgumentError.value(
-      tolerance,
-      'tolerance',
-      'must be finite and positive',
-    );
-  }
+  checkPositive(tolerance, 'tolerance');
 
   FitResult run(double? fixed) => _search(
     initial,
@@ -222,9 +216,7 @@ FitResult _search(
     origin[i] = (lower[i] + upper[i]) / 2;
   }
   if (profile.evaluate(origin).usedObservations < 1) {
-    final flat = [
-      for (final component in initial.components) ...component.diffuseStates,
-    ].where((flag) => flag).length;
+    final flat = diffuseStateIndices(initial.components).length;
     throw UnderdeterminedModelException(
       'too few observations to estimate '
       'anything: the model has $flat flat directions, which use up one '
@@ -608,6 +600,8 @@ FitResult _withLargestResidual(
   FitResult result,
   List<Observation> observations,
 ) {
+  // TODO(gwosd): iterate this into a robust fit that down-weights the worst
+  // readings through relativeVariance and refits (see doc/roadmap.md).
   final diagnostics = result.model.diagnose(observations);
   final residuals = diagnostics.residuals;
   if (residuals.length < 8) return result;

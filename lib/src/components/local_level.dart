@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import '../arguments.dart';
 import '../component.dart';
 import '../engine/matrix_block.dart';
 
@@ -8,24 +9,17 @@ import '../engine/matrix_block.dart';
 ///
 /// One state, `A(dt) = 1`, `Q(dt) = sigma^2 dt`. The implied kernel is
 /// Brownian motion, `k(t, t') = sigma^2 min(t, t')`, and the posterior mean is
-/// a linear interpolant through shrunken observations — the continuous-time
+/// a linear interpolant through shrunken observations: the continuous-time
 /// counterpart of simple exponential smoothing.
 ///
-/// Useful on its own for series with no persistent direction, and as the
-/// simplest thing that can go wrong when something in the engine breaks.
+/// For series with no persistent direction.
 ///
 /// {@category Components}
 final class LocalLevel extends Component {
   /// A level driven by white noise of intensity [processVariance], which must
   /// be finite and positive.
   LocalLevel({required this.processVariance}) {
-    if (!(processVariance > 0) || !processVariance.isFinite) {
-      throw ArgumentError.value(
-        processVariance,
-        'processVariance',
-        'must be finite and positive',
-      );
-    }
+    checkPositive(processVariance, 'processVariance');
   }
 
   @override

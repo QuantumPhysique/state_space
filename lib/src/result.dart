@@ -244,9 +244,8 @@ SmoothingResult newSmoothingResult({
 /// The signal projected past the end of the data.
 ///
 /// For a local linear trend the variance of the forecast grows like the cube
-/// of the horizon, so the band widens like its three-halves power. That is the
-/// model's statement that a trend whose slope is free to wander becomes
-/// unknowable, not a defect.
+/// of the horizon, so the band widens like its three-halves power. This is
+/// expected: a slope that is free to wander soon becomes unknowable.
 ///
 /// {@category Getting started}
 final class ForecastResult {
@@ -379,9 +378,8 @@ final class FitResult {
 
   /// The maximised profile log-likelihood, *without* the penalty.
   ///
-  /// The penalised objective is the right thing to maximise and the wrong
-  /// thing to compare: two models penalised differently are not on the same
-  /// scale. This is the unpenalised number, which removes that objection.
+  /// Two models penalised differently are not on the same scale, so this is
+  /// the unpenalised number.
   ///
   /// **It is still comparable only across models of equal [diffuseDimension],**
   /// and [isComparableWith] is the check. Under exact diffuse initialisation
@@ -415,11 +413,9 @@ final class FitResult {
   /// The estimated ratio of each variance to the measurement variance, in
   /// parameter order.
   ///
-  /// Not every parameter is a variance. Entries belonging to a shape parameter
-  /// — a Matérn length scale, a cycle's period — are [double.nan], because a
-  /// ratio of a period to a variance is not a quantity. [parameterSpecs] says
-  /// which is which, and the fitted values themselves are on the components of
-  /// [model], which is where a caller should read a period from anyway.
+  /// Entries for a shape parameter, such as a Matérn length scale or a
+  /// cycle's period, are [double.nan]; [parameterSpecs] says which is which.
+  /// The fitted shape parameters are on the components of [model].
   final Float64List varianceRatios;
 
   /// Number of filter passes the search took, including the axis probes that
@@ -436,17 +432,14 @@ final class FitResult {
   /// so it answers "how well pinned down is this one number" and not "how well
   /// pinned down is the fit". When two components trade off against each other
   /// the joint region is wider than any of these slices, and these numbers
-  /// understate how undetermined things are. Worse, when another parameter has
+  /// understate how undetermined things are. When another parameter has
   /// finished on a bound the slice is taken at that bound, which can make a
-  /// width look tiny for a reason that has nothing to do with the data; see
-  /// [warnings].
+  /// width look tiny for reasons unrelated to the data; see [warnings].
   ///
-  /// Entries whose coordinate is not a logarithm — a damping factor, which is
-  /// searched as a logit — are [double.nan], because a width in logits divided
-  /// by `ln 10` is not decades of anything. [plateauWidthByParameter] has the
-  /// raw number for every parameter, and [ParameterSpec.isLogarithmic] says
-  /// which is which. This mirrors what [varianceRatios] already does for a
-  /// parameter that is not a variance.
+  /// Entries whose coordinate is not a logarithm (a damping factor, searched
+  /// as a logit) are [double.nan]. [plateauWidthByParameter] has the raw
+  /// number for every parameter, and [ParameterSpec.isLogarithmic] says which
+  /// is which.
   ///
   /// For a parameter whose [parameterStatus] is not
   /// [ParameterStatus.determined] the width is one-sided and is not an error
@@ -480,7 +473,7 @@ final class FitResult {
   ///
   /// True when both integrated out the same number of flat directions. False
   /// otherwise, and then the difference between the two likelihoods is not a
-  /// statement about the data — see [logMarginalLikelihood] for why.
+  /// statement about the data; see [logMarginalLikelihood].
   ///
   /// It does not check that the fits are of the same observations, which no
   /// [FitResult] retains; that is the caller's to know.

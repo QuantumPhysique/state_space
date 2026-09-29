@@ -1,20 +1,11 @@
 /// Exact Gaussian process regression for irregular time series, in linear
 /// time.
 ///
-/// The package computes one object under three descriptions, and its whole
-/// value is that they agree:
-///
-/// 1. **A Gaussian process.** `f ~ GP(0, k)` observed with noise. The
-///    posterior mean and variance are the textbook expressions involving
-///    `(K + sigma^2 I)^-1`, which cost `O(N^3)` time and `O(N^2)` memory.
-/// 2. **A stochastic differential equation.** For Markovian kernels the same
-///    prior is a linear SDE, discretised *exactly* over an arbitrary gap.
-/// 3. **A Kalman filter and RTS smoother.** Which computes the same posterior
-///    and the same log marginal likelihood in `O(N)` time and memory.
-///
-/// For the default [LocalLinearTrend] the implied kernel is the cubic spline
-/// kernel, so the posterior mean is the natural cubic smoothing spline, with a
-/// credible band, computed in linear time.
+/// The prior is a Gaussian process with a Markovian kernel, written as a
+/// linear SDE and discretised exactly over each gap, so a Kalman filter and
+/// RTS smoother compute the same posterior and log marginal likelihood as the
+/// `O(N^3)` textbook expressions in `O(N)`. With the default
+/// [LocalLinearTrend] the posterior mean is a natural cubic smoothing spline.
 ///
 /// ```dart
 /// final data = [
@@ -42,16 +33,16 @@
 ///
 /// ## Documentation
 ///
-/// * [Getting started](https://github.com/QuantumPhysique/state_space/blob/main/doc/getting-started.md)
-///   — grids, slopes, forecasts, unequal readings, noise floors, isolates
-/// * [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md)
-///   — which components, and how to tell whether one earned its place
-/// * [Components](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md)
-///   — what each one is, and which kernels are reachable
-/// * [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md)
-///   — the Gaussian process, the SDE, the filter, and the numerical choices
-/// * [Validation](https://github.com/QuantumPhysique/state_space/blob/main/doc/validation.md)
-///   — what is checked, against what, and how closely
+/// * [Getting started](https://github.com/QuantumPhysique/state_space/blob/main/doc/getting-started.md):
+///   grids, slopes, forecasts, unequal readings, noise floors, isolates
+/// * [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md):
+///   which components, and how to compare them
+/// * [Components](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md):
+///   what each one is, and writing your own
+/// * [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md):
+///   the filter, the smoother and the fit
+/// * [Validation](https://github.com/QuantumPhysique/state_space/blob/main/doc/validation.md):
+///   what is checked, against what, and how closely
 library;
 
 export 'src/component.dart';

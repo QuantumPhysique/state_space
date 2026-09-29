@@ -26,17 +26,17 @@ The squared exponential kernel: it has no exact finite-state form. See
 
 * Kalman (1960), *J. Basic Eng.* 82(1): 35–45
 * Rauch, Tung & Striebel (1965), *AIAA J.* 3(8): 1445–1450
-* Wahba (1978), *JRSS-B* 40(3): 364–372 — the spline/GP equivalence
-* Silverman (1984), *Ann. Statist.* 12(3): 898–916 — the spline's equivalent
-  kernel, which is how the calibration tool turns a variance ratio into a
+* Wahba (1978), *JRSS-B* 40(3): 364–372: the spline/GP equivalence
+* Silverman (1984), *Ann. Statist.* 12(3): 898–916: the spline's equivalent
+  kernel, used by the calibration tool to turn a variance ratio into a
   bandwidth in days
 * Harvey (1989), *Forecasting, Structural Time Series Models and the Kalman
-  Filter*, CUP — profile likelihood, ch. 3–4
-* Hartikainen & Särkkä (2010), *IEEE MLSP*: 379–384 — GP to state space
+  Filter*, CUP: profile likelihood, ch. 3–4
+* Hartikainen & Särkkä (2010), *IEEE MLSP*: 379–384: GP to state space
 * Durbin & Koopman (2012), *Time Series Analysis by State Space Methods*, 2nd
-  ed. — exact diffuse initialisation, ch. 5
-* Solin & Särkkä (2014), *AISTATS*: 904–912 — periodic covariance functions as
+  ed.: exact diffuse initialisation, ch. 5
+* Solin & Särkkä (2014), *AISTATS*: 904–912: periodic covariance functions as
   state-space models
 * Särkkä & Solin (2019), *Applied Stochastic Differential Equations*, CUP
-* Simpson et al. (2017), *Statist. Sci.* 32(1): 1–28 — penalised complexity
+* Simpson et al. (2017), *Statist. Sci.* 32(1): 1–28: penalised complexity
   priors, which `ComplexityPenalty` implements

@@ -5,6 +5,7 @@ import '../exceptions.dart';
 import '../initialization.dart';
 import 'cholesky.dart';
 import 'kalman.dart';
+import 'layout.dart';
 import 'matrix_block.dart';
 import 'timeline.dart';
 
@@ -25,34 +26,29 @@ import 'timeline.dart';
 /// instead of quietly when the predicted covariance is singular.
 ///
 /// The results overwrite [FilterResult.stateMean] and
-/// [FilterResult.stateCovariance] in place — which is why those are not called
-/// `filtered`: the same arrays hold the filtered moments before this runs and
-/// the smoothed ones after. Each smoothed step is read
-/// exactly once, by the step before it, so nothing is lost — and a decade of
-/// daily data at sixteen states is a few megabytes, which is worth not
-/// doubling.
+/// [FilterResult.stateCovariance] in place. Each smoothed step is read once,
+/// by the step before it, so nothing is lost, and a decade of daily data at
+/// sixteen states is a few megabytes per array.
 ///
 /// ## What it does not smooth
 ///
-/// A state with no dynamics — a regression coefficient, `A = I` and `Q = 0`
-/// under a flat prior — has covariance identically zero conditional on the
-/// flat directions, at every step. So `G` has zero rows *and* zero columns
-/// there: such a state smooths to its filtered value, and contributes nothing
-/// to any other state's. The recursion below therefore runs on the states that
-/// actually move, gathering them into a compact block and writing the results
-/// back where they came from.
+/// A state with no dynamics (a regression coefficient: `A = I`, `Q = 0`, flat
+/// prior) has covariance identically zero conditional on the flat directions,
+/// at every step. So `G` has zero rows *and* zero columns there: such a state
+/// smooths to its filtered value and contributes nothing to any other. The
+/// recursion below therefore runs on the states that move, gathered into a
+/// compact block, and writes the results back where they came from.
 ///
 /// The backward pass is cubic in the state dimension, so for a trend plus
 /// twenty holiday indicators this smooths two states rather than twenty-two.
 /// See [Component.isStatic].
 class RtsSmoother {
-  /// [initialization] is what decides whether the reduction below applies, and
-  /// omitting it declines the reduction rather than guessing at one: it is
-  /// sound only under a flat prior, since with a proper one a static state has
-  /// real variance and a real gain like anything else.
+  /// The static-state reduction is used only when [initialization] is
+  /// [ExactDiffuse]. Under a proper prior a static state has a real variance
+  /// and gain, and leaving [initialization] out disables the reduction.
   RtsSmoother(this.components, {Initialization? initialization})
     : stateDim = components.fold(0, (n, c) => n + c.stateDim),
-      _offsets = _blockOffsets(components),
+      _offsets = blockOffsets(components),
       _active = _activeStates(components, initialization) {
     final n = _active.length;
     _a = Float64List(n * n);
@@ -114,28 +110,10 @@ class RtsSmoother {
   /// that step's mean diagonal, or zero.
   double _lastJitterRatio = 0;
 
-  static List<int> _blockOffsets(List<Component> components) {
-    final offsets = <int>[];
-    var next = 0;
-    for (final c in components) {
-      offsets.add(next);
-      next += c.stateDim;
-    }
-    return offsets;
-  }
-
-  /// The states the backward recursion can change.
-  ///
-  /// Under a flat prior a [Component.isStatic] component's covariance
-  /// conditional on the flat directions is identically zero, so the smoother
-  /// gain has zero rows and zero columns there: those states smooth to their
-  /// filtered values, and they contribute nothing to any other state's. What
-  /// they are worth arrives later, from the flat directions, in
-  /// [combineDiffuse].
-  ///
-  /// Under [ApproximateDiffuse] the same states carry `kappa` and behave like
-  /// anything else, so nothing is dropped — and neither is anything when the
-  /// caller did not say which prior is in force.
+  /// The states the backward recursion can change. Under [ExactDiffuse] that
+  /// leaves out the states of [Component.isStatic] components, which get
+  /// their values from the flat directions in [combineDiffuse]; under any
+  /// other prior it is every state.
   static Int32List _activeStates(
     List<Component> components,
     Initialization? initialization,
@@ -300,26 +278,23 @@ class RtsSmoother {
   /// Folds the estimated flat directions back into the smoothed moments.
   ///
   /// Given the flat directions, the smoothed state is normal with mean
-  /// `xa + Xb d` and covariance `Ps` — a covariance that does not depend on
-  /// `d` at all. The flat directions are themselves normal with mean `dhat`
-  /// and covariance `S`. So the law of total variance gives the whole answer
-  /// in one line each:
+  /// `xa + Xb d` and covariance `Ps`, which does not depend on `d`. The flat
+  /// directions are normal with mean `dhat` and covariance `S`, so by the law
+  /// of total variance:
   ///
   /// ```text
   /// E[x]   = xa + Xb dhat
   /// Var[x] = Ps + Xb S Xb'
   /// ```
   ///
-  /// Written back in place, so that everything downstream sees an ordinary
-  /// smoothed mean and covariance and needs to know nothing about any of this.
+  /// Written back in place, so everything downstream sees an ordinary smoothed
+  /// mean and covariance.
   ///
-  /// [steps] limits the fold-in to the steps whose moments will actually be
-  /// read. This costs `O(n^2 d)` per step, which for a model whose flat
-  /// directions are mostly regression coefficients is the largest single term
-  /// in the whole backward pass; a caller reporting on a short grid has no
-  /// reason to pay it at every observation. Every step is folded when it is
-  /// null, and a step left out keeps moments that are conditional on the flat
-  /// directions rather than marginal over them.
+  /// [steps] limits the fold-in to the steps whose moments will be read. It
+  /// costs `O(n^2 d)` per step, the largest term in the backward pass when
+  /// most flat directions are regression coefficients. Every step is folded
+  /// when [steps] is null; a step left out keeps moments conditional on the
+  /// flat directions.
   void combineDiffuse(FilterResult filtered, {Int32List? steps}) {
     final d = filtered.diffuseDim;
     final estimate = filtered.diffuseMean;

@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'dart:typed_data';
 
+import 'arguments.dart';
 import 'component.dart';
 import 'components/local_level.dart';
 import 'components/local_linear_trend.dart';
@@ -8,6 +9,7 @@ import 'components/regression.dart';
 import 'diagnostics.dart';
 import 'engine/fast_path_2x2.dart';
 import 'engine/kalman.dart';
+import 'engine/layout.dart';
 import 'engine/rts.dart';
 import 'engine/scale.dart';
 import 'engine/timeline.dart';
@@ -37,7 +39,7 @@ final class StructuralModel {
   /// [components] must not be empty. Each component's [Component.parameters]
   /// must have [Component.parameterCount] entries and its
   /// [Component.diffuseStates] [Component.stateDim] entries; both are checked
-  /// here, once, rather than failing inside the recursion.
+  /// here.
   StructuralModel(
     List<Component> components, {
     this.measurementVariance = 1.0,
@@ -50,13 +52,7 @@ final class StructuralModel {
         'a model needs at least one component',
       );
     }
-    if (!(measurementVariance > 0) || !measurementVariance.isFinite) {
-      throw ArgumentError.value(
-        measurementVariance,
-        'measurementVariance',
-        'must be finite and positive',
-      );
-    }
+    checkPositive(measurementVariance, 'measurementVariance');
     for (var i = 0; i < components.length; i++) {
       final c = components[i];
       if (c.parameters.length != c.parameterCount) {
@@ -123,21 +119,11 @@ final class StructuralModel {
   /// [ApproximateDiffuse] and the number of diffuse states under
   /// [ExactDiffuse].
   ///
-  /// Worth knowing because it is what decides whether two models'
-  /// [SmoothingResult.logMarginalLikelihood] values are on the same scale. Two
-  /// models with the same diffuse dimension have integrated the same thing
-  /// away and can be compared; two with different dimensions cannot. See
-  /// [logLikelihood].
-  int get diffuseDimension {
-    if (initialization is! ExactDiffuse) return 0;
-    var count = 0;
-    for (final component in components) {
-      for (final flag in component.diffuseStates) {
-        if (flag) count++;
-      }
-    }
-    return count;
-  }
+  /// Two models' [SmoothingResult.logMarginalLikelihood] values can only be
+  /// compared when this matches. See [logLikelihood].
+  int get diffuseDimension => initialization is ExactDiffuse
+      ? diffuseStateIndices(components).length
+      : 0;
 
   /// Total number of free parameters across all components.
   int get parameterCount => components.fold(0, (n, c) => n + c.parameterCount);
@@ -211,7 +197,8 @@ final class StructuralModel {
   ///
   /// [minimumMeasurementVariance], if given, is a floor on the estimate. On a
   /// short series the estimate comes from a handful of residuals and can be
-  /// far too small; a floor at a realistic spread keeps the band honest.
+  /// far too small, and a floor at a realistic spread keeps the band from
+  /// collapsing.
   ///
   /// Only the variances are rescaled; a shape parameter such as a length
   /// scale or a period is kept as it is.
@@ -223,13 +210,7 @@ final class StructuralModel {
     double? minimumMeasurementVariance,
   }) {
     final floor = minimumMeasurementVariance;
-    if (floor != null && (!(floor > 0) || !floor.isFinite)) {
-      throw ArgumentError.value(
-        floor,
-        'minimumMeasurementVariance',
-        'must be finite and positive',
-      );
-    }
+    if (floor != null) checkPositive(floor, 'minimumMeasurementVariance');
     final pass = _filter(
       Timeline.merge(observations, null),
       keepHistory: false,
@@ -263,12 +244,11 @@ final class StructuralModel {
   /// directions have been integrated out against an improper prior. That makes
   /// it the right thing to maximise, and it makes it comparable only with
   /// models of the same [diffuseDimension]. Across different diffuse
-  /// dimensions it is not on a common scale — and not merely by an unknown
-  /// constant, but by one the caller controls without meaning to: writing a
-  /// regression column in grams rather than kilograms shifts this number by
-  /// `log 1000`, and so does changing the unit of [Observation.time]. Use the
-  /// fitted noise level, an out-of-sample error, or [diagnose] to choose
-  /// between models whose diffuse structure differs.
+  /// dimensions the offset between two of them depends on the units: writing
+  /// a regression column in grams rather than kilograms shifts this number by
+  /// `log 1000`, and changing the unit of [Observation.time] shifts it too.
+  /// Use the fitted noise level, an out-of-sample error, or [diagnose] to
+  /// choose between models whose diffuse structure differs.
   ///
   /// Throws [UnderdeterminedModelException] when the data cannot determine the
   /// model's flat directions (see [initialization]), [ArgumentError] for
@@ -424,12 +404,7 @@ final class StructuralModel {
     final mean = filtered.stateMean!;
     final covariance = filtered.stateCovariance!;
 
-    final offsets = <int>[];
-    var next = 0;
-    for (final component in components) {
-      offsets.add(next);
-      next += component.stateDim;
-    }
+    final offsets = blockOffsets(components);
 
     final h = Float64List(n);
     final slices = [
@@ -531,9 +506,8 @@ final class StructuralModel {
   ///
   /// They are taken at the last step rather than the last output time, because
   /// a caller may ask for an empty grid and there would then be no output to
-  /// read. It makes no difference otherwise: a state with `A = I` and `Q = 0`
-  /// has the same full-data posterior at every step, which is the whole reason
-  /// a single number is the right thing to report.
+  /// read. Otherwise it makes no difference: a state with `A = I` and `Q = 0`
+  /// has the same smoothed posterior at every step.
   List<Coefficient> _coefficients(
     Timeline timeline,
     FilterResult filtered,
