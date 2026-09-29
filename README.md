@@ -2,14 +2,16 @@
 
 ![Readings with a gap, the smoothed trend with its 95% credible band, and a forecast](https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/trend.png)
 
-Smoothed trends with uncertainty bands for noisy readings taken at irregular
-times, such as a weight diary, a sensor or a price. You get the trend, its
-slope and a credible band, across gaps and into the future. Pure Dart, so it
-runs in Flutter on every platform.
+**state_space** estimates smoothed trends from noisy readings taken at
+irregular times. I wrote it for body-weight diaries, where days are skipped and
+readings come in bursts, but nothing in it is specific to weight: a sensor or a
+price works just as well. It returns the trend, its slope and a credible band,
+across gaps and into the future. It is written in pure Dart, so it runs in
+Flutter on every platform.
 
-It is Gaussian process regression, computed exactly in linear time by a Kalman
-filter and RTS smoother. The hyperparameters are fitted by maximising the
-marginal likelihood.
+Under the hood it is Gaussian process regression, computed exactly in linear
+time with a Kalman filter and RTS smoother. The hyperparameters are fitted by
+maximising the marginal likelihood.
 
 ## Install
 
