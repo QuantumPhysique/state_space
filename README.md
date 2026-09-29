@@ -1,6 +1,6 @@
 # state_space
 
-![Readings with a gap, the smoothed trend with its 95% credible band, and a forecast](https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/trend.png)
+![Social preview](https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/social-preview.png)
 
 **state_space** estimates smoothed trends from noisy readings taken at
 irregular times. It returns the trend, its slope and a credible band, across
@@ -13,6 +13,9 @@ Under the hood it is Gaussian process regression, computed exactly in linear
 time with a Kalman filter and RTS smoother. The hyperparameters are fitted by
 maximising the marginal likelihood.
 
+
+
+![Readings with a gap, the smoothed trend with its 95% credible band, and a forecast](https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/trend.png)
 ## Install
 
 ```yaml
