@@ -2,6 +2,9 @@
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/social-preview.png" alt="Social preview" width="66%">
+</p><p align="center">
+  <a href="https://pub.dev/packages/state_space"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/pub/state_space.svg?mode=dark"><img alt="badge" src="https://shieldcn.dev/pub/state_space.svg?mode=light"></picture></a>
+  <a href="https://pub.dev/packages/state_space/score"><picture><source media="(prefers-color-scheme: dark)" srcset="https://shieldcn.dev/pub/points/flutter_bloc.svg?variant=secondary&amp;mode=dark"><img alt="pub points" src="https://shieldcn.dev/pub/points/flutter_bloc.svg?variant=secondary&amp;mode=light"></picture></a>
 </p>
 
 **state_space** estimates smoothed trends from noisy readings taken at
