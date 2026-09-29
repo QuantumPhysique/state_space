@@ -1,6 +1,8 @@
-# state_space
+# Smooth trends from noisy, irregular time series
 
-![Social preview](https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/social-preview.png)
+<p align="center">
+  <img src="https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/social-preview.png" alt="Social preview" width="50%">
+</p>
 
 **state_space** estimates smoothed trends from noisy readings taken at
 irregular times. It returns the trend, its slope and a credible band, across
