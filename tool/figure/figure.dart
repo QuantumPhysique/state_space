@@ -1,5 +1,5 @@
 // Writes the data behind doc/images/trend.png: noisy readings with a gap, the
-// smoothed trend with its credible band, and a forecast.
+// smoothed trend with its credible and predictive bands, and a forecast.
 //
 //   dart run tool/figure/figure.dart > /tmp/trend.csv
 //   uv run --with matplotlib tool/figure/plot.py /tmp/trend.csv doc/images/trend.png
@@ -36,24 +36,27 @@ void main() {
   final grid = [for (var t = 0.0; t <= 100; t += 0.25) t];
   final posterior = fitted.model.smooth(data, grid: grid);
   final band = posterior.credibleBand();
+  final spread = posterior.predictiveBand();
   final horizon = [for (var t = 100.0; t <= 130; t += 0.25) t];
   final ahead = fitted.model.forecast(data, horizon);
   final aheadBand = ahead.credibleBand();
+  final aheadSpread = ahead.predictiveBand();
 
-  print('kind,time,value,lo,hi');
+  print('kind,time,value,lo,hi,plo,phi');
   for (final o in data) {
-    print('reading,${o.time},${o.value},,');
+    print('reading,${o.time},${o.value},,,,');
   }
   for (var i = 0; i < grid.length; i++) {
     print(
       'trend,${grid[i]},${posterior.mean[i]},'
-      '${band.lo[i]},${band.hi[i]}',
+      '${band.lo[i]},${band.hi[i]},${spread.lo[i]},${spread.hi[i]}',
     );
   }
   for (var i = 0; i < horizon.length; i++) {
     print(
       'forecast,${horizon[i]},${ahead.mean[i]},'
-      '${aheadBand.lo[i]},${aheadBand.hi[i]}',
+      '${aheadBand.lo[i]},${aheadBand.hi[i]},'
+      '${aheadSpread.lo[i]},${aheadSpread.hi[i]}',
     );
   }
 }

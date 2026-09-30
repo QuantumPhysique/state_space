@@ -82,12 +82,12 @@ There are two kinds of interval:
 trend.credibleInterval(i);    // where the underlying trend is
 trend.predictiveInterval(i);  // where the next reading would fall
 trend.credibleBand();         // the first at every output time, as lo and hi arrays
+trend.predictiveBand();       // the second at every output time
 ```
 
-Draw the credible band around the curve. It is narrow, and most individual
-readings fall outside it, because it describes the trend rather than the next
-reading. About 95 % of the observations should sit inside the 95 % predictive
-band.
+The credible band is narrow, and most individual readings fall outside it,
+because it describes the trend rather than the next reading. About 95 % of the
+observations should sit inside the 95 % predictive band.
 
 ## Dates
 

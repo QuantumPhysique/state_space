@@ -8,8 +8,9 @@
 </p>
 
 **state_space** estimates smoothed trends from noisy readings taken at
-irregular times. It returns the trend, its slope and a credible band, across
-gaps and into the future. It was built for the body-weight diary
+irregular times. It returns the trend, its slope, and bands for where the
+trend is and where readings fall, across gaps and into the future. It was
+built for the body-weight diary
 [trale](https://github.com/QuantumPhysique/trale), where days are skipped and
 readings are sporadic, but works on any time series. Written in pure Dart, it
 runs on every Flutter platform.
@@ -20,7 +21,7 @@ maximising the marginal likelihood.
 
 
 
-![Readings with a gap, the smoothed trend with its 95% credible band, and a forecast](https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/trend.png)
+![Readings with a gap, the smoothed trend with its 95% credible and predictive bands, and a forecast](https://raw.githubusercontent.com/QuantumPhysique/state_space/main/doc/images/trend.png)
 ## Install
 
 ```yaml
@@ -54,7 +55,8 @@ final trend = fitted.model.smooth(data, grid: everyDay);
 
 trend.mean;                      // the smoothed curve
 trend.trendSlope;                // its rate of change
-trend.credibleBand();            // lower and upper band, as two arrays
+trend.credibleBand();            // where the trend is, as lower and upper arrays
+trend.predictiveBand();          // where readings fall: about 95% of them inside
 
 final ahead = [for (var d = 31; d <= 60; d++) d.toDouble()];
 fitted.model.forecast(data, ahead);

@@ -16,18 +16,23 @@ def series(kind):
     v = [float(r["value"]) for r in picked]
     lo = [float(r["lo"]) for r in picked if r["lo"]]
     hi = [float(r["hi"]) for r in picked if r["hi"]]
-    return t, v, lo, hi
+    plo = [float(r["plo"]) for r in picked if r["plo"]]
+    phi = [float(r["phi"]) for r in picked if r["phi"]]
+    return t, v, lo, hi, plo, phi
 
 
 fig, ax = plt.subplots(figsize=(8, 3.6), dpi=150)
-t, v, lo, hi = series("trend")
-ax.fill_between(t, lo, hi, color="#4c72b0", alpha=0.25, linewidth=0,
-                label="95% credible band")
+t, v, lo, hi, plo, phi = series("trend")
+ax.fill_between(t, plo, phi, color="#4c72b0", alpha=0.12, linewidth=0,
+                label="95% predictive band: where readings fall")
+ax.fill_between(t, lo, hi, color="#4c72b0", alpha=0.3, linewidth=0,
+                label="95% credible band: where the trend is")
 ax.plot(t, v, color="#4c72b0", linewidth=1.8, label="smoothed trend")
-t, v, lo, hi = series("forecast")
-ax.fill_between(t, lo, hi, color="#dd8452", alpha=0.25, linewidth=0)
+t, v, lo, hi, plo, phi = series("forecast")
+ax.fill_between(t, plo, phi, color="#dd8452", alpha=0.12, linewidth=0)
+ax.fill_between(t, lo, hi, color="#dd8452", alpha=0.3, linewidth=0)
 ax.plot(t, v, color="#dd8452", linewidth=1.8, linestyle="--", label="forecast")
-t, v, _, _ = series("reading")
+t, v, *_ = series("reading")
 ax.scatter(t, v, s=9, color="#333333", zorder=3, label="readings")
 ax.axvspan(45, 62, color="#999999", alpha=0.08, linewidth=0)
 ax.text(53.5, max(v) + 0.1, "no readings", ha="center", fontsize=8, color="#666666")
