@@ -14,6 +14,10 @@ import 'package:test/test.dart';
 final component = LocalLinearTrend(processVariance: 7e-4);
 const measurementVariance = 0.06;
 
+/// One flat state and one proper one, which the fast path handles only under
+/// an approximate prior.
+final damped = DampedLinearTrend(processVariance: 7e-4, timeScale: 9);
+
 /// A deliberately awkward series: uneven gaps, a repeated timestamp, a long
 /// hole, unequal weights, and days with no reading at all.
 ({List<Observation> observations, Float64List missing}) awkwardSeries({
@@ -63,12 +67,14 @@ void main() {
   final series = awkwardSeries();
   final timeline = Timeline.merge(series.observations, series.missing);
 
-  for (final initialization in <Initialization>[
-    const ExactDiffuse(),
-    ApproximateDiffuse(),
-    ApproximateDiffuse(variance: 1e3),
+  for (final (component, initialization) in <(Component, Initialization)>[
+    (component, const ExactDiffuse()),
+    (component, ApproximateDiffuse()),
+    (component, ApproximateDiffuse(variance: 1e3)),
+    (damped, ApproximateDiffuse()),
+    (damped, ApproximateDiffuse(variance: 1e3)),
   ]) {
-    group('$initialization', () {
+    group('${component.name}, $initialization', () {
       test('the fast path is chosen at all', () {
         expect(FastPath2x2.handles([component], initialization), isTrue);
       });
@@ -210,6 +216,10 @@ void main() {
         ], const ExactDiffuse()),
         isFalse,
       );
+    });
+
+    test('so does a damped trend under exact initialisation', () {
+      expect(FastPath2x2.handles([damped], const ExactDiffuse()), isFalse);
     });
 
     test('so does a one-state component', () {

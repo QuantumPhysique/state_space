@@ -1,3 +1,10 @@
+## Unreleased
+
+- `DampedLinearTrend` and `StructuralModel.dampedLinearTrend`: a trend whose
+  slope reverts to zero over a time scale, so that the curve straightens across
+  long gaps and a forecast levels off. The level is diffuse and the slope
+  starts from its stationary distribution, so one reading is enough.
+
 ## 0.1.0
 
 First release.

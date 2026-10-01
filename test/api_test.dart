@@ -222,6 +222,7 @@ void main() {
       for (final component in [
         LocalLevel(processVariance: 0.3),
         LocalLinearTrend(processVariance: 0.3),
+        DampedLinearTrend(processVariance: 0.3, timeScale: 4),
         TrigonometricSeasonal(period: 7, harmonics: 3, processVariance: 0.2),
         Matern.oneHalf(variance: 1, lengthScale: 2),
         Matern.threeHalves(variance: 1, lengthScale: 2),
@@ -354,6 +355,10 @@ void main() {
     for (final (component, name) in [
       (LocalLevel(processVariance: 1), 'LocalLevel'),
       (LocalLinearTrend(processVariance: 1), 'LocalLinearTrend'),
+      (
+        DampedLinearTrend(processVariance: 1, timeScale: 1),
+        'DampedLinearTrend',
+      ),
       (Matern.oneHalf(variance: 1, lengthScale: 1), 'Matern'),
     ]) {
       expect(component.name, name);

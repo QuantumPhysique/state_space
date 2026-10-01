@@ -31,6 +31,23 @@ periods and checks each component's share against the dense per-component
 posterior. Confounding between a trend and a weekly pattern leaves the total fit
 intact and shows up only in the decomposition.
 
+## The damped trend equals its own closed-form kernel
+
+`test/damped_trend_test.dart` writes the integrated Ornstein–Uhlenbeck kernel
+out from its double integral,
+
+```text
+k(s, t) = sigma^2 tau / 2 * integral_0^s integral_0^t exp(-|u - w| / tau) du dw
+```
+
+adds a flat level, and checks the filter against it to 1e-9: the restricted
+likelihood, the posterior mean and variance under exact initialisation
+(universal kriging, the dense way), and the same under an approximate prior,
+at the readings, inside a 40-unit hole and up to 42 units past the end. A time
+scale of 1e7 reproduces `LocalLinearTrend`, and one of 1e-5 a `LocalLevel` of
+variance `q τ²`, likelihood included; each agrees thirty times better than at
+a hundred times less extreme.
+
 ## A regression coefficient equals its generalised least-squares estimate
 
 A coefficient is a flat direction like any other, so exact diffuse
@@ -99,7 +116,10 @@ Two notes on the reference:
 A single two-state component runs its forward pass in unrolled scalars.
 `fast_path_equivalence_test.dart` asserts agreement with the generic engine to
 1e-12 across irregular gaps, a repeated timestamp, a two-month hole, missing
-observations, unequal weights and all three initialisations. Under a very wide
+observations, unequal weights and all three initialisations. A
+`DampedLinearTrend`, with one flat and one proper state, is held to the same
+under both approximate initialisations; under exact initialisation it runs on
+the generic engine. Under a very wide
 approximate prior on a series with extreme gaps, 1e-9 and 1000 time units in the
 same series, the two agree only to a few parts in a million in the likelihood,
 which is the rounding that prior costs either engine; exact initialisation
@@ -132,6 +152,12 @@ asymptotic down to `dt = 1e-9` and that every leading principal minor stays
 non-negative down to `dt = 1e-12`. `Q = P∞ − A P∞ A'` is a difference of two
 quantities of order `variance` with a result of order `dt³` or `dt⁵`, so
 computing it that way loses every digit.
+
+`damped_trend_test.dart` does the same for the damped trend's level noise,
+`σ²τ³ (u − 2(1 − e⁻ᵘ) + (1 − e⁻²ᵘ)/2)` with `u = dt/τ`, which cancels from
+order `u` to order `u³`: it matches the integral it comes from to 1e-12 on both
+sides of the switch to a power series, keeps the spline's leading term down to
+`dt = 1e-12`, and with `τ = 1e12` is the `LocalLinearTrend`'s `A` and `Q`.
 
 ## Parameter recovery
 

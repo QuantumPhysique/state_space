@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'arguments.dart';
 import 'component.dart';
+import 'components/damped_linear_trend.dart';
 import 'components/local_level.dart';
 import 'components/local_linear_trend.dart';
 import 'components/regression.dart';
@@ -82,6 +83,19 @@ final class StructuralModel {
     Initialization initialization = const ExactDiffuse(),
   }) => StructuralModel(
     [LocalLinearTrend(processVariance: processVariance)],
+    measurementVariance: measurementVariance,
+    initialization: initialization,
+  );
+
+  /// A single [DampedLinearTrend]: a trend whose slope reverts to zero over
+  /// [timeScale], so that it levels off across long gaps and in forecasts.
+  factory StructuralModel.dampedLinearTrend({
+    required double processVariance,
+    required double timeScale,
+    double measurementVariance = 1.0,
+    Initialization initialization = const ExactDiffuse(),
+  }) => StructuralModel(
+    [DampedLinearTrend(processVariance: processVariance, timeScale: timeScale)],
     measurementVariance: measurementVariance,
     initialization: initialization,
   );
