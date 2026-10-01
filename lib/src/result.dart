@@ -612,6 +612,7 @@ final class FitResult {
                 component.parameterSpecs[i - at],
                 theta[i],
                 noiseAbsorbed: stationary && isVariance,
+                stationary: stationary,
               ),
             );
           case ParameterStatus.determined:
@@ -648,18 +649,24 @@ final class FitResult {
     ParameterSpec declared,
     double value, {
     required bool noiseAbsorbed,
+    required bool stationary,
   }) {
     if (searched case ShapeParameter(
       :final lower,
       :final upper,
     ) when value - lower < upper - value) {
       final raised = declared is ShapeParameter && declared.lower < lower;
-      return raised
-          ? 'the $label finished at the bottom of its bracket, which was '
-                'raised to what the sampling can resolve: below it the '
-                'component could not be told apart from measurement noise'
-          : 'the $label finished at the bottom of its bracket, so the real '
-                'optimum may be outside it';
+      if (raised) {
+        return stationary
+            ? 'the $label finished at the bottom of its bracket, which was '
+                  'raised to what the sampling can resolve: below it the '
+                  'component could not be told apart from measurement noise'
+            : 'the $label finished at the bottom of its bracket, which was '
+                  'raised to what the sampling can resolve: below it the data '
+                  'determine only a combination of it with the variance';
+      }
+      return 'the $label finished at the bottom of its bracket, so the real '
+          'optimum may be outside it';
     }
     if (noiseAbsorbed && !measurementVariancePinned) {
       return 'the $label finished at the top of its bracket, which means the '

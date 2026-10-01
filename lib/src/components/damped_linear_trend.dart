@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import '../arguments.dart';
 import '../component.dart';
 import '../engine/matrix_block.dart';
+import '../exceptions.dart';
 import '../parameter_spec.dart';
 
 /// A smoothly varying level whose rate of change is pulled back towards zero:
@@ -94,6 +95,9 @@ final class DampedLinearTrend extends Component {
   ///
   /// The default spans six decades, which for daily data is a quarter of an
   /// hour to twenty-seven years.
+  ///
+  /// [fit] raises the bottom of it to the median gap between readings; see
+  /// [parameterSpecsAt]. The top is used as given.
   final ({double lower, double upper}) timeScaleBounds;
 
   /// Variance of the slope in the long run, `processVariance * timeScale / 2`,
@@ -116,6 +120,36 @@ final class DampedLinearTrend extends Component {
       upper: math.log(timeScaleBounds.upper),
     ),
   ];
+
+  /// Raises the time-scale bracket to the sampling interval.
+  ///
+  /// Over a time scale shorter than the gap between readings the slope
+  /// forgets itself between them and the level moves like a random walk of
+  /// variance `processVariance * timeScale^2`: the data determine that
+  /// product, not its two factors. See [Component.parameterSpecsAt].
+  @override
+  List<ParameterSpec> parameterSpecsAt({required double resolution}) {
+    if (!(resolution > 0)) return parameterSpecs;
+    final floor = math.max(timeScaleBounds.lower, resolution);
+    final upper = timeScaleBounds.upper;
+    if (!(floor < upper)) {
+      throw UnderdeterminedModelException(
+        'a DampedLinearTrend time scale is bracketed at '
+        '[${timeScaleBounds.lower}, $upper], but the readings are '
+        '$resolution apart, and below one sampling interval only '
+        'processVariance * timeScale^2 is determined. Widen timeScaleBounds '
+        'or use a LocalLevel.',
+      );
+    }
+    return [
+      const VarianceParameter(),
+      ShapeParameter(
+        label: 'time scale',
+        lower: math.log(floor),
+        upper: math.log(upper),
+      ),
+    ];
+  }
 
   @override
   void transition(double dt, MatrixBlock out) {

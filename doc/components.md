@@ -104,9 +104,9 @@ about 0.77, 0.88, 0.92 and 0.96 of its value for a `timeScale` of 5, 10, 15 and
 A `timeScale` in proportion to the bandwidth keeps that fraction fixed.
 
 `fit` estimates `timeScale` as a shape parameter over `timeScaleBounds`, by
-default 0.01 to 10 000 time units. With readings much further apart than
-`timeScale`, the data see a random walk and determine only
-`processVariance * timeScale²`.
+default 0.01 to 10 000 time units, raised at the bottom to the sampling
+interval ([below](#a-floor-from-the-sampling)). A fit that finishes there,
+with a warning, has found a series better described by a `LocalLevel`.
 
 ### `TrigonometricSeasonal`
 
@@ -244,8 +244,15 @@ it. Allowed down to a length scale of 0.01 on daily readings with a true noise
 level of 0.3, it reports the noise as **0.002**, with a band covering every
 point and a trend that interpolates the noise.
 
-So `fit` raises the bottom of `lengthScaleBounds` to the typical gap between
-visits, and a cycle's `periodBounds` to twice it, which is the Nyquist limit.
+A `DampedLinearTrend` with a time scale shorter than the gap between readings
+is a random walk: its slope forgets itself between readings, and the data
+determine only `processVariance * timeScale²`. On a series without a
+persistent direction a fit runs the time scale down there and reports both
+parameters as sharp, because each is measured with the other held fixed.
+
+So `fit` raises the bottom of `lengthScaleBounds` and `timeScaleBounds` to the
+typical gap between visits, and a cycle's `periodBounds` to twice it, which is
+the Nyquist limit.
 Readings much closer together than the typical gap, such as two weighings on one
 morning, count as one visit. A higher lower bound of your own is kept, and the
 upper bound is used as given.

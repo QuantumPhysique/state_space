@@ -497,6 +497,40 @@ void main() {
     }
   });
 
+  test('a random walk drives the time scale to the sampling floor, and the fit '
+      'says so', () {
+    final random = math.Random(5);
+    var level = 70.0;
+    final walk = [
+      for (var d = 0; d < 400; d++)
+        () {
+          level += 0.2 * (random.nextDouble() - 0.5);
+          return Observation(d.toDouble(), level + 0.3 * random.nextDouble());
+        }(),
+    ];
+    final fitted = fit(
+      StructuralModel.dampedLinearTrend(processVariance: 1e-2, timeScale: 5),
+      walk,
+    );
+    final found = fitted.model.components.single as DampedLinearTrend;
+    expect(found.timeScale, closeTo(1, 1e-3));
+    expect(fitted.parameterStatus[1], ParameterStatus.beyondBracket);
+    expect(
+      fitted.warnings,
+      contains(
+        contains('determine only a combination of it with the variance'),
+      ),
+    );
+    expect(
+      () => DampedLinearTrend(
+        processVariance: 1,
+        timeScale: 0.1,
+        timeScaleBounds: (lower: 0.01, upper: 0.5),
+      ).parameterSpecsAt(resolution: 1),
+      throwsA(isA<UnderdeterminedModelException>()),
+    );
+  });
+
   test('arguments are checked', () {
     for (final bad in [0.0, -1.0, double.nan, double.infinity]) {
       expect(
