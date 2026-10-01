@@ -71,8 +71,8 @@ class FastPath2x2 {
   /// Whether the specialisation covers this model.
   ///
   /// One component, two states, and under exact initialisation both of them
-  /// flat. A component with one flat and one proper state takes the generic
-  /// path; nothing in the package produces one yet.
+  /// flat. A component with one flat and one proper state, such as
+  /// `DampedLinearTrend`, takes the generic path under exact initialisation.
   static bool handles(
     List<Component> components,
     Initialization initialization,

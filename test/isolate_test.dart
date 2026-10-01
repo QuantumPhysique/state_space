@@ -116,6 +116,23 @@ void main() {
       },
     );
 
+    test('so does a damped trend, which cannot share a model with the trend '
+        'above', () async {
+      final model = StructuralModel.dampedLinearTrend(
+        processVariance: 1e-4,
+        timeScale: 30,
+      );
+      final data = _data();
+      final here = _worker((model, data));
+      final there = await Isolate.run(() => _worker((model, data)));
+
+      expect(there.level, here.level);
+      expect(there.slope, here.slope);
+      expect(there.logMarginalLikelihood, here.logMarginalLikelihood);
+      expect(there.varianceRatios[0], here.varianceRatios[0]);
+      expect(there.varianceRatios[1].isNaN, isTrue);
+    });
+
     test('the model itself survives the trip, not just its output', () async {
       // Sending the model as data rather than rebuilding it inside the worker.
       // This is the half that a closure in a component would break.

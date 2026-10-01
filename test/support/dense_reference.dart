@@ -77,8 +77,33 @@ Kernel cycleKernel(double period, double damping, double stationaryVariance) =>
           math.cos(2 * math.pi * lag / period);
     };
 
+/// The kernel of a [DampedLinearTrend] with its level pinned at zero at time
+/// zero: the integral of a stationary Ornstein-Uhlenbeck slope of variance
+/// `sigma^2 tau / 2`,
+///
+/// ```text
+/// k(s, t) = sigma^2 tau / 2 * integral_0^s integral_0^t exp(-|u - w| / tau) du dw
+/// ```
+///
+/// written out from that double integral (Taylor, Cumberland & Sy 1994), not
+/// from the transition and process noise the component builds.
+Kernel dampedTrendKernel(double processVariance, double timeScale) {
+  final tau = timeScale;
+  final slopeVariance = processVariance * tau / 2;
+  return (s, t) {
+    final m = math.min(s, t);
+    final settled = 1 - math.exp(-m / tau);
+    final apart = 1 - math.exp(-(s - t).abs() / tau);
+    return slopeVariance *
+        (2 * tau * m - 2 * tau * tau * settled + tau * tau * settled * apart);
+  };
+}
+
 Basis trendBasis() =>
     (s) => [1, s];
+
+Basis levelBasis() =>
+    (s) => [1];
 
 Basis seasonalBasis(double period, int harmonics) =>
     (s) => [
@@ -278,4 +303,104 @@ restrictedLikelihood(
     estimate: [for (var k = 0; k < d; k++) solvedSystem(k, 0)],
     variance: [for (var k = 0; k < d; k++) solvedSystem(k, k + 1)],
   );
+}
+
+/// The posterior under an exact flat prior on the directions [basis] spans,
+/// at [queries]: universal kriging, the textbook way.
+///
+/// ```text
+/// beta = M^-1 B' C^-1 y,              M = B' C^-1 B
+/// mean = k' C^-1 (y - B beta) + b' beta
+/// var  = k(q, q) - k' C^-1 k + r' M^-1 r,   r = b - B' C^-1 k
+/// ```
+///
+/// The last term is what the flat directions add: the uncertainty of their
+/// least-squares estimate, carried to the query.
+({List<double> mean, List<double> variance}) denseExactPosterior(
+  List<Observation> data,
+  List<double> queries,
+  Kernel kernel,
+  Basis basis, {
+  required double measurementVariance,
+}) {
+  final n = data.length;
+  final origin = data.first.time;
+  final times = [for (final o in data) o.time - origin];
+  final shifted = [for (final q in queries) q - origin];
+  final design = [for (final s in times) basis(s)];
+  final d = design.first.length;
+
+  final c = <List<double>>[
+    for (var i = 0; i < n; i++)
+      [
+        for (var j = 0; j < n; j++)
+          kernel(times[i], times[j]) +
+              (i == j ? data[i].relativeVariance * measurementVariance : 0.0),
+      ],
+  ];
+  final rhs = <List<double>>[
+    for (var i = 0; i < n; i++)
+      [
+        data[i].value,
+        ...design[i],
+        for (final q in shifted) kernel(q, times[i]),
+      ],
+  ];
+  final solved = Matrix64.fromRows(c).cholesky().solve(Matrix64.fromRows(rhs));
+
+  // M = B' C^-1 B and B' C^-1 y.
+  final information = [for (var k = 0; k < d; k++) List<double>.filled(d, 0)];
+  final projected = List<double>.filled(d, 0);
+  for (var i = 0; i < n; i++) {
+    for (var k = 0; k < d; k++) {
+      projected[k] += design[i][k] * solved(i, 0);
+      for (var l = 0; l < d; l++) {
+        information[k][l] += design[i][k] * solved(i, l + 1);
+      }
+    }
+  }
+  final m = Matrix64.fromRows(information).cholesky();
+  final beta = m.solve(
+    Matrix64.fromRows([
+      for (final p in projected) [p],
+    ]),
+  );
+
+  final mean = <double>[];
+  final variance = <double>[];
+  for (var q = 0; q < queries.length; q++) {
+    final column = 1 + d + q;
+    final b = basis(shifted[q]);
+    var centre = 0.0;
+    var explained = 0.0;
+    final r = List<double>.of(b);
+    for (var i = 0; i < n; i++) {
+      final cross = kernel(shifted[q], times[i]);
+      // C^-1 (y - B beta) = C^-1 y - C^-1 B beta.
+      var weight = solved(i, 0);
+      for (var k = 0; k < d; k++) {
+        weight -= solved(i, k + 1) * beta(k, 0);
+      }
+      centre += cross * weight;
+      explained += cross * solved(i, column);
+      for (var k = 0; k < d; k++) {
+        r[k] -= design[i][k] * solved(i, column);
+      }
+    }
+    for (var k = 0; k < d; k++) {
+      centre += b[k] * beta(k, 0);
+    }
+    final rSolved = m.solve(
+      Matrix64.fromRows([
+        for (final x in r) [x],
+      ]),
+    );
+    var added = 0.0;
+    for (var k = 0; k < d; k++) {
+      added += r[k] * rSolved(k, 0);
+    }
+    mean.add(centre);
+    variance.add(kernel(shifted[q], shifted[q]) - explained + added);
+  }
+  return (mean: mean, variance: variance);
 }

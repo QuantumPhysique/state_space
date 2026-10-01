@@ -159,7 +159,9 @@ ahead.predictiveInterval(0);  // where an actual reading would fall
 
 The band widens quickly. For a local linear trend the forecast variance grows
 like the cube of the horizon, because the slope itself is uncertain and keeps
-drifting. This is expected behaviour.
+drifting. This is expected behaviour. For a `DampedLinearTrend` it grows like
+the cube up to about the `timeScale` and linearly beyond, where the forecast
+levels off.
 
 If the first horizon time equals the last observation time, the forecast there
 is the filtered state: conditioned on everything up to and including that
@@ -241,7 +243,8 @@ only on the ratio; the noise level only changes the band. Pass
 ## When there is not enough data
 
 A trend has two flat directions, a level and a slope, so it needs readings at
-two distinct times. Each harmonic of a seasonal adds two more, and each
+two distinct times. A `DampedLinearTrend` has one, the level, so one reading is
+enough. Each harmonic of a seasonal adds two more, and each
 regression column one. `fit` needs one reading more than that to
 estimate a noise level from. With fewer, the package throws an
 `UnderdeterminedModelException` whose message says what is missing:

@@ -9,6 +9,7 @@ the residuals rather than the likelihood to decide whether each one helps.
 |---|---|
 | noisy readings of something that drifts | `LocalLinearTrend` (the default; a smoothing spline) |
 | a level with no persistent direction | `LocalLevel` |
+| a trend that should level off across long gaps and in forecasts | `DampedLinearTrend` |
 | a pattern on a calendar you know: a week, a year | `TrigonometricSeasonal(period: 7, harmonics: 2, ...)`, or `period: 365.25` |
 | named, dated events: a holiday, a course of medication | `RegressionComponent` with `IndicatorRegressor`s |
 | a covariate that changes at known instants | `RegressionComponent` with a `StepRegressor` |
@@ -18,7 +19,8 @@ the residuals rather than the likelihood to decide whether each one helps.
 The choice between `LocalLinearTrend` and `LocalLevel` is about whether the
 series has a direction that persists. A trend carries a slope and extrapolates
 it; a level does not. If "still going down" makes sense for your data, use the
-trend.
+trend. `DampedLinearTrend` is in between: it carries a slope for about its
+`timeScale` and then lets it fade.
 
 [Components](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md) has the detail on each. This page is about putting
 them together.
@@ -71,12 +73,14 @@ match:
 |---|---|
 | `LocalLevel` | 1 |
 | `LocalLinearTrend` | 2 |
+| `DampedLinearTrend` | 1 |
 | `TrigonometricSeasonal` | 2 per harmonic |
 | `RegressionComponent` | 1 per column |
 | `Matern`, `StochasticCycle` | 0 |
 
 So a trend *can* be compared with a trend plus a Matérn, and *cannot* be compared
-with a trend plus a weekly seasonal.
+with a trend plus a weekly seasonal. A damped trend can be compared with a
+`LocalLevel` and not with a `LocalLinearTrend`.
 
 These can be compared across any models:
 

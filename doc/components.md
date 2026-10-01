@@ -14,6 +14,7 @@ adds its own cost.
 |---|---|---|---|---|
 | `LocalLevel` | Brownian motion, `min(s,t)` | 1 | diffuse | 1 |
 | `LocalLinearTrend` | cubic spline, `min(s,t)³/3 + min(s,t)²\|s−t\|/2` | 2 | diffuse | 1 |
+| `DampedLinearTrend` | integrated Ornstein–Uhlenbeck | 2 | level diffuse, slope stationary | 2 |
 | `TrigonometricSeasonal` | `min(s,t) Σⱼ cos λⱼ(s−t)` | 2 per harmonic | diffuse | 1 |
 | `RegressionComponent` | a constant per column | 1 per column | diffuse | **0** |
 | `Matern` | Matérn, ν = 1/2, 3/2, 5/2 | 1, 2, 3 | stationary | 2 |
@@ -62,6 +63,50 @@ linear time.
 has the kernel and the smoothing parameter.
 
 Unlike `LocalLevel` it carries a slope, and extrapolates it.
+
+### `DampedLinearTrend`
+
+A `LocalLinearTrend` whose slope reverts to zero over `timeScale`: the damped
+trend (Gardner & McKenzie 1985), or integrated Ornstein–Uhlenbeck process
+(Taylor, Cumberland & Sy 1994).
+
+```text
+d(mu) = nu dt,   d(nu) = -nu / tau dt + sigma dB
+```
+
+```dart
+final model = StructuralModel.dampedLinearTrend(
+  processVariance: 4e-3,
+  timeScale: 60,
+);
+```
+
+Over spans much shorter than `timeScale` it is a `LocalLinearTrend` with the
+same `processVariance`. Over much longer spans its level moves like a
+`LocalLevel` of variance `processVariance * timeScale²`. So:
+
+* across a gap several time scales long the curve bends only near the edges
+  and is otherwise close to a straight line between them, where a
+  `LocalLinearTrend` carries the slope at each edge into the gap;
+* a forecast continues the current slope for about `timeScale` and then levels
+  off at `level + timeScale * slope`, with a variance growing linearly in the
+  horizon rather than like its cube.
+
+The level is a flat direction. The slope starts from its stationary
+distribution, with variance `processVariance * timeScale / 2`, so a single
+reading is enough: it gives a flat line.
+
+The pull towards zero also acts on a slope that persists. Between readings on
+both sides a steady slope is recovered. At the last reading it comes out at
+about 0.77, 0.88, 0.92 and 0.96 of its value for a `timeScale` of 5, 10, 15 and
+30 smoothing bandwidths, the bandwidth being
+`(measurementVariance / processVariance)^(1/4)` for one reading per time unit.
+A `timeScale` in proportion to the bandwidth keeps that fraction fixed.
+
+`fit` estimates `timeScale` as a shape parameter over `timeScaleBounds`, by
+default 0.01 to 10 000 time units, raised at the bottom to the sampling
+interval ([below](#a-floor-from-the-sampling)). A fit that finishes there,
+with a warning, has found a series better described by a `LocalLevel`.
 
 ### `TrigonometricSeasonal`
 
@@ -199,8 +244,15 @@ it. Allowed down to a length scale of 0.01 on daily readings with a true noise
 level of 0.3, it reports the noise as **0.002**, with a band covering every
 point and a trend that interpolates the noise.
 
-So `fit` raises the bottom of `lengthScaleBounds` to the typical gap between
-visits, and a cycle's `periodBounds` to twice it, which is the Nyquist limit.
+A `DampedLinearTrend` with a time scale shorter than the gap between readings
+is a random walk: its slope forgets itself between readings, and the data
+determine only `processVariance * timeScale²`. On a series without a
+persistent direction a fit runs the time scale down there and reports both
+parameters as sharp, because each is measured with the other held fixed.
+
+So `fit` raises the bottom of `lengthScaleBounds` and `timeScaleBounds` to the
+typical gap between visits, and a cycle's `periodBounds` to twice it, which is
+the Nyquist limit.
 Readings much closer together than the typical gap, such as two weighings on one
 morning, count as one visit. A higher lower bound of your own is kept, and the
 upper bound is used as given.

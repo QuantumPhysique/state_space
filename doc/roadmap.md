@@ -30,8 +30,12 @@ The squared exponential kernel: it has no exact finite-state form. See
 * Silverman (1984), *Ann. Statist.* 12(3): 898–916: the spline's equivalent
   kernel, used by the calibration tool to turn a variance ratio into a
   bandwidth in days
+* Gardner & McKenzie (1985), *Management Science* 31(10): 1237–1246: the
+  damped trend
 * Harvey (1989), *Forecasting, Structural Time Series Models and the Kalman
   Filter*, CUP: profile likelihood, ch. 3–4
+* Taylor, Cumberland & Sy (1994), *JASA* 89(427): 727–736: the integrated
+  Ornstein–Uhlenbeck process
 * Hartikainen & Särkkä (2010), *IEEE MLSP*: 379–384: GP to state space
 * Durbin & Koopman (2012), *Time Series Analysis by State Space Methods*, 2nd
   ed.: exact diffuse initialisation, ch. 5

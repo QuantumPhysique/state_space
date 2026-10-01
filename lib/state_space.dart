@@ -46,6 +46,7 @@
 library;
 
 export 'src/component.dart';
+export 'src/components/damped_linear_trend.dart';
 export 'src/components/local_level.dart';
 export 'src/components/local_linear_trend.dart';
 export 'src/components/matern.dart';
