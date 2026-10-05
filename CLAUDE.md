@@ -24,11 +24,11 @@ CI (`ci.yaml`) runs format, analyze, test and the examples at SDK 3.9.0 and stab
 
 - `main` is the only long-lived branch; feature branches `feat/<topic>`, `fix/<topic>`, `docs/<topic>`, `ci/<topic>`, `chore/<topic>` off `main`, back by merge commit. Never commit to `main` directly.
 - Every commit lands on `main` as it is (no squash), so every commit is a conventional commit — see `/commit`. The PR title uses the same format.
-- A release is one `chore: prepare vX.Y.Z` commit on its own branch: `version:` in `pubspec.yaml`, and `## Unreleased` in `CHANGELOG.md` becomes `## X.Y.Z`. After the merge, pushing the tag `vX.Y.Z` on `main` runs `publish.yaml`, which publishes to pub.dev. Ask before pushing a tag.
+- Versions are prepared with `/release`: a `release/prepare_vX.Y.Z` branch with one `chore: prepare vX.Y.Z` commit that bumps `version:` in `pubspec.yaml`, renames `## Unreleased` in `CHANGELOG.md` to `## X.Y.Z` and updates the `^X.Y.Z` install line in the README and Getting started. After the merge, `/release` pushes the tag `vX.Y.Z`, which runs `publish.yaml` and publishes to pub.dev. Never tag or `dart pub publish` by hand.
 
 ## Changelog
 
-`CHANGELOG.md` is read on pub.dev by developers who call the package. Every change to the public API or to what it returns adds a bullet to `## Unreleased`.
+`CHANGELOG.md` is read on pub.dev by developers who call the package. Every change to the public API or to what it returns adds a bullet to `## Unreleased`, the topmost heading, created if it is missing.
 
 - What a caller can now do or will now get, naming the API in backticks. Not the implementation or how the change was found
 - Bug fixes start with `Fixed …`

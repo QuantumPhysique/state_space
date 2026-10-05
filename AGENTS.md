@@ -8,3 +8,4 @@ Read `CLAUDE.md` for all project conventions, setup, commands, and coding guidel
 |---|---|---|
 | `commit.md` | `/commit` | Plan and create commits interactively, one at a time |
 | `pr.md` | `/pr` | Open a pull request onto `main` |
+| `release.md` | `/release` | Prepare a release: version, changelog, PR, then the tag that publishes to pub.dev |
