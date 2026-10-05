@@ -3,7 +3,7 @@ description: >-
   Gaussian process regression for irregular time series: smoothed trends with
   uncertainty bands, forecasts and learned hyperparameters, in linear time.
   Pure Dart.
-version: 0.1.0
+version: 0.2.0
 repository: https://github.com/QuantumPhysique/state_space
 issue_tracker: https://github.com/QuantumPhysique/state_space/issues
 
