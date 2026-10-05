@@ -4,6 +4,8 @@ pubspec.lock
 doc/api/
 .claude/
 
-# Maintainer scripts; available in the GitHub repository.
+# Maintainer scripts and agent instructions; available in the GitHub repository.
 tool/
 benchmark/
+CLAUDE.md
+AGENTS.md
