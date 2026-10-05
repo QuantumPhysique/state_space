@@ -83,6 +83,7 @@ has the full series, `TimeAxis`, and
 |---|---|---|
 | `LocalLinearTrend` | a smooth trend that keeps its direction; the default | 2 |
 | `LocalLevel` | a level with no persistent direction | 1 |
+| `DampedLinearTrend` | a trend whose rate fades, so that long gaps and forecasts level off | 2 |
 | `TrigonometricSeasonal` | a pattern with a known period, such as a week or a year | 2 per harmonic |
 | `RegressionComponent` | dated events and known covariates | 1 per column |
 | `Matern` | short-lived correlated deviations beside a trend | 1, 2 or 3 |
