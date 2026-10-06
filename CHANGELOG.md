@@ -1,9 +1,20 @@
-## Unreleased
+## 0.2.0
+
+A month without stepping on the scale shouldn't turn into a forecast that runs
+off the chart, at least not in [trale](https://github.com/QuantumPhysique/trale),
+the weight diary I write this package for. This release adds a trend that
+levels off when the readings stop.
 
 - `DampedLinearTrend` and `StructuralModel.dampedLinearTrend`: a trend whose
-  slope reverts to zero over a time scale, so that the curve straightens across
-  long gaps and a forecast levels off. The level is diffuse and the slope
-  starts from its stationary distribution, so one reading is enough.
+  slope reverts to zero over `timeScale`. Across a gap several time scales
+  long the curve is close to a straight line between its ends, and a forecast
+  levels off at `level + timeScale * slope`, with a variance growing linearly
+  in the horizon rather than like its cube.
+- A `DampedLinearTrend` gives a flat line from a single reading, and its
+  likelihood can be compared with a `LocalLevel`'s but not with a
+  `LocalLinearTrend`'s.
+- `fit` estimates `timeScale` along with the process variance, within
+  `timeScaleBounds` and never below the typical gap between readings.
 
 ## 0.1.0
 

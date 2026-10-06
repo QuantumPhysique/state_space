@@ -8,7 +8,7 @@ weight.
 
 ```yaml
 dependencies:
-  state_space: ^0.1.0
+  state_space: ^0.2.0
 ```
 
 No runtime dependencies, no platform channels, no native code.
