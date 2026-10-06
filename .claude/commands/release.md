@@ -26,7 +26,7 @@ Only after the version is confirmed. On a branch `release/prepare_vX.Y.Z` off `m
 
 1. `pubspec.yaml`: `version: X.Y.Z`.
 2. `CHANGELOG.md`: bring every bullet under `## Unreleased` in line with the CLAUDE.md Changelog section, then rename the heading to `## X.Y.Z`, the intro line, if any, directly below it. No new `## Unreleased`; the next change adds it.
-3. Every `state_space: ^<previous>` that `grep -rn "state_space: ^" README.md doc/` finds becomes `state_space: ^X.Y.Z`.
+3. Every `state_space: ^<previous>` that `grep -rnF "state_space: ^" README.md doc/` finds becomes `state_space: ^X.Y.Z`.
 4. The gate from CLAUDE.md, and `dart pub publish --dry-run`, which must end in `Package has 0 warnings.`
 5. Show the new changelog section; after approval commit everything as `chore: prepare vX.Y.Z` (via `/commit`) and open the PR (via `/pr`).
 
