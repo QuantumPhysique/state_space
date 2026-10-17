@@ -312,5 +312,32 @@ void main() {
         );
       }
     });
+
+    test('does not depend on the unit of the data under a pinned noise', () {
+      final simulation = _simulate(
+        trendVariance: trendVariance,
+        seasonalVariance: seasonalVariance,
+        measurementVariance: measurementVariance,
+        count: 200,
+        seed: 5,
+      );
+      FitResult inUnit(double unit) => fit(
+        _start(),
+        [for (final o in simulation.data) Observation(o.time, o.value * unit)],
+        penalty: ComplexityPenalty(),
+        fixedMeasurementVariance: measurementVariance * unit * unit,
+      );
+      final kilograms = inUnit(1);
+      final grams = inUnit(1000);
+
+      expect(grams.logPenalty, closeTo(kilograms.logPenalty, 1e-9));
+      for (var i = 0; i < 2; i++) {
+        expect(
+          grams.varianceRatios[i],
+          closeTo(kilograms.varianceRatios[i], 1e-9),
+          reason: 'parameter $i',
+        );
+      }
+    });
   });
 }

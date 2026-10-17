@@ -3,6 +3,9 @@
 - `StructuralModel.smooth` takes `signal`: the components whose sum
   `SmoothingResult.mean` and `SmoothingResult.variance` report, with the
   covariances between them.
+- Fixed `fit` with `fixedMeasurementVariance` and a `ComplexityPenalty`: the
+  penalty was off by a factor of the measurement standard deviation, so the
+  fit depended on the unit of the readings.
 
 ## 0.2.0
 

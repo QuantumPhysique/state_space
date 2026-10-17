@@ -122,11 +122,13 @@ class ProfileLikelihood {
   ///
   /// The conversion factor is the measurement standard deviation this set of
   /// ratios implies, divided by the observed spread of the data. Both halves
-  /// are needed: the filter reports wandering relative to the measurement
-  /// noise, and the penalty is stated relative to the data.
+  /// are needed: the filter reports wandering relative to the noise level the
+  /// pass ran at, and the penalty is stated relative to the data.
   double _penaltyHere() {
     if (_dataSpread <= 0) return 0;
-    final noise = math.sqrt(measurementVarianceOf(_cached));
+    final noise = math.sqrt(
+      measurementVarianceOf(_cached) / _cachedModel.measurementVariance,
+    );
     return penalty.at(_cachedModel.components, span, noise / _dataSpread);
   }
 
