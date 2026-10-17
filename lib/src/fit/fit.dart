@@ -53,7 +53,8 @@ const double _halfNat = 0.5;
 ///
 /// The measurement variance is concentrated out analytically, so the search
 /// runs over one log variance ratio per variance parameter, plus any shape
-/// parameters, and never over the noise level itself.
+/// parameters, and not over the noise level itself, unless a held variance
+/// ties the model to an absolute scale; see [heldParameters] below.
 ///
 /// The search runs in three stages. A coordinate scan sweeps each parameter in
 /// turn across its bracket to find the right basin. Then golden section for a
@@ -65,7 +66,8 @@ const double _halfNat = 0.5;
 ///
 /// [lowerLogRatio] and [upperLogRatio] bracket the natural log of every
 /// variance ratio, whatever the model passed in: the variances [initial]
-/// carries are ignored under the default [start]. The default bracket,
+/// carries are ignored under the default [start], unless they are held. The
+/// default bracket,
 /// `[-20, 10]`, is thirteen decades wide, from about `1e-8.7` to `1e4.3` times
 /// the measurement variance. It suits time in days; a trend's variance is per
 /// cubed time unit, so measuring time in seconds moves the optimum about
@@ -80,6 +82,23 @@ const double _halfNat = 0.5;
 /// [start] decides whether the coordinate scan runs; see [SearchStart].
 ///
 /// [penalty] defaults to none. See [ComplexityPenalty] for what one does.
+///
+/// ## Holding parameters
+///
+/// [heldParameters] are indices into `initial.parameters`, in the order of
+/// [StructuralModel.parameterSpecs]. A held parameter is not searched: it
+/// keeps the value [initial] gives it, a variance as an absolute value and a
+/// shape parameter whether or not it lies inside its bracket.
+/// [FitResult.parameterStatus] marks it [ParameterStatus.held], and it has no
+/// width.
+///
+/// A held variance pins the model to an absolute scale, which concentrating
+/// the noise level out would not keep. With one, unless
+/// [fixedMeasurementVariance] is given, the log of the measurement variance
+/// becomes one more search axis, over the same bracket of log ratios
+/// centred on the noise level that would explain the spread of the readings
+/// on its own. The free variances are still searched as ratios to it. With
+/// every parameter held, the noise level is all that is left to search.
 ///
 /// ## Saying what the scale can measure
 ///
@@ -110,7 +129,8 @@ const double _halfNat = 0.5;
 /// for a trend, one more per diffuse state for each component added), two
 /// components the data cannot tell apart, or a component that cannot be
 /// resolved at this sampling, such as a seasonal harmonic past the Nyquist
-/// frequency. Throws [ArgumentError] for invalid arguments.
+/// frequency. Throws [ArgumentError] for invalid arguments, among them a held
+/// index the model has no parameter for.
 ///
 /// {@category Choosing a model}
 FitResult fit(
@@ -124,6 +144,7 @@ FitResult fit(
   double? fixedMeasurementVariance,
   double? minimumMeasurementVariance,
   SearchStart start = SearchStart.bracketScan,
+  Set<int> heldParameters = const {},
 }) {
   if (fixedMeasurementVariance != null && minimumMeasurementVariance != null) {
     throw ArgumentError(
@@ -145,6 +166,16 @@ FitResult fit(
     throw ArgumentError.value(scanPoints, 'scanPoints', 'must be at least 3');
   }
   checkPositive(tolerance, 'tolerance');
+  final count = initial.parameterCount;
+  for (final index in heldParameters) {
+    if (index < 0 || index >= count) {
+      throw ArgumentError.value(
+        index,
+        'heldParameters',
+        'the model has $count parameters',
+      );
+    }
+  }
 
   FitResult run(double? fixed) => _search(
     initial,
@@ -156,6 +187,7 @@ FitResult fit(
     penalty: penalty ?? const NoPenalty(),
     fixedMeasurementVariance: fixed,
     start: start,
+    held: heldParameters,
   );
 
   final FitResult result;
@@ -191,28 +223,43 @@ FitResult _search(
   required Penalty penalty,
   required double? fixedMeasurementVariance,
   required SearchStart start,
+  required Set<int> held,
 }) {
   final k = initial.parameterCount;
   final specs = initial.parameterSpecsAt(
     resolution: samplingResolution(observations),
   );
-  final brackets = _brackets(
-    specs,
-    lowerLogRatio,
-    upperLogRatio,
-    scanPoints: scanPoints,
-  );
-  final (:lower, :upper, :points, :step) = brackets;
-
   final profile = ProfileLikelihood(
     initial,
     observations,
     penalty: penalty,
     fixedMeasurementVariance: fixedMeasurementVariance,
+    held: held,
   );
+  final free = profile.free;
+  final scaleAxis = profile.searchesScale ? free.length : null;
+  final axes = [
+    for (final i in free) specs[i],
+    if (scaleAxis != null)
+      const VarianceParameter(label: 'measurement variance'),
+  ];
+  final m = axes.length;
 
-  final origin = Float64List(k);
-  for (var i = 0; i < k; i++) {
+  final brackets = _brackets(
+    axes,
+    lowerLogRatio,
+    upperLogRatio,
+    scanPoints: scanPoints,
+  );
+  final (:lower, :upper, :points, :step) = brackets;
+  if (scaleAxis != null) {
+    final centre = math.log(profile.spreadVariance);
+    lower[scaleAxis] += centre;
+    upper[scaleAxis] += centre;
+  }
+
+  final origin = Float64List(m);
+  for (var i = 0; i < m; i++) {
     origin[i] = (lower[i] + upper[i]) / 2;
   }
   if (profile.evaluate(origin).usedObservations < 1) {
@@ -228,32 +275,39 @@ FitResult _search(
   // Anything outside the bracket, or not a number, is refused without running
   // a filter. That bounds the simplex and keeps a degenerate variance from
   // reaching a component constructor.
-  double objective(Float64List theta) {
-    for (var i = 0; i < k; i++) {
-      if (!(theta[i] >= lower[i] && theta[i] <= upper[i])) {
+  double objective(Float64List argument) {
+    for (var i = 0; i < m; i++) {
+      if (!(argument[i] >= lower[i] && argument[i] <= upper[i])) {
         return -double.maxFinite;
       }
     }
-    final value = profile.at(theta);
+    final value = profile.at(argument);
     return value.isNaN ? -double.maxFinite : value;
   }
 
   final Float64List current;
   if (start == SearchStart.previousParameters) {
-    current = _previous(initial, specs, lower, upper);
+    current = _previous(initial, specs, free, scaleAxis, lower, upper);
   } else {
     current = _scan(objective, origin, brackets);
   }
 
-  var best = _maximise(objective, current, specs, brackets, tolerance);
-  final absorbed = _noiseAbsorbed(initial, specs, best.argument, brackets);
+  var best = _maximise(objective, current, axes, brackets, tolerance);
+  final absorbed = _noiseAbsorbed(
+    initial,
+    specs,
+    free,
+    best.argument,
+    brackets,
+  );
   if (absorbed) {
     final alternative = _restartWithMoreNoise(
       objective,
       best,
-      specs,
+      axes,
       brackets,
       tolerance,
+      scaleAxis: scaleAxis,
     );
     if (alternative != null && alternative.value > best.value) {
       best = alternative;
@@ -261,10 +315,11 @@ FitResult _search(
   }
   final optimum = best.argument;
 
-  final widths = Float64List(k);
-  final decades = Float64List(k);
-  for (var axis = 0; axis < k; axis++) {
-    widths[axis] = _halfNatWidth(
+  final widths = Float64List(k)..fillRange(0, k, double.nan);
+  final decades = Float64List(k)..fillRange(0, k, double.nan);
+  for (var axis = 0; axis < free.length; axis++) {
+    final i = free[axis];
+    widths[i] = _halfNatWidth(
       objective,
       optimum,
       axis,
@@ -274,20 +329,24 @@ FitResult _search(
     );
     // A width in a logit coordinate divided by ln 10 is not decades of
     // anything, so the decade view reports NaN there.
-    decades[axis] = specs[axis].isLogarithmic
-        ? widths[axis] / _ln10
-        : double.nan;
+    decades[i] = specs[i].isLogarithmic ? widths[i] / _ln10 : double.nan;
   }
 
   final atOptimum = profile.evaluate(optimum);
   final measurementVariance = profile.measurementVarianceOf(atOptimum);
+  final absolute = profile.parametersAt(optimum, measurementVariance);
   final shift = math.log(measurementVariance);
-  final absolute = Float64List(k);
-  final ratios = Float64List(k);
+  final ratios = Float64List(k)..fillRange(0, k, double.nan);
   for (var i = 0; i < k; i++) {
-    final isVariance = specs[i] is VarianceParameter;
-    absolute[i] = isVariance ? optimum[i] + shift : optimum[i];
-    ratios[i] = isVariance ? math.exp(optimum[i]) : double.nan;
+    if (specs[i] is VarianceParameter) {
+      ratios[i] = math.exp(absolute[i] - shift);
+    }
+  }
+
+  final searched = _classify(objective, best, axes, brackets, free.length);
+  final status = List.filled(k, ParameterStatus.held);
+  for (var axis = 0; axis < free.length; axis++) {
+    status[free[axis]] = searched[axis];
   }
 
   return newFitResult(
@@ -302,7 +361,7 @@ FitResult _search(
     converged: best.converged,
     plateauDecadesByParameter: decades,
     plateauWidthByParameter: widths,
-    parameterStatus: _classify(objective, best, specs, brackets),
+    parameterStatus: status,
     parameterSpecs: specs,
     diffuseDimension: initial.diffuseDimension,
     measurementVariancePinned: fixedMeasurementVariance != null,
@@ -339,23 +398,28 @@ _Brackets _brackets(
   return (lower: lower, upper: upper, points: points, step: step);
 }
 
-/// The model's own parameters in search coordinates, clamped into the
+/// The model's own free parameters in search coordinates, clamped into the
 /// bracket: variances as ratios to the model's measurement variance, shape
-/// parameters as they stand.
+/// parameters as they stand, and the log measurement variance on [scaleAxis]
+/// if there is one.
 Float64List _previous(
   StructuralModel initial,
   List<ParameterSpec> specs,
+  List<int> free,
+  int? scaleAxis,
   Float64List lower,
   Float64List upper,
 ) {
   final theta = initial.parameters;
   final shift = math.log(initial.measurementVariance);
+  final start = [
+    for (final i in free)
+      specs[i] is VarianceParameter ? theta[i] - shift : theta[i],
+    if (scaleAxis != null) shift,
+  ];
   return Float64List.fromList([
-    for (var i = 0; i < theta.length; i++)
-      (specs[i] is VarianceParameter ? theta[i] - shift : theta[i]).clamp(
-        lower[i],
-        upper[i],
-      ),
+    for (var axis = 0; axis < start.length; axis++)
+      start[axis].clamp(lower[axis], upper[axis]),
   ]);
 }
 
@@ -404,9 +468,9 @@ _Optimum _maximise(
 ) {
   final k = start.length;
   if (k == 0) {
-    // A model of nothing but regression components: the coefficients are
-    // states and the noise level is concentrated out, so one evaluation is
-    // the answer.
+    // A model of nothing but regression components, whose coefficients are
+    // states, or one held entirely under a fixed noise level: one evaluation
+    // is the answer.
     return (argument: start, value: objective(start), converged: true);
   }
   if (k == 1) return _goldenSection(objective, start[0], brackets, tolerance);
@@ -491,26 +555,28 @@ _Optimum _goldenSection(
   }
 }
 
-/// Whether a stationary component's variance ratio finished at the top of its
-/// bracket: the signature of a component that has taken over the measurement
-/// noise.
+/// Whether a free stationary component's variance ratio finished at the top
+/// of its bracket: the signature of a component that has taken over the
+/// measurement noise.
 bool _noiseAbsorbed(
   StructuralModel model,
   List<ParameterSpec> specs,
+  List<int> free,
   Float64List optimum,
   _Brackets brackets,
 ) {
-  var at = 0;
-  for (final component in model.components) {
-    final stationary = !component.diffuseStates.contains(true);
-    for (var i = at; i < at + component.parameterCount; i++) {
-      if (stationary &&
-          specs[i] is VarianceParameter &&
-          optimum[i] >= brackets.upper[i] - brackets.step[i]) {
-        return true;
-      }
+  final stationary = [
+    for (final component in model.components)
+      for (var p = 0; p < component.parameterCount; p++)
+        !component.diffuseStates.contains(true),
+  ];
+  for (var axis = 0; axis < free.length; axis++) {
+    final i = free[axis];
+    if (stationary[i] &&
+        specs[i] is VarianceParameter &&
+        optimum[axis] >= brackets.upper[axis] - brackets.step[axis]) {
+      return true;
     }
-    at += component.parameterCount;
   }
   return false;
 }
@@ -523,21 +589,26 @@ bool _noiseAbsorbed(
 /// shares of the signal and hands the rest to the noise. When a stationary
 /// component has absorbed the noise, the better optimum usually lies in that
 /// direction, past a stretch where the likelihood falls, which a local search
-/// started at the collapsed point does not cross.
+/// started at the collapsed point does not cross. Where the noise level is
+/// searched on [scaleAxis] rather than concentrated out, it is raised by the
+/// same amount, so the components keep their variances and the noise grows.
 _Optimum? _restartWithMoreNoise(
   double Function(Float64List) objective,
   _Optimum collapsed,
   List<ParameterSpec> specs,
   _Brackets brackets,
-  double tolerance,
-) {
+  double tolerance, {
+  required int? scaleAxis,
+}) {
   final k = collapsed.argument.length;
   Float64List? bestStart;
   var bestValue = -double.infinity;
   for (final shift in const [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]) {
     final start = Float64List.fromList(collapsed.argument);
     for (var i = 0; i < k; i++) {
-      if (specs[i] is VarianceParameter) {
+      if (i == scaleAxis) {
+        start[i] = math.min(brackets.upper[i], start[i] + shift);
+      } else if (specs[i] is VarianceParameter) {
         start[i] = math.max(brackets.lower[i], start[i] - shift);
       }
     }
@@ -565,11 +636,15 @@ _Optimum? _restartWithMoreNoise(
 /// A variance at the bottom of its bracket has been shrunk; a shape parameter
 /// at the bottom has not been shrunk out of anything, and its bracket is in
 /// the wrong place, which is what beyondBracket means.
+///
+/// Only the first [count] axes are classified, which leaves out the noise
+/// level when it is searched.
 List<ParameterStatus> _classify(
   double Function(Float64List) objective,
   _Optimum best,
   List<ParameterSpec> specs,
   _Brackets brackets,
+  int count,
 ) {
   final (:lower, :upper, points: _, :step) = brackets;
   final optimum = best.argument;
@@ -582,7 +657,7 @@ List<ParameterStatus> _classify(
   }
 
   return [
-    for (var i = 0; i < optimum.length; i++)
+    for (var i = 0; i < count; i++)
       if (optimum[i] >= upper[i] - step[i] && reaches(i, upper[i]))
         ParameterStatus.beyondBracket
       else if (optimum[i] <= lower[i] + step[i] && reaches(i, lower[i]))

@@ -142,6 +142,11 @@ unchanged and scales every innovation variance by that constant, so the noise
 level has a closed form given the ratios. A `k`-component model is therefore a
 `k`-dimensional search rather than `k + 1`.
 
+**Held parameters are not searched.** They keep their values, and the search
+runs over the rest. A held variance is absolute, which a closed form over
+ratios cannot keep, so with one the log measurement variance becomes a search
+axis of its own and the other variances are searched as ratios to it.
+
 **The search has three stages.** A coordinate scan sweeps each parameter across
 its whole bracket, because a likelihood that is flat over decades, or
 multimodal, can leave a local search stuck. Then golden section for one
@@ -169,14 +174,14 @@ the sampling interval they no longer describe a different model. See
 ## What the fit tells you afterwards
 
 * **`parameterStatus`**: whether each parameter was estimated, shrunk out at the
-  bottom of its bracket, or pushed past an edge (the top, or for a shape
-  parameter either end). A parameter counts as on a bound only when the
+  bottom of its bracket, pushed past an edge (the top, or for a shape
+  parameter either end), or held. A parameter counts as on a bound only when the
   likelihood at the bound is within half a nat of the optimum. A variance of
   zero is the edge of the parameter space rather than an interior point, so the
   width reported for such a parameter is one-sided and is not an error bar.
 * **`plateauDecadesByParameter`**: how far each parameter can move before the fit
-  loses half a nat. `NaN` where the coordinate is not a logarithm;
-  `plateauWidthByParameter` has the raw number.
+  loses half a nat. `NaN` where the coordinate is not a logarithm and for a
+  held parameter; `plateauWidthByParameter` has the raw number.
 * **`warnings`**: the above in sentences, including the case where a width was
   measured while another parameter sat on a bound.
 

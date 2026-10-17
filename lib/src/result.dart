@@ -349,6 +349,10 @@ enum ParameterStatus {
   /// A parameter counts as on a bound only when the likelihood at the bound
   /// is within half a nat of the optimum.
   beyondBracket,
+
+  /// The parameter was held at the value the model passed to [fit] gave it,
+  /// through `heldParameters`, and not searched. It has no width.
+  held,
 }
 
 /// What [StructuralModel] fitting returned, together with enough diagnostics
@@ -377,8 +381,8 @@ final class FitResult {
        plateauDecadesByParameter = _view(plateauDecadesByParameter),
        plateauWidthByParameter = _view(plateauWidthByParameter);
 
-  /// The fitted model: components at their estimated variances, and the
-  /// analytically concentrated measurement variance.
+  /// The fitted model: components at their estimated variances, held
+  /// parameters at their values, and the estimated measurement variance.
   final StructuralModel model;
 
   /// The maximised profile log-likelihood, *without* the penalty.
@@ -415,8 +419,8 @@ final class FitResult {
   /// otherwise.
   final Penalty penalty;
 
-  /// The estimated ratio of each variance to the measurement variance, in
-  /// parameter order.
+  /// The ratio of each variance to the measurement variance, in parameter
+  /// order, held variances included.
   ///
   /// Entries for a shape parameter, such as a Matérn length scale or a
   /// cycle's period, are [double.nan]; [parameterSpecs] says which is which.
@@ -442,17 +446,17 @@ final class FitResult {
   /// width look tiny for reasons unrelated to the data; see [warnings].
   ///
   /// Entries whose coordinate is not a logarithm (a damping factor, searched
-  /// as a logit) are [double.nan]. [plateauWidthByParameter] has the raw
-  /// number for every parameter, and [ParameterSpec.isLogarithmic] says which
-  /// is which.
+  /// as a logit) are [double.nan], and so are those of held parameters.
+  /// [plateauWidthByParameter] has the raw number for every searched
+  /// parameter, and [ParameterSpec.isLogarithmic] says which is which.
   ///
   /// For a parameter whose [parameterStatus] is not
   /// [ParameterStatus.determined] the width is one-sided and is not an error
   /// bar; see that enum for why.
   final Float64List plateauDecadesByParameter;
 
-  /// The same widths, in each parameter's own unconstrained coordinate, and
-  /// finite for every parameter.
+  /// The same widths, in each parameter's own unconstrained coordinate:
+  /// finite for every searched parameter, [double.nan] for a held one.
   ///
   /// This is [plateauDecadesByParameter] before the division by `ln 10`, and
   /// it is what to read for a parameter searched as a logit.
@@ -508,8 +512,11 @@ final class FitResult {
   /// Kept as a single flag because it is the first thing worth checking;
   /// [parameterStatus] says which parameter and which edge, which is what
   /// determines whether the answer is wrong or merely uninteresting.
-  bool get atBracketEdge =>
-      parameterStatus.any((s) => s != ParameterStatus.determined);
+  bool get atBracketEdge => parameterStatus.any(
+    (s) =>
+        s == ParameterStatus.shrunkToNothing ||
+        s == ParameterStatus.beyondBracket,
+  );
 
   /// The estimated ratio of process to measurement variance, for a model with
   /// exactly one of them. Its reciprocal is the smoothing-spline parameter
@@ -590,7 +597,8 @@ final class FitResult {
       var pinnedShape = -1;
       for (var i = at; i < at + count; i++) {
         if (parameterSpecs[i] is ShapeParameter &&
-            parameterStatus[i] != ParameterStatus.determined) {
+            (parameterStatus[i] == ParameterStatus.shrunkToNothing ||
+                parameterStatus[i] == ParameterStatus.beyondBracket)) {
           pinnedShape = i;
         }
       }
@@ -636,6 +644,8 @@ final class FitResult {
                 'well the data determines it',
               );
             }
+          case ParameterStatus.held:
+            break;
         }
       }
       at += count;
@@ -693,7 +703,7 @@ final class FitResult {
   /// True when the likelihood surface is too flat to support the estimate.
   bool get isFlat => plateauDecades > 2;
 
-  /// The concentrated measurement variance, i.e. the fitted noise level.
+  /// The fitted noise level.
   double get measurementVariance => model.measurementVariance;
 
   @override

@@ -206,8 +206,6 @@ final class StructuralModel {
   /// estimated, for instance from a user setting: the stiffness of the curve
   /// is fixed by the ratios, and the noise level is the restricted maximum
   /// likelihood estimate given them, in closed form from one forward pass.
-  /// [fit] with the same model and a bracket of zero width would return the
-  /// same number, after a search.
   ///
   /// [minimumMeasurementVariance], if given, is a floor on the estimate. On a
   /// short series the estimate comes from a handful of residuals and can be

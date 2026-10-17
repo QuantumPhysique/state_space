@@ -172,6 +172,14 @@ sides of the switch to a power series, keeps the spline's leading term down to
 Simulate from known variances using the exact discretisation, fit, and check both
 that the estimate is close and that it gets closer as the series grows.
 
+## A fit with held parameters reaches the maximum a grid finds
+
+`test/multi_component_fit_test.dart` holds a damped trend and a Matérn length
+scale, leaves the Matérn's variance and the noise level free, and compares
+`fit` with the maximum of the likelihood on a grid refined to a thousandth.
+Both logs agree to 0.01 and the likelihood to 1e-3 nats, which is where the
+search stops, and the held parameters come back exactly as passed.
+
 ## Identifiability
 
 `identifiability_test.dart` builds models the data cannot determine: a trend

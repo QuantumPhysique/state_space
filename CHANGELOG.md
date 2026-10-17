@@ -3,6 +3,11 @@
 - `StructuralModel.smooth` takes `signal`: the components whose sum
   `SmoothingResult.mean` and `SmoothingResult.variance` report, with the
   covariances between them.
+- `fit` takes `heldParameters`: a held parameter keeps the value the initial
+  model gives it, a variance as an absolute value, and
+  `ParameterStatus.held` marks it. With a variance held, the measurement
+  variance is searched rather than concentrated out. This breaks a `switch`
+  over `ParameterStatus`, which needs the new case.
 - Fixed `fit` with `fixedMeasurementVariance` and a `ComplexityPenalty`: the
   penalty was off by a factor of the measurement standard deviation, so the
   fit depended on the unit of the readings.
