@@ -8,6 +8,9 @@
   `ParameterStatus.held` marks it. With a variance held, the measurement
   variance is searched rather than concentrated out. This breaks a `switch`
   over `ParameterStatus`, which needs the new case.
+- `fit` takes `priors` and `measurementVariancePrior`, each a
+  `LogNormalPrior`, and then returns the posterior mode in the log of every
+  searched parameter; `FitResult.logPrior` is the log prior density there.
 - Fixed `fit` with `fixedMeasurementVariance` and a `ComplexityPenalty`: the
   penalty was off by a factor of the measurement standard deviation, so the
   fit depended on the unit of the readings.

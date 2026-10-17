@@ -9,6 +9,7 @@ import '../model.dart';
 import '../observation.dart';
 import '../parameter_spec.dart';
 import 'penalty.dart';
+import 'prior.dart';
 
 /// The likelihood of a model as a function of the coordinates a fit searches,
 /// with the measurement variance concentrated out where it can be.
@@ -22,10 +23,11 @@ import 'penalty.dart';
 ///
 /// The coordinates are the parameters listed in [free], in that order; the
 /// others keep the values [template] gives them. A held variance is an
-/// absolute value, which the closed form cannot keep, so with one the log
-/// measurement variance becomes one more coordinate, the last; see
-/// [searchesScale]. The free variances are searched as log ratios to it all
-/// the same, so that the bracket a caller passes means one thing.
+/// absolute value, and so is a prior on a variance or on the noise level,
+/// which the closed form cannot keep. With one the log measurement variance
+/// becomes one more coordinate, the last; see [searchesScale]. The free
+/// variances are searched as log ratios to it all the same, so that the
+/// bracket a caller passes means one thing.
 ///
 /// With [fixedMeasurementVariance] set the concentrating step is skipped: the
 /// filter runs at that noise level and the objective becomes the ordinary log
@@ -42,6 +44,8 @@ class ProfileLikelihood {
     this.penalty = const NoPenalty(),
     this.fixedMeasurementVariance,
     Set<int> held = const {},
+    this.priors = const {},
+    this.measurementVariancePrior,
   }) : _timeline = Timeline.merge(observations, null),
        _specs = template.parameterSpecs,
        _start = template.parameters,
@@ -51,7 +55,11 @@ class ProfileLikelihood {
        ]),
        searchesScale =
            fixedMeasurementVariance == null &&
-           _holdsVariance(template.parameterSpecs, held),
+           (measurementVariancePrior != null ||
+               _anyVariance(template.parameterSpecs, {
+                 ...held,
+                 ...priors.keys,
+               })),
        span = observations.isEmpty
            ? 0
            : observations.last.time - observations.first.time,
@@ -70,13 +78,19 @@ class ProfileLikelihood {
   /// out analytically or search it.
   final double? fixedMeasurementVariance;
 
+  /// Priors on parameters, by index, over the log of their absolute values.
+  final Map<int, LogNormalPrior> priors;
+
+  /// A prior on the measurement variance, or null for none.
+  final LogNormalPrior? measurementVariancePrior;
+
   /// The parameters searched over, by their index in [template]'s parameter
   /// vector, in the order of the coordinates.
   final List<int> free;
 
   /// Whether the log measurement variance is a coordinate, after those of
-  /// [free]: when a held variance ties the model to an absolute scale and no
-  /// noise level is fixed.
+  /// [free]: when a held variance or a prior ties the model to an absolute
+  /// scale and no noise level is fixed.
   final bool searchesScale;
 
   /// Length of the series, which is what the penalty measures wandering over.
@@ -106,6 +120,7 @@ class ProfileLikelihood {
   Float64List? _cachedArgument;
   late FilterResult _cached;
   late StructuralModel _cachedModel;
+  late Float64List _cachedParameters;
 
   /// How many forward passes have been run.
   int get evaluations => _evaluations;
@@ -122,10 +137,10 @@ class ProfileLikelihood {
   }
 
   /// The objective the search maximises: the log-likelihood plus the
-  /// penalty.
+  /// penalty and the log prior.
   double at(Float64List argument) {
     evaluate(argument);
-    return logLikelihoodOf(_cached) + _penaltyHere();
+    return logLikelihoodOf(_cached) + _penaltyHere() + _priorHere();
   }
 
   /// Whichever likelihood this instance is maximising: the profile one when
@@ -164,6 +179,12 @@ class ProfileLikelihood {
     return _penaltyHere();
   }
 
+  /// The log prior alone at the same point.
+  double priorAt(Float64List argument) {
+    evaluate(argument);
+    return _priorHere();
+  }
+
   /// [template]'s parameter vector at [argument], with the free variances
   /// lifted from their ratios to a noise level of [measurementVariance].
   Float64List parametersAt(Float64List argument, double measurementVariance) {
@@ -192,6 +213,20 @@ class ProfileLikelihood {
     return penalty.at(_cachedModel.components, span, noise / _dataSpread);
   }
 
+  /// The log prior for the pass currently cached, over the logs of the
+  /// absolute values the filter ran at.
+  double _priorHere() {
+    var total = 0.0;
+    for (final MapEntry(key: i, value: prior) in priors.entries) {
+      total += prior.logDensity(_cachedParameters[i]);
+    }
+    final noise = measurementVariancePrior;
+    if (noise != null) {
+      total += noise.logDensity(math.log(_cachedModel.measurementVariance));
+    }
+    return total;
+  }
+
   /// The full forward pass at these coordinates. Repeating the most recent
   /// argument is free, which is how the search can ask for the objective, the
   /// likelihood and the concentrated variance without paying three times.
@@ -205,8 +240,9 @@ class ProfileLikelihood {
     final scale =
         fixedMeasurementVariance ??
         (searchesScale ? math.exp(argument[free.length]) : 1.0);
+    _cachedParameters = parametersAt(argument, scale);
     _cachedModel = template
-        .withParameters(parametersAt(argument, scale))
+        .withParameters(_cachedParameters)
         .withMeasurementVariance(scale);
     _cached = forwardPass(
       _cachedModel.components,
@@ -219,8 +255,8 @@ class ProfileLikelihood {
     return _cached;
   }
 
-  static bool _holdsVariance(List<ParameterSpec> specs, Set<int> held) =>
-      held.any((i) => specs[i] is VarianceParameter);
+  static bool _anyVariance(List<ParameterSpec> specs, Set<int> indices) =>
+      indices.any((i) => specs[i] is VarianceParameter);
 
   static bool _sameAs(Float64List a, Float64List b) {
     if (a.length != b.length) return false;

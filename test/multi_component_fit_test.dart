@@ -365,8 +365,8 @@ void main() {
     });
   });
 
-  test('a free amplitude and noise level beside held parameters reach the '
-      'maximum a grid finds', () {
+  test('a free amplitude and noise level under priors, beside held '
+      'parameters, reach the maximum a grid finds', () {
     // A daily Ornstein–Uhlenbeck wobble of variance 0.1 and length scale 2,
     // and noise of variance 0.0225: where the grid starts.
     final random = math.Random(3);
@@ -384,20 +384,35 @@ void main() {
           Matern.oneHalf(variance: math.exp(logAmplitude), lengthScale: 2),
         ], measurementVariance: math.exp(logNoise));
 
+    final amplitude = LogNormalPrior(median: 0.05, logSd: 0.5);
+    final noise = LogNormalPrior(median: 0.04, logSd: 0.5);
+
     final initial = model(0, 0);
     const held = {0, 1, 3};
-    final fitted = fit(initial, data, heldParameters: held);
-    final grid = _gridMaximum((a, n) => model(a, n).logLikelihood(data), (
-      x: math.log(0.1),
-      y: math.log(0.02),
-    ));
+    final fitted = fit(
+      initial,
+      data,
+      heldParameters: held,
+      priors: {2: amplitude},
+      measurementVariancePrior: noise,
+    );
+    final grid = _gridMaximum(
+      (a, n) =>
+          model(a, n).logLikelihood(data) +
+          amplitude.logDensity(a) +
+          noise.logDensity(n),
+      (x: math.log(0.1), y: math.log(0.02)),
+    );
 
     // The search stops once its simplex agrees to a ten-thousandth of a nat,
     // which on this surface leaves either log a few thousandths out.
     final theta = fitted.model.parameters;
     expect(theta[2], closeTo(grid.x, 0.01));
     expect(math.log(fitted.measurementVariance), closeTo(grid.y, 0.01));
-    expect(fitted.logMarginalLikelihood, closeTo(grid.value, 1e-3));
+    expect(
+      fitted.logMarginalLikelihood + fitted.logPrior,
+      closeTo(grid.value, 1e-3),
+    );
     for (final i in held) {
       expect(theta[i], initial.parameters[i], reason: 'parameter $i');
       expect(fitted.parameterStatus[i], ParameterStatus.held);

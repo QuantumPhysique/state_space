@@ -12,6 +12,7 @@ import '../result.dart';
 import 'golden_section.dart';
 import 'nelder_mead.dart';
 import 'penalty.dart';
+import 'prior.dart';
 import 'profile_likelihood.dart';
 
 const double _ln10 = 2.302585092994046;
@@ -53,8 +54,9 @@ const double _halfNat = 0.5;
 ///
 /// The measurement variance is concentrated out analytically, so the search
 /// runs over one log variance ratio per variance parameter, plus any shape
-/// parameters, and not over the noise level itself, unless a held variance
-/// ties the model to an absolute scale; see [heldParameters] below.
+/// parameters, and not over the noise level itself, unless a held variance or
+/// a prior ties the model to an absolute scale; see [heldParameters] and
+/// [priors] below.
 ///
 /// The search runs in three stages. A coordinate scan sweeps each parameter in
 /// turn across its bracket to find the right basin. Then golden section for a
@@ -100,6 +102,19 @@ const double _halfNat = 0.5;
 /// on its own. The free variances are still searched as ratios to it. With
 /// every parameter held, the noise level is all that is left to search.
 ///
+/// ## Priors
+///
+/// [priors] puts a [LogNormalPrior] on parameters by index, as
+/// [heldParameters] counts them, and [measurementVariancePrior] one on the
+/// measurement variance. The answer is then the posterior mode in the log of
+/// every searched parameter: the maximum of the log-likelihood plus the log
+/// prior density, which [FitResult.logPrior] reports. A prior on a variance is
+/// on its absolute value, not its ratio, so like a held variance it makes the
+/// noise level a search axis. The brackets still bound the search.
+///
+/// A prior needs a parameter searched as a log, so one on a held parameter or
+/// on one searched as a logit, such as a cycle's damping, throws.
+///
 /// ## Saying what the scale can measure
 ///
 /// By default the noise level is whatever explains the data best, which on a
@@ -112,7 +127,8 @@ const double _halfNat = 0.5;
 ///   scale that rounds to 0.1 contributes a rounding error of standard
 ///   deviation `0.1 / sqrt(12)`, about 0.029, whatever the data says.
 /// - [fixedMeasurementVariance] pins the noise level outright, for when it is
-///   known, and estimates the smoothing given it.
+///   known, and estimates the smoothing given it. It excludes
+///   [measurementVariancePrior] as well.
 ///
 /// A floor cannot be clamped onto the estimate afterwards: pinning one
 /// variance in absolute units breaks the scale equivariance the concentrating
@@ -129,8 +145,8 @@ const double _halfNat = 0.5;
 /// for a trend, one more per diffuse state for each component added), two
 /// components the data cannot tell apart, or a component that cannot be
 /// resolved at this sampling, such as a seasonal harmonic past the Nyquist
-/// frequency. Throws [ArgumentError] for invalid arguments, among them a held
-/// index the model has no parameter for.
+/// frequency. Throws [ArgumentError] for invalid arguments, among them an index
+/// the model has no parameter for.
 ///
 /// {@category Choosing a model}
 FitResult fit(
@@ -145,12 +161,20 @@ FitResult fit(
   double? minimumMeasurementVariance,
   SearchStart start = SearchStart.bracketScan,
   Set<int> heldParameters = const {},
+  Map<int, LogNormalPrior> priors = const {},
+  LogNormalPrior? measurementVariancePrior,
 }) {
   if (fixedMeasurementVariance != null && minimumMeasurementVariance != null) {
     throw ArgumentError(
       'pass fixedMeasurementVariance or '
       'minimumMeasurementVariance, not both: a noise level pinned to a value '
       'cannot also be given a floor to clear',
+    );
+  }
+  if (fixedMeasurementVariance != null && measurementVariancePrior != null) {
+    throw ArgumentError(
+      'pass fixedMeasurementVariance or measurementVariancePrior, not both: a '
+      'noise level pinned to a value leaves a prior nothing to weigh',
     );
   }
   if (fixedMeasurementVariance != null) {
@@ -166,13 +190,30 @@ FitResult fit(
     throw ArgumentError.value(scanPoints, 'scanPoints', 'must be at least 3');
   }
   checkPositive(tolerance, 'tolerance');
-  final count = initial.parameterCount;
-  for (final index in heldParameters) {
-    if (index < 0 || index >= count) {
+  final specs = initial.parameterSpecs;
+  void checkIndex(int index, String name) {
+    if (index < 0 || index >= specs.length) {
       throw ArgumentError.value(
         index,
-        'heldParameters',
-        'the model has $count parameters',
+        name,
+        'the model has ${specs.length} parameters',
+      );
+    }
+  }
+
+  for (final index in heldParameters) {
+    checkIndex(index, 'heldParameters');
+  }
+  for (final index in priors.keys) {
+    checkIndex(index, 'priors');
+    if (heldParameters.contains(index)) {
+      throw ArgumentError.value(index, 'priors', 'is a held parameter');
+    }
+    if (!specs[index].isLogarithmic) {
+      throw ArgumentError.value(
+        index,
+        'priors',
+        'is a parameter searched as a logit, not a log',
       );
     }
   }
@@ -188,6 +229,8 @@ FitResult fit(
     fixedMeasurementVariance: fixed,
     start: start,
     held: heldParameters,
+    priors: priors,
+    measurementVariancePrior: measurementVariancePrior,
   );
 
   final FitResult result;
@@ -224,6 +267,8 @@ FitResult _search(
   required double? fixedMeasurementVariance,
   required SearchStart start,
   required Set<int> held,
+  required Map<int, LogNormalPrior> priors,
+  required LogNormalPrior? measurementVariancePrior,
 }) {
   final k = initial.parameterCount;
   final specs = initial.parameterSpecsAt(
@@ -235,6 +280,8 @@ FitResult _search(
     penalty: penalty,
     fixedMeasurementVariance: fixedMeasurementVariance,
     held: held,
+    priors: priors,
+    measurementVariancePrior: measurementVariancePrior,
   );
   final free = profile.free;
   final scaleAxis = profile.searchesScale ? free.length : null;
@@ -355,6 +402,7 @@ FitResult _search(
         .withMeasurementVariance(measurementVariance),
     logMarginalLikelihood: profile.likelihoodAt(optimum),
     logPenalty: profile.penaltyAt(optimum),
+    logPrior: profile.priorAt(optimum),
     penalty: penalty,
     varianceRatios: ratios,
     evaluations: profile.evaluations,
@@ -697,6 +745,7 @@ FitResult _withLargestResidual(
     model: result.model,
     logMarginalLikelihood: result.logMarginalLikelihood,
     logPenalty: result.logPenalty,
+    logPrior: result.logPrior,
     penalty: result.penalty,
     varianceRatios: result.varianceRatios,
     evaluations: result.evaluations,

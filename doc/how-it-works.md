@@ -147,6 +147,11 @@ runs over the rest. A held variance is absolute, which a closed form over
 ratios cannot keep, so with one the log measurement variance becomes a search
 axis of its own and the other variances are searched as ratios to it.
 
+**Priors are added to the log-likelihood**, each a normal density over the log
+of its parameter, so the search finds the posterior mode in those coordinates.
+A prior on a variance is on its absolute value, so it too makes the noise
+level a search axis.
+
 **The search has three stages.** A coordinate scan sweeps each parameter across
 its whole bracket, because a likelihood that is flat over decades, or
 multimodal, can leave a local search stuck. Then golden section for one

@@ -364,6 +364,7 @@ final class FitResult {
     required this.model,
     required this.logMarginalLikelihood,
     required this.logPenalty,
+    required this.logPrior,
     required this.penalty,
     required this.evaluations,
     required this.converged,
@@ -411,9 +412,15 @@ final class FitResult {
   final double logMarginalLikelihood;
 
   /// What the penalty contributed at the optimum, so that the objective that
-  /// was actually maximised is [logMarginalLikelihood] plus this. Zero under
-  /// [NoPenalty].
+  /// was actually maximised is [logMarginalLikelihood] plus this and
+  /// [logPrior]. Zero under [NoPenalty].
   final double logPenalty;
+
+  /// The log density of the priors passed to [fit] at the optimum, each over
+  /// the log of its parameter, so that [logMarginalLikelihood] plus this is
+  /// the log posterior density the fit maximised, up to a constant. Zero
+  /// without priors.
+  final double logPrior;
 
   /// The penalty the fit used, which [fit] chooses for you unless you say
   /// otherwise.
@@ -723,6 +730,7 @@ FitResult newFitResult({
   required StructuralModel model,
   required double logMarginalLikelihood,
   required double logPenalty,
+  required double logPrior,
   required Penalty penalty,
   required Float64List varianceRatios,
   required int evaluations,
@@ -738,6 +746,7 @@ FitResult newFitResult({
   model: model,
   logMarginalLikelihood: logMarginalLikelihood,
   logPenalty: logPenalty,
+  logPrior: logPrior,
   penalty: penalty,
   varianceRatios: varianceRatios,
   evaluations: evaluations,
