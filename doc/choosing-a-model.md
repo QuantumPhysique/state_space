@@ -13,7 +13,7 @@ the residuals rather than the likelihood to decide whether each one helps.
 | a pattern on a calendar you know: a week, a year | `TrigonometricSeasonal(period: 7, harmonics: 2, ...)`, or `period: 365.25` |
 | named, dated events: a holiday, a course of medication | `RegressionComponent` with `IndicatorRegressor`s |
 | a covariate that changes at known instants | `RegressionComponent` with a `StepRegressor` |
-| correlated wobble the trend should not be chasing | `Matern.oneHalf(...)` alongside the trend, with a noise floor |
+| correlated wobble the trend should not be chasing | a `Matern` beside a held trend; see [Separating variation by time scale](#separating-variation-by-time-scale) |
 | a rhythm that is approximate, or whose period you do not know | `StochasticCycle` |
 
 The choice between `LocalLinearTrend` and `LocalLevel` is about whether the
@@ -151,7 +151,8 @@ the fit does not always tell you which one took it.
 * **A trend and a Matérn.** Both are slow. With both free the fit is measurably
   worse than with neither: the two compete for the same slow variation and the
   trend's variance ends up undetermined over five decades. If you add a Matérn
-  deviation, consider fixing the trend's smoothing rather than fitting it.
+  deviation, hold the trend's variance rather than fitting it; see
+  [Separating variation by time scale](#separating-variation-by-time-scale).
 * **A Matérn and the measurement noise.** A length scale below the sampling
   interval *is* white noise, so `fit` floors it at the typical gap between
   visits. Above the floor the two can still trade: when readings carry
@@ -168,6 +169,74 @@ the fit does not always tell you which one took it.
   the data, and on a series without one the level shrinks away while the cycle's
   variance and period come back flat over eight and two decades. In both cases
   the fit has not determined anything.
+
+## Separating variation by time scale
+
+A series often moves on several time scales at once: a slow trend, a wobble
+over about a week, and scatter from one reading to the next. Fitted freely,
+these compete as above. What works better is to hold what the readings cannot
+determine, the time scales, and to estimate the amplitudes under priors:
+
+```dart
+const slopeSd = 1e-3;    // per time unit, as a fraction of the level
+const amplitude = 4e-3;  // prior median of both wobbles, likewise
+const step = 0.1;        // display step, in the units of the readings
+
+final data = [
+  for (final r in readings)
+    Observation(r.time, math.log(r.value),
+        relativeVariance: 1 / (r.value * r.value)),
+];
+final model = StructuralModel([
+  DampedLinearTrend(
+    processVariance: 2 * slopeSd * slopeSd / 30,
+    timeScale: 30,
+  ),
+  Matern.threeHalves(variance: amplitude * amplitude, lengthScale: 7),
+  Matern.oneHalf(variance: amplitude * amplitude, lengthScale: 1),
+], measurementVariance: step * step);
+final wobble = LogNormalPrior(
+  median: amplitude * amplitude,
+  logSd: 2 * math.ln2,
+);
+
+final fitted = fit(
+  model,
+  data,
+  heldParameters: {0, 1, 3, 5},  // the trend and both length scales
+  priors: {2: wobble, 4: wobble},
+  measurementVariancePrior:
+      LogNormalPrior(median: step * step, logSd: 2 * math.ln2),
+  minimumMeasurementVariance: step * step / 12,
+);
+final curve = fitted.model.smooth(data, grid: everyDay, signal: {0, 1});
+```
+
+* **Hold the time scales**, and the trend's variance with them. They describe
+  the process, and a series of readings determines them poorly. A damped
+  trend's slope has a stationary variance of `processVariance * timeScale / 2`,
+  so `2 s² / timeScale` gives it a standard deviation `s`.
+* **Put priors on the amplitudes and the noise level** rather than fitting them
+  freely. On a handful of readings the answer stays near the medians, and as
+  readings accumulate the data takes over, with no rule for when to switch. A
+  `logSd` of `2 ln 2` on a variance is a factor of two either way on its
+  standard deviation.
+* **Work on the logarithm** of a positive quantity whose variation grows with
+  its size. Every amplitude is then a fraction of the level, and one prior
+  serves small and large values alike. An error fixed in the units of the
+  readings, such as the display step, becomes a variance per reading through
+  `relativeVariance: 1 / (y * y)`; the measurement variance, its prior and its
+  floor are then in the squared units of `y`.
+* **Draw the slow part alone.** `signal: {0, 1}` is the trend and the week-scale
+  wobble together, with their covariance, and so is its credible band. Its
+  predictive band lacks the scatter; for where a new reading will fall, take
+  the predictive band of a `smooth` without `signal`.
+* **Read a rate from the curve, not from the slope at the last reading.** A
+  damped trend shows a steady slope low at the last reading
+  ([`DampedLinearTrend`](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md#dampedlineartrend)).
+  On a steady ramp read daily without noise, `model` above shows the trend's
+  slope there at 78 % of the ramp's, however long the ramp has run, and the
+  change of the curve over the last 14 time units at 96 %.
 
 ## When to stop
 
