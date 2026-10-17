@@ -48,6 +48,14 @@ scale of 1e7 reproduces `LocalLinearTrend`, and one of 1e-5 a `LocalLevel` of
 variance `q τ²`, likelihood included; each agrees thirty times better than at
 a hundred times less extreme.
 
+## A signal of several components equals their joint posterior
+
+`test/matern_reference_test.dart` adds a short Matérn to a trend and a Matérn
+deviation and asks `smooth` for the trend and the deviation alone. Their summed
+mean and variance match the dense posterior of their summed kernel to 1e-9.
+The covariance between the two is what that checks: it reaches 0.76 there,
+against a joint variance of about 0.1.
+
 ## A regression coefficient equals its generalised least-squares estimate
 
 A coefficient is a flat direction like any other, so exact diffuse

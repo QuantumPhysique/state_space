@@ -113,7 +113,9 @@ final class SmoothingResult {
   final Float64List times;
 
   /// Posterior mean of the signal, `E[H(t) x(t) | y]`: the sum of every
-  /// component's contribution. [componentMean] has each one on its own.
+  /// component's contribution, or of the components named by the `signal`
+  /// passed to `StructuralModel.smooth`. [componentMean] has each one on its
+  /// own.
   final Float64List mean;
 
   /// Posterior variance of [mean]. This is uncertainty about the underlying
@@ -199,6 +201,9 @@ final class SmoothingResult {
   /// Where a new measurement would fall, at output index [i]: the credible
   /// interval widened by the measurement noise. Roughly 95% of the observed
   /// points should sit inside the 95% version of this band.
+  ///
+  /// Only the measurement noise is added: a component left out of the
+  /// `signal` passed to `StructuralModel.smooth` is in neither band.
   Band predictiveInterval(int i, {double coverage = 0.95}) {
     final half =
         twoSidedZ(coverage) * math.sqrt(variance[i] + measurementVariance);

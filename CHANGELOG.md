@@ -1,3 +1,9 @@
+## Unreleased
+
+- `StructuralModel.smooth` takes `signal`: the components whose sum
+  `SmoothingResult.mean` and `SmoothingResult.variance` report, with the
+  covariances between them.
+
 ## 0.2.0
 
 A month without stepping on the scale shouldn't turn into a forecast that runs

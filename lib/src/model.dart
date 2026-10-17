@@ -307,16 +307,42 @@ final class StructuralModel {
   /// observation. A grid may extend past the data at either end, and the
   /// posterior variance widens accordingly.
   ///
+  /// [signal], if given, names the components, by their position in
+  /// [components], whose sum [SmoothingResult.mean] and
+  /// [SmoothingResult.variance] report, with the covariances between them.
+  /// By default the signal is every component. A component left out of it is
+  /// left out of the credible and predictive bands as well, which add only
+  /// [measurementVariance] to the signal's variance.
+  ///
   /// Throws [UnderdeterminedModelException] when the data cannot determine the
   /// model's flat directions (see [initialization]), [ArgumentError] for
-  /// unsorted or non-finite input.
-  SmoothingResult smooth(List<Observation> observations, {List<double>? grid}) {
+  /// unsorted or non-finite input, and for a [signal] that is empty or names a
+  /// component the model does not have.
+  SmoothingResult smooth(
+    List<Observation> observations, {
+    List<double>? grid,
+    Set<int>? signal,
+  }) {
+    if (signal != null) {
+      if (signal.isEmpty) {
+        throw ArgumentError.value(signal, 'signal', 'names no component');
+      }
+      for (final index in signal) {
+        if (index < 0 || index >= components.length) {
+          throw ArgumentError.value(
+            signal,
+            'signal',
+            'has no component $index; the model has ${components.length}',
+          );
+        }
+      }
+    }
     final timeline = Timeline.merge(observations, grid);
     final filtered = _filter(timeline, keepHistory: true);
     RtsSmoother(components, initialization: initialization)
       ..smoothInPlace(timeline, filtered)
       ..combineDiffuse(filtered, steps: _stepsWorthFolding(timeline));
-    return _report(timeline, filtered);
+    return _report(timeline, filtered, signal);
   }
 
   /// Projects the signal past the last observation, at each time in
@@ -411,7 +437,14 @@ final class StructuralModel {
   /// Collapses the smoothed states down to the quantities callers actually
   /// plot: the signal, its variance, each component's share, and each
   /// component's rate where it has one.
-  SmoothingResult _report(Timeline timeline, FilterResult filtered) {
+  ///
+  /// The signal is the sum over [included], or over every component when it
+  /// is null.
+  SmoothingResult _report(
+    Timeline timeline,
+    FilterResult filtered,
+    Set<int>? included,
+  ) {
     final n = stateDim;
     final indices = timeline.outputIndices;
     final count = indices.length;
@@ -429,6 +462,9 @@ final class StructuralModel {
           offsets[b] + components[b].stateDim,
         ),
     ];
+    // The signal's loadings: h itself, or h with the blocks left out of the
+    // signal held at zero.
+    final g = included == null ? h : Float64List(n);
 
     final times = Float64List(count);
     final signal = Float64List(count);
@@ -457,21 +493,27 @@ final class StructuralModel {
       for (var b = 0; b < components.length; b++) {
         components[b].observationAt(times[k], slices[b]);
       }
+      if (included != null) {
+        for (final b in included) {
+          final start = offsets[b];
+          g.setRange(start, start + components[b].stateDim, h, start);
+        }
+      }
 
       var total = 0.0;
       for (var i = 0; i < n; i++) {
-        total += h[i] * mean[row + i];
+        total += g[i] * mean[row + i];
       }
       signal[k] = total;
 
       var spread = 0.0;
       for (var i = 0; i < n; i++) {
-        if (h[i] == 0) continue;
+        if (g[i] == 0) continue;
         var sum = 0.0;
         for (var j = 0; j < n; j++) {
-          sum += covariance[block + i * n + j] * h[j];
+          sum += covariance[block + i * n + j] * g[j];
         }
-        spread += h[i] * sum;
+        spread += g[i] * sum;
       }
       signalVariance[k] = spread;
 
