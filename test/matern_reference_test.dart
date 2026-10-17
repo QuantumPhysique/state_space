@@ -184,5 +184,52 @@ void main() {
         );
       }
     });
+
+    test('and two of three components sum with their covariance', () {
+      const diffuseVariance = 50.0;
+      const kappa = diffuseVariance * measurementVariance;
+      final model = StructuralModel(
+        [
+          LocalLinearTrend(processVariance: processVariance),
+          Matern.threeHalves(variance: variance, lengthScale: lengthScale),
+          Matern.oneHalf(variance: variance / 4, lengthScale: 1),
+        ],
+        measurementVariance: measurementVariance,
+        initialization: ApproximateDiffuse(variance: diffuseVariance),
+      );
+      final posterior = model.smooth(data, signal: {0, 1});
+
+      // One kernel standing for the trend and the wobble together: its dense
+      // posterior is that of their sum, covariance included.
+      final dense = densePosterior(
+        data,
+        [for (final o in data) o.time],
+        [
+          sumOf([
+            withDiffusePrior(
+              splineKernel(processVariance),
+              trendBasis(),
+              kappa,
+            ),
+            maternKernel(MaternOrder.threeHalves, variance, lengthScale),
+          ]),
+          maternKernel(MaternOrder.oneHalf, variance / 4, 1),
+        ],
+        measurementVariance: measurementVariance,
+      );
+
+      for (var i = 0; i < data.length; i++) {
+        expect(
+          posterior.mean[i],
+          closeTo(dense.mean[0][i], 1e-9),
+          reason: 'mean at $i',
+        );
+        expect(
+          posterior.variance[i],
+          closeTo(dense.variance[0][i], 1e-9),
+          reason: 'variance at $i',
+        );
+      }
+    });
   });
 }

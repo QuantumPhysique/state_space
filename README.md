@@ -17,7 +17,8 @@ runs on every Flutter platform.
 
 Under the hood it is Gaussian process regression, computed exactly in linear
 time with a Kalman filter and RTS smoother. The hyperparameters are fitted by
-maximising the marginal likelihood.
+maximising the marginal likelihood, under priors where you give them, and any
+of them can be held at a value you choose.
 
 
 
@@ -140,7 +141,7 @@ model and its posterior can be sent between isolates.
 | | |
 |---|---|
 | [Getting started](https://github.com/QuantumPhysique/state_space/blob/main/doc/getting-started.md) | dates, grids, slopes, forecasts, unequal and bad readings, noise floors, errors, isolates |
-| [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md) | which components, and how to compare them |
+| [Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md) | which components, how to compare them, and separating variation by time scale |
 | [Components](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md) | what each one is, which kernels are reachable, and writing your own |
 | [How it works](https://github.com/QuantumPhysique/state_space/blob/main/doc/how-it-works.md) | the Gaussian process, the SDE, the filter, and the numerical choices |
 | [Validation](https://github.com/QuantumPhysique/state_space/blob/main/doc/validation.md) | what is checked, against what, and how closely, plus benchmarks |

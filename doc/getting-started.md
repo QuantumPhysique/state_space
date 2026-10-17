@@ -147,6 +147,11 @@ daily.trendSlope![10];          // signal units per time unit
 daily.trendSlopeVariance![10];  // and how sure it is
 ```
 
+A `DampedLinearTrend` shows a steady slope low at the last reading; for a rate
+there, read the curve's change over a window instead, as
+[Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#separating-variation-by-time-scale)
+shows.
+
 A forecast is the same recursion with no more observations:
 
 ```dart
@@ -239,6 +244,11 @@ final trend = chosen.smooth(data, grid: everyDay);
 restricted maximum likelihood estimate, in one forward pass. The curve depends
 only on the ratio; the noise level only changes the band. Pass
 `minimumMeasurementVariance` to put a floor under the estimate.
+
+To choose some parameters and estimate the rest, pass `heldParameters` and
+`priors` to `fit`;
+[Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#separating-variation-by-time-scale)
+works through an example.
 
 ## When there is not enough data
 

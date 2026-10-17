@@ -48,6 +48,14 @@ scale of 1e7 reproduces `LocalLinearTrend`, and one of 1e-5 a `LocalLevel` of
 variance `q τ²`, likelihood included; each agrees thirty times better than at
 a hundred times less extreme.
 
+## A signal of several components equals their joint posterior
+
+`test/matern_reference_test.dart` adds a short Matérn to a trend and a Matérn
+deviation and asks `smooth` for the trend and the deviation alone. Their summed
+mean and variance match the dense posterior of their summed kernel to 1e-9.
+The covariance between the two is what that checks: it reaches 0.76 there,
+against a joint variance of about 0.1.
+
 ## A regression coefficient equals its generalised least-squares estimate
 
 A coefficient is a flat direction like any other, so exact diffuse
@@ -163,6 +171,15 @@ sides of the switch to a power series, keeps the spline's leading term down to
 
 Simulate from known variances using the exact discretisation, fit, and check both
 that the estimate is close and that it gets closer as the series grows.
+
+## A fit with held parameters and priors reaches the maximum a grid finds
+
+`test/multi_component_fit_test.dart` holds a damped trend and a Matérn length
+scale, leaves the Matérn's variance and the noise level free under priors
+that pull both away from the likelihood's maximum, and compares `fit` with the
+maximum of the likelihood plus the log prior on a grid refined to a
+thousandth. Both logs agree to 0.01 and the objective to 1e-3 nats, which is
+where the search stops, and the held parameters come back exactly as passed.
 
 ## Identifiability
 
