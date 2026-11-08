@@ -200,10 +200,13 @@ final wobble = LogNormalPrior(
   logSd: 2 * math.ln2,
 );
 
+// Indices into model.parameterSpecs: 0 and 1 the trend's processVariance and
+// timeScale, 2 and 3 the week-scale variance and lengthScale, 4 and 5 the
+// day-scale ones.
 final fitted = fit(
   model,
   data,
-  heldParameters: {0, 1, 3, 5},  // the trend and both length scales
+  heldParameters: {0, 1, 3, 5},
   priors: {2: wobble, 4: wobble},
   measurementVariancePrior:
       LogNormalPrior(median: step * step, logSd: 2 * math.ln2),
@@ -228,15 +231,13 @@ final curve = fitted.model.smooth(data, grid: everyDay, signal: {0, 1});
   `relativeVariance: 1 / (y * y)`; the measurement variance, its prior and its
   floor are then in the squared units of `y`.
 * **Draw the slow part alone.** `signal: {0, 1}` is the trend and the week-scale
-  wobble together, with their covariance, and so is its credible band. Its
-  predictive band lacks the scatter; for where a new reading will fall, take
-  the predictive band of a `smooth` without `signal`.
-* **Read a rate from the curve, not from the slope at the last reading.** A
-  damped trend shows a steady slope low at the last reading
-  ([`DampedLinearTrend`](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md#dampedlineartrend)).
-  On a steady ramp read daily without noise, `model` above shows the trend's
-  slope there at 78 % of the ramp's, however long the ramp has run, and the
-  change of the curve over the last 14 time units at 96 %.
+  wobble together, with their covariance, and so is its credible band;
+  `forecast` takes the same `signal`. Its predictive band lacks the scatter;
+  for where a new reading will fall, take the predictive band of a `smooth` or
+  `forecast` without `signal`.
+* **Read a rate from the curve, not from the slope at the last reading**, which
+  a damped trend shows low; see
+  [`DampedLinearTrend`](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md#dampedlineartrend).
 
 ## When to stop
 

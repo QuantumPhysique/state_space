@@ -149,8 +149,8 @@ daily.trendSlopeVariance![10];  // and how sure it is
 
 A `DampedLinearTrend` shows a steady slope low at the last reading; for a rate
 there, read the curve's change over a window instead, as
-[Choosing a model](https://github.com/QuantumPhysique/state_space/blob/main/doc/choosing-a-model.md#separating-variation-by-time-scale)
-shows.
+[Components](https://github.com/QuantumPhysique/state_space/blob/main/doc/components.md#dampedlineartrend)
+explains.
 
 A forecast is the same recursion with no more observations:
 
