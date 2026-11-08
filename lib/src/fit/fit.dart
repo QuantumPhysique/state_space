@@ -69,13 +69,13 @@ const double _halfNat = 0.5;
 /// [lowerLogRatio] and [upperLogRatio] bracket the natural log of every
 /// variance ratio, whatever the model passed in: the variances [initial]
 /// carries are ignored under the default [start], unless they are held. The
-/// default bracket,
-/// `[-20, 10]`, is thirteen decades wide, from about `1e-8.7` to `1e4.3` times
-/// the measurement variance. It suits time in days; a trend's variance is per
-/// cubed time unit, so measuring time in seconds moves the optimum about
-/// fifteen decades. Check [FitResult.atBracketEdge] before believing the
-/// answer. Shape parameters (a Matérn length scale, a cycle's period) are
-/// bracketed by the component that owns them; see [ParameterSpec].
+/// default bracket, `[-20, 10]`, is thirteen decades wide, from about
+/// `1e-8.7` to `1e4.3` times the measurement variance. It suits time in days;
+/// a trend's variance is per cubed time unit, so measuring time in seconds
+/// moves the optimum about fifteen decades. Check [FitResult.atBracketEdge]
+/// before believing the answer. Shape parameters (a Matérn length scale, a
+/// cycle's period) are bracketed by the component that owns them; see
+/// [ParameterSpec].
 ///
 /// A shape parameter measured in time units also gets a floor from the data:
 /// the bottom of its bracket is raised to what the sampling can resolve. See
