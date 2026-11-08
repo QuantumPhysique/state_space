@@ -369,6 +369,7 @@ final class FitResult {
     required this.evaluations,
     required this.converged,
     required List<ParameterStatus> parameterStatus,
+    required this.measurementVarianceStatus,
     required List<ParameterSpec> parameterSpecs,
     required this.diffuseDimension,
     required this.measurementVariancePinned,
@@ -475,6 +476,13 @@ final class FitResult {
   /// What each parameter is, in the same order again.
   final List<ParameterSpec> parameterSpecs;
 
+  /// What became of the measurement variance where it was searched rather
+  /// than concentrated out, which a held variance or a prior brings about:
+  /// [ParameterStatus.shrunkToNothing] at the bottom of `fit`'s
+  /// `measurementVarianceBounds`, [ParameterStatus.beyondBracket] at the top.
+  /// Null when it was concentrated out or pinned.
+  final ParameterStatus? measurementVarianceStatus;
+
   /// How many flat directions this fit integrated out.
   ///
   /// Zero under [ApproximateDiffuse]. Under [ExactDiffuse] it is the number of
@@ -514,16 +522,19 @@ final class FitResult {
   /// scale it is measured against. Gaussian noise almost never exceeds 6.
   final ({double time, double score})? largestResidual;
 
-  /// Whether any parameter finished at an edge of the search bracket.
+  /// Whether any parameter, or a searched measurement variance, finished at
+  /// an edge of the search bracket.
   ///
   /// Kept as a single flag because it is the first thing worth checking;
-  /// [parameterStatus] says which parameter and which edge, which is what
-  /// determines whether the answer is wrong or merely uninteresting.
-  bool get atBracketEdge => parameterStatus.any(
-    (s) =>
-        s == ParameterStatus.shrunkToNothing ||
-        s == ParameterStatus.beyondBracket,
-  );
+  /// [parameterStatus] and [measurementVarianceStatus] say which parameter
+  /// and which edge, which is what determines whether the answer is wrong or
+  /// merely uninteresting.
+  bool get atBracketEdge =>
+      [...parameterStatus, ?measurementVarianceStatus].any(
+        (s) =>
+            s == ParameterStatus.shrunkToNothing ||
+            s == ParameterStatus.beyondBracket,
+      );
 
   /// The estimated ratio of process to measurement variance, for a model with
   /// exactly one of them. Its reciprocal is the smoothing-spline parameter
@@ -565,7 +576,7 @@ final class FitResult {
   /// What is worth knowing about this fit before quoting anything from it, in
   /// plain sentences, empty when there is nothing to say.
   ///
-  /// Five things are reported:
+  /// Six things are reported:
   ///
   /// 1. A reading far from what the rest of the data predicts for it (see
   ///    [largestResidual]). The fit is Gaussian, so one mistyped value
@@ -583,6 +594,8 @@ final class FitResult {
   ///    same component sat on a bound, which can make it look sharp for a
   ///    reason that is not about the data. See [StochasticCycle] for the
   ///    common case.
+  /// 6. A searched measurement variance on a bound (see
+  ///    [measurementVarianceStatus]).
   List<String> get warnings {
     final found = <String>[];
     final outlier = largestResidual;
@@ -656,6 +669,23 @@ final class FitResult {
         }
       }
       at += count;
+    }
+    switch (measurementVarianceStatus) {
+      case ParameterStatus.shrunkToNothing:
+        found.add(
+          'the measurement variance finished at the bottom of its bracket: '
+          'the components follow the readings almost exactly and the fitted '
+          'noise level is too small; check the held variances and the priors, '
+          'or pass minimumMeasurementVariance at what the instrument can '
+          'resolve',
+        );
+      case ParameterStatus.beyondBracket:
+        found.add(
+          'the measurement variance finished at the top of its bracket, so '
+          'the real optimum may be outside it; widen measurementVarianceBounds',
+        );
+      case ParameterStatus.determined || ParameterStatus.held || null:
+        break;
     }
     return found;
   }
@@ -738,6 +768,7 @@ FitResult newFitResult({
   required Float64List plateauDecadesByParameter,
   required Float64List plateauWidthByParameter,
   required List<ParameterStatus> parameterStatus,
+  ParameterStatus? measurementVarianceStatus,
   required List<ParameterSpec> parameterSpecs,
   required int diffuseDimension,
   bool measurementVariancePinned = false,
@@ -754,6 +785,7 @@ FitResult newFitResult({
   plateauDecadesByParameter: plateauDecadesByParameter,
   plateauWidthByParameter: plateauWidthByParameter,
   parameterStatus: parameterStatus,
+  measurementVarianceStatus: measurementVarianceStatus,
   parameterSpecs: parameterSpecs,
   diffuseDimension: diffuseDimension,
   measurementVariancePinned: measurementVariancePinned,

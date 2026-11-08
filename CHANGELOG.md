@@ -6,8 +6,10 @@
 - `fit` takes `heldParameters`: a held parameter keeps the value the initial
   model gives it, a variance as an absolute value, and
   `ParameterStatus.held` marks it. With a variance held, the measurement
-  variance is searched rather than concentrated out. This breaks a `switch`
-  over `ParameterStatus`, which needs the new case.
+  variance is searched rather than concentrated out, within
+  `measurementVarianceBounds`, and `FitResult.measurementVarianceStatus` says
+  whether it finished on a bound. This breaks a `switch` over
+  `ParameterStatus`, which needs the new case.
 - `fit` takes `priors` and `measurementVariancePrior`, each a
   `LogNormalPrior`, and then returns the posterior mode in the log of every
   searched parameter; `FitResult.logPrior` is the log prior density there.

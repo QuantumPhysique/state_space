@@ -126,8 +126,8 @@ class ProfileLikelihood {
   int get evaluations => _evaluations;
 
   /// The noise level that would explain the spread of the readings on its
-  /// own, or the tiny floor when they have none: where a search over the
-  /// noise level is centred.
+  /// own, or the tiny floor when they have none: what the default bracket of
+  /// a searched noise level is measured against.
   double get spreadVariance {
     final variance = _dataSpread * _dataSpread / _meanRelativeVariance;
     return variance > _floor ? variance : _floor;

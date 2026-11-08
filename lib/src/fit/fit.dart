@@ -97,10 +97,12 @@ const double _halfNat = 0.5;
 /// A held variance pins the model to an absolute scale, which concentrating
 /// the noise level out would not keep. With one, unless
 /// [fixedMeasurementVariance] is given, the log of the measurement variance
-/// becomes one more search axis, over the same bracket of log ratios
-/// centred on the noise level that would explain the spread of the readings
-/// on its own. The free variances are still searched as ratios to it. With
-/// every parameter held, the noise level is all that is left to search.
+/// becomes one more search axis, bracketed by [measurementVarianceBounds].
+/// They default to `1e-9` to `10` times the noise level that would explain
+/// the spread of the readings on its own. The free variances are still
+/// searched as ratios to it. With every parameter held, the noise level is
+/// all that is left to search. [FitResult.measurementVarianceStatus] says
+/// whether it finished on a bound.
 ///
 /// ## Priors
 ///
@@ -128,7 +130,7 @@ const double _halfNat = 0.5;
 ///   deviation `0.1 / sqrt(12)`, about 0.029, whatever the data says.
 /// - [fixedMeasurementVariance] pins the noise level outright, for when it is
 ///   known, and estimates the smoothing given it. It excludes
-///   [measurementVariancePrior] as well.
+///   [measurementVariancePrior] and [measurementVarianceBounds] as well.
 ///
 /// A floor cannot be clamped onto the estimate afterwards: pinning one
 /// variance in absolute units breaks the scale equivariance the concentrating
@@ -163,6 +165,7 @@ FitResult fit(
   Set<int> heldParameters = const {},
   Map<int, LogNormalPrior> priors = const {},
   LogNormalPrior? measurementVariancePrior,
+  ({double lower, double upper})? measurementVarianceBounds,
 }) {
   if (fixedMeasurementVariance != null && minimumMeasurementVariance != null) {
     throw ArgumentError(
@@ -176,6 +179,22 @@ FitResult fit(
       'pass fixedMeasurementVariance or measurementVariancePrior, not both: a '
       'noise level pinned to a value leaves a prior nothing to weigh',
     );
+  }
+  if (measurementVarianceBounds != null) {
+    if (fixedMeasurementVariance != null) {
+      throw ArgumentError(
+        'pass fixedMeasurementVariance or measurementVarianceBounds, not both: '
+        'a noise level pinned to a value is not searched',
+      );
+    }
+    final (:lower, :upper) = measurementVarianceBounds;
+    if (!(lower > 0) || !(lower < upper) || !upper.isFinite) {
+      throw ArgumentError.value(
+        measurementVarianceBounds,
+        'measurementVarianceBounds',
+        'must be a positive increasing range',
+      );
+    }
   }
   if (fixedMeasurementVariance != null) {
     checkPositive(fixedMeasurementVariance, 'fixedMeasurementVariance');
@@ -231,6 +250,7 @@ FitResult fit(
     held: heldParameters,
     priors: priors,
     measurementVariancePrior: measurementVariancePrior,
+    measurementVarianceBounds: measurementVarianceBounds,
   );
 
   final FitResult result;
@@ -269,6 +289,7 @@ FitResult _search(
   required Set<int> held,
   required Map<int, LogNormalPrior> priors,
   required LogNormalPrior? measurementVariancePrior,
+  required ({double lower, double upper})? measurementVarianceBounds,
 }) {
   final k = initial.parameterCount;
   final specs = initial.parameterSpecsAt(
@@ -292,18 +313,18 @@ FitResult _search(
   ];
   final m = axes.length;
 
+  final spread = profile.spreadVariance;
   final brackets = _brackets(
     axes,
     lowerLogRatio,
     upperLogRatio,
     scanPoints: scanPoints,
+    scale: scaleAxis == null
+        ? null
+        : measurementVarianceBounds ??
+              (lower: 1e-9 * spread, upper: 10 * spread),
   );
   final (:lower, :upper, :points, :step) = brackets;
-  if (scaleAxis != null) {
-    final centre = math.log(profile.spreadVariance);
-    lower[scaleAxis] += centre;
-    upper[scaleAxis] += centre;
-  }
 
   final origin = Float64List(m);
   for (var i = 0; i < m; i++) {
@@ -390,7 +411,7 @@ FitResult _search(
     }
   }
 
-  final searched = _classify(objective, best, axes, brackets, free.length);
+  final searched = _classify(objective, best, axes, brackets);
   final status = List.filled(k, ParameterStatus.held);
   for (var axis = 0; axis < free.length; axis++) {
     status[free[axis]] = searched[axis];
@@ -410,6 +431,7 @@ FitResult _search(
     plateauDecadesByParameter: decades,
     plateauWidthByParameter: widths,
     parameterStatus: status,
+    measurementVarianceStatus: scaleAxis == null ? null : searched[scaleAxis],
     parameterSpecs: specs,
     diffuseDimension: initial.diffuseDimension,
     measurementVariancePinned: fixedMeasurementVariance != null,
@@ -418,11 +440,15 @@ FitResult _search(
 
 /// The caller's bracket for a variance ratio, and the owning component's for
 /// a shape parameter.
+///
+/// With [scale] given, the last axis is the log measurement variance, and
+/// [scale] its bracket in absolute units.
 _Brackets _brackets(
   List<ParameterSpec> specs,
   double lowerLogRatio,
   double upperLogRatio, {
   required int scanPoints,
+  required ({double lower, double upper})? scale,
 }) {
   final k = specs.length;
   final lower = Float64List(k);
@@ -438,6 +464,10 @@ _Brackets _brackets(
         upper[i] = hi;
         if (scanPoints != null) points[i] = scanPoints;
     }
+  }
+  if (scale != null) {
+    lower[k - 1] = math.log(scale.lower);
+    upper[k - 1] = math.log(scale.upper);
   }
   final step = Float64List(k);
   for (var i = 0; i < k; i++) {
@@ -684,15 +714,11 @@ _Optimum? _restartWithMoreNoise(
 /// A variance at the bottom of its bracket has been shrunk; a shape parameter
 /// at the bottom has not been shrunk out of anything, and its bracket is in
 /// the wrong place, which is what beyondBracket means.
-///
-/// Only the first [count] axes are classified, which leaves out the noise
-/// level when it is searched.
 List<ParameterStatus> _classify(
   double Function(Float64List) objective,
   _Optimum best,
   List<ParameterSpec> specs,
   _Brackets brackets,
-  int count,
 ) {
   final (:lower, :upper, points: _, :step) = brackets;
   final optimum = best.argument;
@@ -705,7 +731,7 @@ List<ParameterStatus> _classify(
   }
 
   return [
-    for (var i = 0; i < count; i++)
+    for (var i = 0; i < optimum.length; i++)
       if (optimum[i] >= upper[i] - step[i] && reaches(i, upper[i]))
         ParameterStatus.beyondBracket
       else if (optimum[i] <= lower[i] + step[i] && reaches(i, lower[i]))
@@ -753,6 +779,7 @@ FitResult _withLargestResidual(
     plateauDecadesByParameter: result.plateauDecadesByParameter,
     plateauWidthByParameter: result.plateauWidthByParameter,
     parameterStatus: result.parameterStatus,
+    measurementVarianceStatus: result.measurementVarianceStatus,
     parameterSpecs: result.parameterSpecs,
     diffuseDimension: result.diffuseDimension,
     measurementVariancePinned: result.measurementVariancePinned,

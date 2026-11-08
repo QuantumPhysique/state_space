@@ -145,7 +145,8 @@ level has a closed form given the ratios. A `k`-component model is therefore a
 **Held parameters are not searched.** They keep their values, and the search
 runs over the rest. A held variance is absolute, which a closed form over
 ratios cannot keep, so with one the log measurement variance becomes a search
-axis of its own and the other variances are searched as ratios to it.
+axis of its own, over `measurementVarianceBounds`, and the other variances are
+searched as ratios to it.
 
 **Priors are added to the log-likelihood**, each a normal density over the log
 of its parameter, so the search finds the posterior mode in those coordinates.
@@ -184,6 +185,7 @@ the sampling interval they no longer describe a different model. See
   likelihood at the bound is within half a nat of the optimum. A variance of
   zero is the edge of the parameter space rather than an interior point, so the
   width reported for such a parameter is one-sided and is not an error bar.
+  `measurementVarianceStatus` says the same of a searched noise level.
 * **`plateauDecadesByParameter`**: how far each parameter can move before the fit
   loses half a nat. `NaN` where the coordinate is not a logarithm and for a
   held parameter; `plateauWidthByParameter` has the raw number.
