@@ -125,9 +125,6 @@ class ProfileLikelihood {
   /// How many forward passes have been run.
   int get evaluations => _evaluations;
 
-  /// How many coordinates the search has.
-  int get dimension => free.length + (searchesScale ? 1 : 0);
-
   /// The noise level that would explain the spread of the readings on its
   /// own, or the tiny floor when they have none: where a search over the
   /// noise level is centred.
