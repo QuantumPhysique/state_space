@@ -101,7 +101,10 @@ both sides a steady slope is recovered. At the last reading it comes out at
 about 0.77, 0.88, 0.92 and 0.96 of its value for a `timeScale` of 5, 10, 15 and
 30 smoothing bandwidths, the bandwidth being
 `(measurementVariance / processVariance)^(1/4)` for one reading per time unit.
-A `timeScale` in proportion to the bandwidth keeps that fraction fixed.
+A `timeScale` in proportion to the bandwidth keeps that fraction fixed. For a
+rate at the last reading, read the change of the smoothed curve over a window
+ending there instead: over the last two bandwidths it comes out at 0.89, 0.95,
+0.96 and 0.98 of the slope for the same time scales.
 
 `fit` estimates `timeScale` as a shape parameter over `timeScaleBounds`, by
 default 0.01 to 10 000 time units, raised at the bottom to the sampling

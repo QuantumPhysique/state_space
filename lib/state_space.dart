@@ -57,6 +57,7 @@ export 'src/diagnostics.dart';
 export 'src/exceptions.dart';
 export 'src/fit/fit.dart' show fit, SearchStart;
 export 'src/fit/penalty.dart';
+export 'src/fit/prior.dart';
 export 'src/initialization.dart';
 export 'src/model.dart';
 export 'src/observation.dart';

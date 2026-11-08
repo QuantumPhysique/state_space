@@ -97,6 +97,30 @@ double _rootMeanSquare(
   return math.sqrt(total / truth.length);
 }
 
+/// The maximum of [f] over a square of half-width [reach] around [centre],
+/// by a grid refined to a thousandth.
+({double x, double y, double value}) _gridMaximum(
+  double Function(double x, double y) f,
+  ({double x, double y}) centre, {
+  double reach = 3,
+}) {
+  var best = (x: centre.x, y: centre.y, value: f(centre.x, centre.y));
+  for (var spacing = 0.1; spacing > 5e-4; spacing /= 10) {
+    final from = best;
+    final cells = (reach / spacing).round();
+    for (var i = -cells; i <= cells; i++) {
+      for (var j = -cells; j <= cells; j++) {
+        final x = from.x + i * spacing;
+        final y = from.y + j * spacing;
+        final value = f(x, y);
+        if (value > best.value) best = (x: x, y: y, value: value);
+      }
+    }
+    reach = spacing;
+  }
+  return best;
+}
+
 void main() {
   const trendVariance = 3e-5;
   const seasonalVariance = 4e-4;
@@ -312,5 +336,86 @@ void main() {
         );
       }
     });
+
+    test('does not depend on the unit of the data under a pinned noise', () {
+      final simulation = _simulate(
+        trendVariance: trendVariance,
+        seasonalVariance: seasonalVariance,
+        measurementVariance: measurementVariance,
+        count: 200,
+        seed: 5,
+      );
+      FitResult inUnit(double unit) => fit(
+        _start(),
+        [for (final o in simulation.data) Observation(o.time, o.value * unit)],
+        penalty: ComplexityPenalty(),
+        fixedMeasurementVariance: measurementVariance * unit * unit,
+      );
+      final kilograms = inUnit(1);
+      final grams = inUnit(1000);
+
+      expect(grams.logPenalty, closeTo(kilograms.logPenalty, 1e-9));
+      for (var i = 0; i < 2; i++) {
+        expect(
+          grams.varianceRatios[i],
+          closeTo(kilograms.varianceRatios[i], 1e-9),
+          reason: 'parameter $i',
+        );
+      }
+    });
+  });
+
+  test('a free amplitude and noise level under priors, beside held '
+      'parameters, reach the maximum a grid finds', () {
+    // A daily Ornstein–Uhlenbeck wobble of variance 0.1 and length scale 2,
+    // and noise of variance 0.0225: where the grid starts.
+    final random = math.Random(3);
+    final data = <Observation>[];
+    var wobble = 0.0;
+    for (var day = 0; day < 200; day++) {
+      wobble = 0.6 * wobble + 0.25 * _gaussian(random);
+      final value = 80 - 0.01 * day + wobble + 0.15 * _gaussian(random);
+      data.add(Observation(day.toDouble(), value));
+    }
+    const trendVariance = 2e-5;
+    StructuralModel model(double logAmplitude, double logNoise) =>
+        StructuralModel([
+          DampedLinearTrend(processVariance: trendVariance, timeScale: 30),
+          Matern.oneHalf(variance: math.exp(logAmplitude), lengthScale: 2),
+        ], measurementVariance: math.exp(logNoise));
+
+    final amplitude = LogNormalPrior(median: 0.05, logSd: 0.5);
+    final noise = LogNormalPrior(median: 0.04, logSd: 0.5);
+
+    final initial = model(0, 0);
+    const held = {0, 1, 3};
+    final fitted = fit(
+      initial,
+      data,
+      heldParameters: held,
+      priors: {2: amplitude},
+      measurementVariancePrior: noise,
+    );
+    final grid = _gridMaximum(
+      (a, n) =>
+          model(a, n).logLikelihood(data) +
+          amplitude.logDensity(a) +
+          noise.logDensity(n),
+      (x: math.log(0.1), y: math.log(0.02)),
+    );
+
+    // The search stops once its simplex agrees to a ten-thousandth of a nat,
+    // which on this surface leaves either log a few thousandths out.
+    final theta = fitted.model.parameters;
+    expect(theta[2], closeTo(grid.x, 0.01));
+    expect(math.log(fitted.measurementVariance), closeTo(grid.y, 0.01));
+    expect(
+      fitted.logMarginalLikelihood + fitted.logPrior,
+      closeTo(grid.value, 1e-3),
+    );
+    for (final i in held) {
+      expect(theta[i], initial.parameters[i], reason: 'parameter $i');
+      expect(fitted.parameterStatus[i], ParameterStatus.held);
+    }
   });
 }

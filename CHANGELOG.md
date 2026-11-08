@@ -1,3 +1,22 @@
+## Unreleased
+
+- `StructuralModel.smooth` and `StructuralModel.forecast` take `signal`: the
+  components whose sum `mean` and `variance` report, with the covariances
+  between them.
+- `fit` takes `heldParameters`: a held parameter keeps the value the initial
+  model gives it, a variance as an absolute value, and
+  `ParameterStatus.held` marks it. With a variance held, the measurement
+  variance is searched rather than concentrated out, within
+  `measurementVarianceBounds`, and `FitResult.measurementVarianceStatus` says
+  whether it finished on a bound. This breaks a `switch` over
+  `ParameterStatus`, which needs the new case.
+- `fit` takes `priors` and `measurementVariancePrior`, each a
+  `LogNormalPrior`, and then returns the posterior mode in the log of every
+  searched parameter; `FitResult.logPrior` is the log prior density there.
+- Fixed `fit` with `fixedMeasurementVariance` and a `ComplexityPenalty`: the
+  penalty was off by a factor of the measurement standard deviation, so the
+  fit depended on the unit of the readings.
+
 ## 0.2.0
 
 A month without stepping on the scale shouldn't turn into a forecast that runs

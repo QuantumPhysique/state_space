@@ -113,7 +113,9 @@ final class SmoothingResult {
   final Float64List times;
 
   /// Posterior mean of the signal, `E[H(t) x(t) | y]`: the sum of every
-  /// component's contribution. [componentMean] has each one on its own.
+  /// component's contribution, or of the components named by the `signal`
+  /// passed to `StructuralModel.smooth`. [componentMean] has each one on its
+  /// own.
   final Float64List mean;
 
   /// Posterior variance of [mean]. This is uncertainty about the underlying
@@ -199,6 +201,9 @@ final class SmoothingResult {
   /// Where a new measurement would fall, at output index [i]: the credible
   /// interval widened by the measurement noise. Roughly 95% of the observed
   /// points should sit inside the 95% version of this band.
+  ///
+  /// Only the measurement noise is added: a component left out of the
+  /// `signal` passed to `StructuralModel.smooth` is in neither band.
   Band predictiveInterval(int i, {double coverage = 0.95}) {
     final half =
         twoSidedZ(coverage) * math.sqrt(variance[i] + measurementVariance);
@@ -261,7 +266,9 @@ final class ForecastResult {
   /// The requested horizon, ascending.
   final Float64List times;
 
-  /// Posterior mean of the signal at each horizon time.
+  /// Posterior mean of the signal at each horizon time: the sum of every
+  /// component, or of the components named by the `signal` passed to
+  /// `StructuralModel.forecast`.
   final Float64List mean;
 
   /// Its variance, excluding measurement noise.
@@ -282,6 +289,9 @@ final class ForecastResult {
   /// Where an actual future reading would fall: the same band widened by the
   /// measurement noise. This is the one to use for a question like "when will
   /// the scale read 75?", because the scale reading includes the noise.
+  ///
+  /// Only the measurement noise is added: a component left out of the
+  /// `signal` passed to `StructuralModel.forecast` is in neither band.
   Band predictiveInterval(int i, {double coverage = 0.95}) {
     final half =
         twoSidedZ(coverage) * math.sqrt(variance[i] + measurementVariance);
@@ -344,6 +354,10 @@ enum ParameterStatus {
   /// A parameter counts as on a bound only when the likelihood at the bound
   /// is within half a nat of the optimum.
   beyondBracket,
+
+  /// The parameter was held at the value the model passed to [fit] gave it,
+  /// through `heldParameters`, and not searched. It has no width.
+  held,
 }
 
 /// What [StructuralModel] fitting returned, together with enough diagnostics
@@ -355,10 +369,12 @@ final class FitResult {
     required this.model,
     required this.logMarginalLikelihood,
     required this.logPenalty,
+    required this.logPrior,
     required this.penalty,
     required this.evaluations,
     required this.converged,
     required List<ParameterStatus> parameterStatus,
+    required this.measurementVarianceStatus,
     required List<ParameterSpec> parameterSpecs,
     required this.diffuseDimension,
     required this.measurementVariancePinned,
@@ -372,8 +388,8 @@ final class FitResult {
        plateauDecadesByParameter = _view(plateauDecadesByParameter),
        plateauWidthByParameter = _view(plateauWidthByParameter);
 
-  /// The fitted model: components at their estimated variances, and the
-  /// analytically concentrated measurement variance.
+  /// The fitted model: components at their estimated variances, held
+  /// parameters at their values, and the estimated measurement variance.
   final StructuralModel model;
 
   /// The maximised profile log-likelihood, *without* the penalty.
@@ -402,16 +418,22 @@ final class FitResult {
   final double logMarginalLikelihood;
 
   /// What the penalty contributed at the optimum, so that the objective that
-  /// was actually maximised is [logMarginalLikelihood] plus this. Zero under
-  /// [NoPenalty].
+  /// was actually maximised is [logMarginalLikelihood] plus this and
+  /// [logPrior]. Zero under [NoPenalty].
   final double logPenalty;
+
+  /// The log density of the priors passed to [fit] at the optimum, each over
+  /// the log of its parameter, so that [logMarginalLikelihood] plus this is
+  /// the log posterior density the fit maximised, up to a constant. Zero
+  /// without priors.
+  final double logPrior;
 
   /// The penalty the fit used, which [fit] chooses for you unless you say
   /// otherwise.
   final Penalty penalty;
 
-  /// The estimated ratio of each variance to the measurement variance, in
-  /// parameter order.
+  /// The ratio of each variance to the measurement variance, in parameter
+  /// order, held variances included.
   ///
   /// Entries for a shape parameter, such as a Matérn length scale or a
   /// cycle's period, are [double.nan]; [parameterSpecs] says which is which.
@@ -437,17 +459,17 @@ final class FitResult {
   /// width look tiny for reasons unrelated to the data; see [warnings].
   ///
   /// Entries whose coordinate is not a logarithm (a damping factor, searched
-  /// as a logit) are [double.nan]. [plateauWidthByParameter] has the raw
-  /// number for every parameter, and [ParameterSpec.isLogarithmic] says which
-  /// is which.
+  /// as a logit) are [double.nan], and so are those of held parameters.
+  /// [plateauWidthByParameter] has the raw number for every searched
+  /// parameter, and [ParameterSpec.isLogarithmic] says which is which.
   ///
   /// For a parameter whose [parameterStatus] is not
   /// [ParameterStatus.determined] the width is one-sided and is not an error
   /// bar; see that enum for why.
   final Float64List plateauDecadesByParameter;
 
-  /// The same widths, in each parameter's own unconstrained coordinate, and
-  /// finite for every parameter.
+  /// The same widths, in each parameter's own unconstrained coordinate:
+  /// finite for every searched parameter, [double.nan] for a held one.
   ///
   /// This is [plateauDecadesByParameter] before the division by `ln 10`, and
   /// it is what to read for a parameter searched as a logit.
@@ -458,6 +480,13 @@ final class FitResult {
 
   /// What each parameter is, in the same order again.
   final List<ParameterSpec> parameterSpecs;
+
+  /// What became of the measurement variance where it was searched rather
+  /// than concentrated out, which a held variance or a prior brings about:
+  /// [ParameterStatus.shrunkToNothing] at the bottom of `fit`'s
+  /// `measurementVarianceBounds`, [ParameterStatus.beyondBracket] at the top.
+  /// Null when it was concentrated out or pinned.
+  final ParameterStatus? measurementVarianceStatus;
 
   /// How many flat directions this fit integrated out.
   ///
@@ -498,13 +527,19 @@ final class FitResult {
   /// scale it is measured against. Gaussian noise almost never exceeds 6.
   final ({double time, double score})? largestResidual;
 
-  /// Whether any parameter finished at an edge of the search bracket.
+  /// Whether any parameter, or a searched measurement variance, finished at
+  /// an edge of the search bracket.
   ///
   /// Kept as a single flag because it is the first thing worth checking;
-  /// [parameterStatus] says which parameter and which edge, which is what
-  /// determines whether the answer is wrong or merely uninteresting.
+  /// [parameterStatus] and [measurementVarianceStatus] say which parameter
+  /// and which edge, which is what determines whether the answer is wrong or
+  /// merely uninteresting.
   bool get atBracketEdge =>
-      parameterStatus.any((s) => s != ParameterStatus.determined);
+      [...parameterStatus, ?measurementVarianceStatus].any(
+        (s) =>
+            s == ParameterStatus.shrunkToNothing ||
+            s == ParameterStatus.beyondBracket,
+      );
 
   /// The estimated ratio of process to measurement variance, for a model with
   /// exactly one of them. Its reciprocal is the smoothing-spline parameter
@@ -546,7 +581,7 @@ final class FitResult {
   /// What is worth knowing about this fit before quoting anything from it, in
   /// plain sentences, empty when there is nothing to say.
   ///
-  /// Five things are reported:
+  /// Six things are reported:
   ///
   /// 1. A reading far from what the rest of the data predicts for it (see
   ///    [largestResidual]). The fit is Gaussian, so one mistyped value
@@ -564,6 +599,8 @@ final class FitResult {
   ///    same component sat on a bound, which can make it look sharp for a
   ///    reason that is not about the data. See [StochasticCycle] for the
   ///    common case.
+  /// 6. A searched measurement variance on a bound (see
+  ///    [measurementVarianceStatus]).
   List<String> get warnings {
     final found = <String>[];
     final outlier = largestResidual;
@@ -585,7 +622,8 @@ final class FitResult {
       var pinnedShape = -1;
       for (var i = at; i < at + count; i++) {
         if (parameterSpecs[i] is ShapeParameter &&
-            parameterStatus[i] != ParameterStatus.determined) {
+            (parameterStatus[i] == ParameterStatus.shrunkToNothing ||
+                parameterStatus[i] == ParameterStatus.beyondBracket)) {
           pinnedShape = i;
         }
       }
@@ -631,9 +669,28 @@ final class FitResult {
                 'well the data determines it',
               );
             }
+          case ParameterStatus.held:
+            break;
         }
       }
       at += count;
+    }
+    switch (measurementVarianceStatus) {
+      case ParameterStatus.shrunkToNothing:
+        found.add(
+          'the measurement variance finished at the bottom of its bracket: '
+          'the components follow the readings almost exactly and the fitted '
+          'noise level is too small; check the held variances and the priors, '
+          'or pass minimumMeasurementVariance at what the instrument can '
+          'resolve',
+        );
+      case ParameterStatus.beyondBracket:
+        found.add(
+          'the measurement variance finished at the top of its bracket, so '
+          'the real optimum may be outside it; widen measurementVarianceBounds',
+        );
+      case ParameterStatus.determined || ParameterStatus.held || null:
+        break;
     }
     return found;
   }
@@ -688,7 +745,7 @@ final class FitResult {
   /// True when the likelihood surface is too flat to support the estimate.
   bool get isFlat => plateauDecades > 2;
 
-  /// The concentrated measurement variance, i.e. the fitted noise level.
+  /// The fitted noise level.
   double get measurementVariance => model.measurementVariance;
 
   @override
@@ -708,6 +765,7 @@ FitResult newFitResult({
   required StructuralModel model,
   required double logMarginalLikelihood,
   required double logPenalty,
+  required double logPrior,
   required Penalty penalty,
   required Float64List varianceRatios,
   required int evaluations,
@@ -715,6 +773,7 @@ FitResult newFitResult({
   required Float64List plateauDecadesByParameter,
   required Float64List plateauWidthByParameter,
   required List<ParameterStatus> parameterStatus,
+  ParameterStatus? measurementVarianceStatus,
   required List<ParameterSpec> parameterSpecs,
   required int diffuseDimension,
   bool measurementVariancePinned = false,
@@ -723,6 +782,7 @@ FitResult newFitResult({
   model: model,
   logMarginalLikelihood: logMarginalLikelihood,
   logPenalty: logPenalty,
+  logPrior: logPrior,
   penalty: penalty,
   varianceRatios: varianceRatios,
   evaluations: evaluations,
@@ -730,6 +790,7 @@ FitResult newFitResult({
   plateauDecadesByParameter: plateauDecadesByParameter,
   plateauWidthByParameter: plateauWidthByParameter,
   parameterStatus: parameterStatus,
+  measurementVarianceStatus: measurementVarianceStatus,
   parameterSpecs: parameterSpecs,
   diffuseDimension: diffuseDimension,
   measurementVariancePinned: measurementVariancePinned,

@@ -207,6 +207,10 @@ void main() {
       expect(const Observation(1, 2), const Observation(1, 2));
       expect(const Observation(1, 2), isNot(const Observation(1, 3)));
       expect(ComplexityPenalty(), ComplexityPenalty());
+      expect(
+        LogNormalPrior(median: 1, logSd: 2),
+        LogNormalPrior(median: 1, logSd: 2),
+      );
     });
   });
 
