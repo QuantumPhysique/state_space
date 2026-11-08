@@ -1,4 +1,4 @@
-## Unreleased
+## 0.3.0
 
 - `StructuralModel.smooth` and `StructuralModel.forecast` take `signal`: the
   components whose sum `mean` and `variance` report, with the covariances
