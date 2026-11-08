@@ -27,7 +27,7 @@ of them can be held at a value you choose.
 
 ```yaml
 dependencies:
-  state_space: ^0.2.0
+  state_space: ^0.3.0
 ```
 
 The API is pre-1.0 and may still change.
