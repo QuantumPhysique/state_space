@@ -266,7 +266,9 @@ final class ForecastResult {
   /// The requested horizon, ascending.
   final Float64List times;
 
-  /// Posterior mean of the signal at each horizon time.
+  /// Posterior mean of the signal at each horizon time: the sum of every
+  /// component, or of the components named by the `signal` passed to
+  /// `StructuralModel.forecast`.
   final Float64List mean;
 
   /// Its variance, excluding measurement noise.
@@ -287,6 +289,9 @@ final class ForecastResult {
   /// Where an actual future reading would fall: the same band widened by the
   /// measurement noise. This is the one to use for a question like "when will
   /// the scale read 75?", because the scale reading includes the noise.
+  ///
+  /// Only the measurement noise is added: a component left out of the
+  /// `signal` passed to `StructuralModel.forecast` is in neither band.
   Band predictiveInterval(int i, {double coverage = 0.95}) {
     final half =
         twoSidedZ(coverage) * math.sqrt(variance[i] + measurementVariance);

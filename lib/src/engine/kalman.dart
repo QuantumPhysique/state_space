@@ -446,11 +446,15 @@ class KalmanFilter {
   /// [run], because it continues from the workspace that pass left behind.
   /// Forecasting is prediction with the update skipped, as over any gap inside
   /// the series.
+  ///
+  /// The signal is the sum over the components in [signal], or over every
+  /// component when it is null.
   ({Float64List mean, Float64List variance}) project(
     double from,
     Float64List horizon,
-    FilterResult result,
-  ) {
+    FilterResult result, {
+    Set<int>? signal,
+  }) {
     final n = stateDim;
     final d = diffuseDim;
     final estimate = result.diffuseMean;
@@ -468,12 +472,16 @@ class KalmanFilter {
       previous = horizon[k];
 
       for (var b = 0; b < components.length; b++) {
-        components[b].observationAt(horizon[k], _hSlices[b]);
+        if (signal == null || signal.contains(b)) {
+          components[b].observationAt(horizon[k], _hSlices[b]);
+        } else {
+          _hSlices[b].fillRange(0, _hSlices[b].length, 0);
+        }
       }
 
-      var signal = 0.0;
+      var total = 0.0;
       for (var i = 0; i < n; i++) {
-        signal += _h[i] * _x[i];
+        total += _h[i] * _x[i];
       }
       var spreadHere = 0.0;
       for (var i = 0; i < n; i++) {
@@ -494,7 +502,7 @@ class KalmanFilter {
             sum += _h[i] * _xb[i * d + c];
           }
           loading[c] = sum;
-          signal += sum * estimate![c];
+          total += sum * estimate![c];
         }
         for (var r = 0; r < d; r++) {
           for (var c = 0; c < d; c++) {
@@ -503,7 +511,7 @@ class KalmanFilter {
         }
       }
 
-      mean[k] = signal;
+      mean[k] = total;
       variance[k] = spreadHere;
     }
 

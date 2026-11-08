@@ -43,6 +43,27 @@ void main() {
     }
   });
 
+  test('and so is a forecast of some of the components', () {
+    final data = _series();
+    final last = data.last.time;
+    final horizon = Float64List.fromList([
+      for (var k = 1; k <= 20; k++) last + k * 0.5,
+    ]);
+    final model = StructuralModel([
+      LocalLinearTrend(processVariance: 6e-4),
+      Matern.threeHalves(variance: 0.2, lengthScale: 7),
+      Matern.oneHalf(variance: 0.05, lengthScale: 1),
+    ], measurementVariance: 0.1);
+
+    final forecast = model.forecast(data, horizon, signal: {0, 1});
+    final smoothed = model.smooth(data, grid: horizon, signal: {0, 1});
+
+    for (var i = 0; i < horizon.length; i++) {
+      expect(forecast.mean[i], closeTo(smoothed.mean[i], 1e-9));
+      expect(forecast.variance[i], closeTo(smoothed.variance[i], 1e-10));
+    }
+  });
+
   test('starting the horizon at the last observation reproduces it', () {
     final data = _series();
     final last = data.last.time;

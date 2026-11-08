@@ -1,8 +1,8 @@
 ## Unreleased
 
-- `StructuralModel.smooth` takes `signal`: the components whose sum
-  `SmoothingResult.mean` and `SmoothingResult.variance` report, with the
-  covariances between them.
+- `StructuralModel.smooth` and `StructuralModel.forecast` take `signal`: the
+  components whose sum `mean` and `variance` report, with the covariances
+  between them.
 - `fit` takes `heldParameters`: a held parameter keeps the value the initial
   model gives it, a variance as an absolute value, and
   `ParameterStatus.held` marks it. With a variance held, the measurement

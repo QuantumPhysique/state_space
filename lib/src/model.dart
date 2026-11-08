@@ -321,20 +321,7 @@ final class StructuralModel {
     List<double>? grid,
     Set<int>? signal,
   }) {
-    if (signal != null) {
-      if (signal.isEmpty) {
-        throw ArgumentError.value(signal, 'signal', 'names no component');
-      }
-      for (final index in signal) {
-        if (index < 0 || index >= components.length) {
-          throw ArgumentError.value(
-            signal,
-            'signal',
-            'has no component $index; the model has ${components.length}',
-          );
-        }
-      }
-    }
+    _checkSignal(signal);
     final timeline = Timeline.merge(observations, grid);
     final filtered = _filter(timeline, keepHistory: true);
     RtsSmoother(components, initialization: initialization)
@@ -357,13 +344,18 @@ final class StructuralModel {
   /// including that reading. That is the figure to show when it must not move
   /// once shown.
   ///
+  /// [signal] names the components whose sum is projected, as for [smooth].
+  ///
   /// Throws [UnderdeterminedModelException] when the data cannot determine the
   /// model's flat directions (see [initialization]), [ArgumentError] for
-  /// unsorted or non-finite input.
+  /// unsorted or non-finite input, and for a [signal] that is empty or names a
+  /// component the model does not have.
   ForecastResult forecast(
     List<Observation> observations,
-    List<double> horizon,
-  ) {
+    List<double> horizon, {
+    Set<int>? signal,
+  }) {
+    _checkSignal(signal);
     if (observations.isEmpty) {
       throw ArgumentError('nothing to forecast from: no observations');
     }
@@ -396,7 +388,7 @@ final class StructuralModel {
     );
     final result = filter.run(timeline);
     final times = Float64List.fromList(horizon);
-    final projected = filter.project(last, times, result);
+    final projected = filter.project(last, times, result, signal: signal);
 
     return newForecastResult(
       times: times,
@@ -404,6 +396,24 @@ final class StructuralModel {
       variance: projected.variance,
       measurementVariance: measurementVariance,
     );
+  }
+
+  /// Throws [ArgumentError] unless [signal] is null or names at least one
+  /// component, and only components the model has.
+  void _checkSignal(Set<int>? signal) {
+    if (signal == null) return;
+    if (signal.isEmpty) {
+      throw ArgumentError.value(signal, 'signal', 'names no component');
+    }
+    for (final index in signal) {
+      if (index < 0 || index >= components.length) {
+        throw ArgumentError.value(
+          signal,
+          'signal',
+          'has no component $index; the model has ${components.length}',
+        );
+      }
+    }
   }
 
   /// The steps [_report] and [_coefficients] will read: the output grid, plus
